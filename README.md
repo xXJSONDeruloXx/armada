@@ -30,6 +30,7 @@ Includes:
 | Odin 2 Portal | SM8550 | ✅ Supported and tested |
 | Odin 2 Mini | SM8550 | ✅ Supported (touchscreen not working) |
 | Odin 2 | SM8550 | ⚪ Supported but untested |
+| Retroid Pocket 6 | QCS8550 (SM8550) | ⚪ Supported (pending hardware testing) |
 
 ## Install
 
