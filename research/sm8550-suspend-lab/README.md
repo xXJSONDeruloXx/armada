@@ -125,12 +125,14 @@ On the device, one detached systemd unit performs this sequence:
    device and writes the post snapshot only after that dispatcher returns, so
    SSH timing is not the suspend boundary and no direct
    `systemd-suspend.service` start is needed. This is not `rtcwake -m freeze`.
-8. For short diagnostic reproductions, `--trace-profile ufs-irq` or
-   `--trace-profile rpmh-aoss` creates a private tracefs instance, records its
-   exact event inventory/configuration, enables only the requested existing
-   tracepoints, archives the bounded buffer after the dispatcher returns, and
-   removes the instance. The profiles never send firmware commands or change
-   runtime-PM, regulator, interconnect, or device power controls.
+8. For short diagnostic reproductions, `--trace-profile ufs-irq`,
+   `--trace-profile rpmh-aoss`, or `--trace-profile rsc-success` creates a
+   private tracefs instance, records its exact event inventory/configuration,
+   enables only the requested existing tracepoints, archives the bounded buffer
+   after the dispatcher returns, and removes the instance. `rsc-success` also
+   requires the isolated observation-only kernel package's successful-path
+   `rpmh_rsc_snapshot` tracepoint. The profiles never send firmware commands or
+   change runtime-PM, regulator, interconnect, or device power controls.
 9. After resume, captures the matching post snapshot, Armada's exact
    `armada-sleep-debug collect` output, bounded logs, and read-only health
    observations.
@@ -204,5 +206,9 @@ remain explicit validation gates after short idle cycles are reliable.
   charge/energy counters when available and labels gauge-derived values as
   indicative.
 
-The test matrix and any kernel A/B work belong to later phases. This Phase 1
-tool deliberately stops at inspection, capture, and reproducible execution.
+The test matrix and functional kernel A/B work belong to later phases. The
+observation-only RSC/TCS package is maintained separately in the Armada
+packages checkout and must reach the Nova through a supported signed Armada
+image/update path; this harness never installs a raw kernel tarball or writes a
+boot file. The lab tool itself remains limited to inspection, capture, and
+reproducible execution.

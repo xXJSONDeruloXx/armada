@@ -1328,15 +1328,61 @@ labels are preserved; this note only corrects the aggregate count.
   allowed implementation step remains gated by the explicit no-build/no-patch
   instruction.
 
+## 2026-09-01 21:03 UTC — observation-only diagnostic package built
+
+- The user-authorized diagnostic build completed through the Armada package
+  checkout. Package base was `2c93e73cbe1bcf4d443495e94fbaa5e7a8cf7141` on
+  branch `feat/sm8550-rsc-observation`; kernel source remained the package's
+  kernel.org stable `linux-7.2` input. No kernel source, firmware, ABL, boot,
+  device, QMP/AOSS, or power-control state was changed on the Nova.
+- The final build used the arm64 Fedora container
+  `registry.fedoraproject.org/fedora@sha256:0c6072366ebf8ea1c8c0f3a118aad3e9a9247d3065d499e54d62968f69351966`,
+  applied all `136` series patches, passed config validation, linked Image,
+  built DTBs/modules, and exited 0. `CONFIG_QCOM_RPMH_SUCCESS_DEBUG=y` and
+  `CONFIG_DEBUG_INFO_BTF=y` were retained. A prior Docker-store I/O failure
+  during module BTF finalization was preserved as a build observation; it was
+  not treated as a source failure. The ccache mount was removed before the
+  successful retry and its generated files were cleaned.
+- Artifact: `/Users/kurt/Developer/armada-packages-suspend-lab/kernel/out/armada-kernel-7.2.0.tar.zst`;
+  SHA-256 `3fc078ffc04e59471538269abe442fab907f3c792a0b42c048d816715af72cc1`.
+  The embedded `vmlinuz` SHA-256 is
+  `5d7348afe15a71ef5918c47eea9d3d995f88d3e157bd65b6907eed352e71d867`.
+  `zstd -t`, checksum verification, extraction, tar listing, and required Nova
+  DTB/module entry checks passed. Embedded metadata reports aarch64 build,
+  136 applied patches, 20 DTBs, and Armada repackaging.
+- The source package remains uncommitted and undeployed at this notebook point;
+  the main checkout has the deployment-preparation document and the package
+  checkout has the patch/config/series changes. Generated `kernel/out` is kept
+  locally for delivery preparation and is not source history.
+
+## 2026-09-01 21:03 UTC — live supported-update gate rechecked
+
+- Read-only SSH inventory to `retroid-nova` (`192.168.0.20`) confirmed the
+  expected Armada userspace: `/usr/lib/armada/version` is `20260830.71e45aa`,
+  the running kernel is `7.2.0`, the booted origin is the signed Armada
+  `testing` image, and the Nova DT/RSC identity remains unchanged. The OS
+  identifies as Fedora 44, which is the Armada bootc base and is not evidence
+  of a wrong host.
+- The supported update entry points are `/usr/bin/steamos-update` and
+  `/usr/libexec/armada/armada-update`; the latter is not on the normal user's
+  `PATH`. Root is required for `bootc status` and update application. The
+  current account's generic `sudo -n` check requires the installed default
+  password, while Armada's narrow passwordless rules cover only selected
+  management operations. No update, reboot, kernel/boot-file write, or lab run
+  was started during this gate.
+- The raw kernel tarball is therefore not yet a deployable device input. It
+  must be wrapped into a signed Armada bootc image and applied through the
+  shipped update workflow. If a custom image cannot satisfy the device's
+  signature policy, deployment will stop rather than bypassing that policy.
+
 ## Next controlled step
 
 The ten-cycle stock reliability objective is exceeded: 11 uninstrumented
 current-image cycles completed cleanly, and the two scoped read-only trace
-experiments are complete. The root-readable diagnostic inventory is now also
-complete. The source review now shows that reviewed Qualcomm RSC v3 is merged
-in the Qualcomm vendor branch but remains timeout-only, and that the AOP
-monitor is not firmware-matched. The next phase is to review/design a
-successful-path read-only RSC snapshot; do not build or deploy it yet. No
-undocumented AOP/QMP command, vote forcing, device-control change, kernel
-patch, or package deployment is authorized by this evidence.
-Remaining blind repetitions stay deferred, not cancelled.
+experiments are complete. The observation-only successful-path RSC/TCS kernel
+is now built and source-ready but not deployed. First publish the source/docs
+to the user's fork(s), then complete the supported signed-image assembly and
+update gate. After boot verification, run exactly one `rsc-success` deep cycle
+with RTC wake, parse the successful-path snapshots, and classify the four
+outstanding branches before selecting any functional fix. Remaining blind
+repetitions stay deferred, not cancelled.
