@@ -3055,6 +3055,7 @@ def device_preflight(args: argparse.Namespace) -> int:
         ("powerd-state", ["systemctl", "show", "armada-powerd.service", "-p", "ActiveState", "-p", "SubState", "-p", "Result", "-p", "NRestarts"], 15),
         ("debugfs-root-diagnostic-files", ["find", "/sys/kernel/debug", "-maxdepth", "2", "-type", "f", "-print"], 30),
         ("debugfs-root-diagnostic-directories", ["find", "/sys/kernel/debug", "-maxdepth", "2", "-type", "d", "-print"], 30),
+        ("trace-event-inventory", ["cat", "/sys/kernel/tracing/available_events"], 60),
         ("firmware-diagnostic-files", ["find", "/sys/firmware", "-maxdepth", "3", "-type", "f", "-print"], 30),
         (
             "rsc-sysfs-metadata",
