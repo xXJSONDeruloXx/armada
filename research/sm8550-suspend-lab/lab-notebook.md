@@ -1374,6 +1374,12 @@ labels are preserved; this note only corrects the aggregate count.
   must be wrapped into a signed Armada bootc image and applied through the
   shipped update workflow. If a custom image cannot satisfy the device's
   signature policy, deployment will stop rather than bypassing that policy.
+- A first post-boot direct tracefs probe reported `absent`, but that probe ran
+  as the normal `armada` user and tracefs denied directory/file reads. The
+  kernel config is root-readable and reports `CONFIG_QCOM_RPMH_SUCCESS_DEBUG=y`.
+  The harness is being refreshed to capture the root-only complete
+  `/sys/kernel/tracing/available_events` file in the next preflight; the direct
+  unprivileged result is not evidence that the event is missing.
 
 ## Next controlled step
 

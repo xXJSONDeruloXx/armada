@@ -77,9 +77,9 @@ attempted.
 Before the eventual update, record a fresh lab preflight and retain its exact
 receipt. After reboot, require all of the following before the diagnostic
 suspend run: the expected Armada version/origin, kernel `7.2.0`, unchanged Nova
-DT identity, the diagnostic config/tracepoint, unchanged boot ID after the
-update boot, and a clean post-boot health check. A failed or ambiguous boot is a
-recovery boundary, not a suspend result.
+DT identity, the diagnostic config and root-readable trace-event inventory,
+unchanged boot ID after the update boot, and a clean post-boot health check. A
+failed or ambiguous boot is a recovery boundary, not a suspend result.
 
 ## Physical instructions for the deployment and first diagnostic run
 
