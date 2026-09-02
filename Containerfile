@@ -46,10 +46,10 @@ COPY decky/armada-control/ ./
 RUN npm run build
 
 FROM ${BASE_IMAGE} AS overlay-build
-RUN dnf5 -y install --setopt=install_weak_deps=False cmake gcc-c++ make qt6-qtbase-devel
+RUN dnf5 -y install --setopt=install_weak_deps=False cmake gcc-c++ make qt6-qtbase-devel qt6-qtdeclarative-devel
 WORKDIR /build/overlay
 COPY overlay/ ./
-RUN cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build --parallel
+RUN cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build --parallel && cmake --install build --prefix /build/overlay/install
 WORKDIR /build/armada-store
 COPY decky/armada-store/package.json decky/armada-store/package-lock.json ./
 RUN npm ci
@@ -87,7 +87,7 @@ RUN --mount=type=bind,from=ctx,source=/,target=/ctx \
     --mount=type=bind,from=umtp-responder,source=/rpms,target=/packages/umtp-responder \
     --mount=type=bind,from=decky-build,source=/build/armada-control/dist,target=/packages/decky-dist \
     --mount=type=bind,from=decky-build,source=/build/armada-store/dist,target=/packages/decky-store-dist \
-    --mount=type=bind,from=overlay-build,source=/build/overlay/build,target=/packages/overlay-build \
+    --mount=type=bind,from=overlay-build,source=/build/overlay/install,target=/packages/overlay-build \
     --mount=type=cache,dst=/var/cache \
     --mount=type=cache,dst=/var/log \
     --mount=type=tmpfs,dst=/tmp \
