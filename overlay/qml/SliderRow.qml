@@ -60,6 +60,7 @@ Item {
         stepSize: root.stepSize
         value: root.value
         enabled: root.enabled
+        onPressedChanged: if (pressed) root.requestFocus()
         onMoved: root.valueEdited(value)
     }
     Text {

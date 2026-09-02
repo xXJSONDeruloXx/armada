@@ -97,6 +97,7 @@ Item {
             border.color: selector.activeFocus ? root.theme.accent : root.theme.panelRaised
             border.width: root.theme.borderWidth
         }
+        onPressedChanged: if (pressed) root.requestFocus()
         onActivated: function(index) {
             root.currentValue = root.optionValue(root.options[index]);
             root.valueEdited(root.currentValue);

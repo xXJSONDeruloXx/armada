@@ -68,6 +68,7 @@ Item {
                 color: root.theme.text
             }
         }
+        onPressedChanged: if (pressed) root.requestFocus()
         onClicked: root.toggled(checked)
     }
     MouseArea {
