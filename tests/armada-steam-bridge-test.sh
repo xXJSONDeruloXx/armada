@@ -77,6 +77,13 @@ assert "SpecifyCompatTool(id, availableTool)" in sweep_expression
 assert "results.every(Boolean)" in sweep_expression
 assert "RequestAppDetails" in sweep_expression
 
+assert bridge.main({"action": "migrate_compat", "games": ["123"], "old_tool": "old", "new_tool": "new", "pinned": []}) is True
+migration_expression = expressions[-1]
+assert "const oldTool = \"old\"" in migration_expression
+assert "const newTool = \"new\"" in migration_expression
+assert "const pinnedIds = pinned === null ? null : new Set(pinned)" in migration_expression
+assert "SpecifyCompatTool(id, newTool)" in migration_expression
+
 try:
     bridge.main({"action": "set_resolution", "appid": "123", "value": "1920x1080"})
 except ValueError as error:

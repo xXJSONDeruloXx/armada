@@ -81,13 +81,21 @@ Item {
     }
     function saveGlobalTool(label) {
         var id = String(label || "");
+        var oldTool = globalTool;
         var reply = call("set_global_compat_tool", {tool: id});
         if (!reply.ok) return;
         globalTool = id;
         var next = JSON.parse(JSON.stringify(armada.config || {}));
         next.tweaks.global.windowsCompatTool = id;
         reply = armada.call("save_tweaks", {data: next.tweaks});
-        statusText = reply.ok ? "Saved" : (reply.error || "Save failed");
+        if (!reply.ok) { statusText = reply.error || "Save failed"; return; }
+        var games = (armada.config.installedGames || []).filter(function(game) {
+            return game && !game.nonSteam && /^\d+$/.test(String(game.appid || ""));
+        });
+        var mapped = armada.call("get_compat_mapped_appids", {tool: oldTool});
+        var pinned = mapped.ok ? (mapped.result || []) : null;
+        var migrated = call("migrate_compat", {games: games, old_tool: oldTool, new_tool: id, pinned: pinned});
+        statusText = migrated.ok ? "Saved" : "Saved; existing pins were not migrated";
     }
     function saveGlobalResolution(value) {
         var reply = call("set_global_resolution", {value: value});

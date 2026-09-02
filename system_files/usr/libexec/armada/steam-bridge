@@ -236,6 +236,42 @@ def main(request):
             "})()"
         )
         return bool(evaluate(expression))
+    if action == "migrate_compat":
+        game_ids = appids(request.get("games"))
+        old_tool = js_string(request.get("old_tool", ""))
+        new_tool = js_string(request.get("new_tool", ""))
+        raw_pinned = request.get("pinned")
+        pinned_ids = None if raw_pinned is None else appids(raw_pinned)
+        if old_tool == new_tool:
+            return True
+        expression = (
+            "(async () => {"
+            f" const ids = {json.dumps(game_ids, separators=(',', ':'))};"
+            f" const oldTool = {old_tool};"
+            f" const newTool = {new_tool};"
+            f" const pinned = {('null' if pinned_ids is None else json.dumps(pinned_ids, separators=(',', ':')))};"
+            " const pinnedIds = pinned === null ? null : new Set(pinned);"
+            " const rawGlobalTools = window.SteamClient.Settings.GetGlobalCompatTools?.() || [];"
+            " const globalTools = Array.isArray(rawGlobalTools) ? rawGlobalTools : [];"
+            " if (!globalTools.some((item) => String(item?.strToolName || '') === newTool)) return true;"
+            " const results = [];"
+            " for (const id of ids) {"
+            "   const type = window.appStore?.GetAppOverviewByAppID?.(id)?.app_type;"
+            "   if (type !== undefined && type !== 1) { results.push(true); continue; }"
+            f"   {details_js('id')}"
+            "   details = details || {};"
+            "   const priority = Number(details.nCompatToolPriority || 0);"
+            "   const currentTool = String(details.strCompatToolName || '');"
+            "   const missingPin = pinnedIds !== null && pinnedIds.has(id);"
+            "   const oldPin = priority >= 250 && currentTool === oldTool;"
+            "   if (!missingPin && !oldPin) { results.push(true); continue; }"
+            "   const result = await Promise.resolve(window.SteamClient.Apps.SpecifyCompatTool(id, newTool));"
+            "   results.push(result !== false);"
+            " }"
+            " return results.every(Boolean);"
+            "})()"
+        )
+        return bool(evaluate(expression))
     raise ValueError("unsupported Steam bridge action")
 
 
