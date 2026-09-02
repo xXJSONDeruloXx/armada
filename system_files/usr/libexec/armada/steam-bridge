@@ -1,0 +1,144 @@
+#!/usr/bin/env python3
+"""Fixed-action user-session bridge for Steam WebHelper's CDP endpoint."""
+import json
+import sys
+import urllib.request
+
+import websocket
+
+
+CDP_URL = "http://127.0.0.1:8080/json/list"
+MAX_TEXT = 16 * 1024
+ALLOWED_RESOLUTIONS = {"Default", "Native", "1280x720", "960x540"}
+GLOBAL_RESOLUTION_KEY = "gamescope_game_resolution_global"
+
+
+def appid(value):
+    text = str(value or "")
+    if not text.isdigit() or len(text) > 12:
+        raise ValueError("invalid appid")
+    return int(text)
+
+
+def target():
+    with urllib.request.urlopen(CDP_URL, timeout=2) as response:
+        targets = json.load(response)
+    for item in targets:
+        if item.get("title") == "SharedJSContext":
+            return item["webSocketDebuggerUrl"]
+    for item in targets:
+        if item.get("type") == "page" and item.get("webSocketDebuggerUrl"):
+            return item["webSocketDebuggerUrl"]
+    raise RuntimeError("Steam WebHelper target unavailable")
+
+
+def evaluate(expression):
+    socket = websocket.create_connection(target(), timeout=5, http_proxy_host=None)
+    try:
+        socket.send(json.dumps({
+            "id": 1,
+            "method": "Runtime.evaluate",
+            "params": {
+                "expression": expression,
+                "returnByValue": True,
+                "awaitPromise": True,
+                "userGesture": True,
+            },
+        }))
+        while True:
+            result = json.loads(socket.recv())
+            if result.get("id") != 1:
+                continue
+            payload = result.get("result", {}).get("result", {})
+            if "exceptionDetails" in result.get("result", {}):
+                raise RuntimeError("Steam WebHelper evaluation failed")
+            if payload.get("subtype") == "error":
+                raise RuntimeError("Steam WebHelper returned an error")
+            return payload.get("value")
+    finally:
+        socket.close()
+
+
+def js_string(value):
+    text = str(value)
+    if len(text) > MAX_TEXT or "\x00" in text:
+        raise ValueError("text value is too long")
+    return json.dumps(text)
+
+
+def tools(raw):
+    if not isinstance(raw, list):
+        return []
+    return [
+        {"id": str(item.get("strToolName", "")), "label": str(item.get("strDisplayName", ""))}
+        for item in raw
+        if isinstance(item, dict) and item.get("strToolName")
+    ]
+
+
+def main(request):
+    action = request.get("action")
+    if action == "get_global_compat_tools":
+        return {"tools": tools(evaluate("window.SteamClient.Settings.GetGlobalCompatTools()"))}
+    if action == "get_app_compat_tools":
+        return {"tools": tools(evaluate(
+            f"window.SteamClient.Apps.GetAvailableCompatTools({appid(request.get('appid'))})"
+        ))}
+    if action == "get_compat_state":
+        result = evaluate(
+            f"(() => {{ const d = window.appDetailsStore?.GetAppDetails?.({appid(request.get('appid'))}) || {{}}; "
+            "return {tool: String(d.strCompatToolName || ''), priority: Number(d.nCompatToolPriority || 0)}; })()"
+        )
+        return result if isinstance(result, dict) else {"tool": "", "priority": 0}
+    if action == "get_launch_options":
+        result = evaluate(
+            f"String(window.appDetailsStore?.GetAppDetails?.({appid(request.get('appid'))})?.strLaunchOptions || '')"
+        )
+        return {"options": str(result or "")}
+    if action == "get_resolution":
+        result = evaluate(
+            f"window.SteamClient.Apps.GetResolutionOverrideForApp({appid(request.get('appid'))})"
+        )
+        return {"value": str(result or "Default")}
+    if action == "get_global_resolution":
+        result = evaluate(
+            f"String(window.settingsStore?.GetClientSetting?.({js_string(GLOBAL_RESOLUTION_KEY)})?.[0] || 'Default')"
+        )
+        return {"value": str(result or "Default")}
+    if action == "set_global_compat_tool":
+        tool = js_string(request.get("tool", ""))
+        return bool(evaluate(f"window.SteamClient.Settings.SpecifyGlobalCompatTool({tool})"))
+    if action == "set_compat_tool":
+        tool = js_string(request.get("tool", ""))
+        return bool(evaluate(
+            f"window.SteamClient.Apps.SpecifyCompatTool({appid(request.get('appid'))}, {tool})"
+        ))
+    if action == "set_launch_options":
+        options = js_string(request.get("options", ""))
+        return bool(evaluate(
+            f"window.SteamClient.Apps.SetAppLaunchOptions({appid(request.get('appid'))}, {options})"
+        ))
+    if action == "set_resolution":
+        resolution = str(request.get("value", "Default"))
+        if resolution not in ALLOWED_RESOLUTIONS:
+            raise ValueError("invalid resolution")
+        return bool(evaluate(
+            f"window.SteamClient.Apps.SetAppResolutionOverride({appid(request.get('appid'))}, {js_string(resolution)})"
+        ))
+    if action == "set_global_resolution":
+        resolution = str(request.get("value", "Default"))
+        if resolution not in ALLOWED_RESOLUTIONS:
+            raise ValueError("invalid resolution")
+        return bool(evaluate(
+            f"window.settingsStore?.GetClientSetting?.({js_string(GLOBAL_RESOLUTION_KEY)})?.[1]?.({js_string(resolution)})"
+        ))
+    raise ValueError("unsupported Steam bridge action")
+
+
+if __name__ == "__main__":
+    try:
+        request = json.load(sys.stdin)
+        print(json.dumps({"ok": True, "result": main(request)}))
+    except Exception as error:
+        print(json.dumps({"ok": False, "error": str(error)}))
+        sys.exit(1)

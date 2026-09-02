@@ -484,7 +484,7 @@ Item {
             FocusRow { id: resetRow; width: parent.width; title: root.selectedAppid ? "Reset game settings" : "Reset all game settings"; value: "A"; theme: root.theme; onActivated: root.resetTarget() }
             FocusRow { id: saveRow; width: parent.width; title: root.dirty ? "Save changes *" : "Save changes"; value: "A"; theme: root.theme; onActivated: root.save() }
             Text { text: root.statusText; color: theme.muted; font.pixelSize: theme.bodySize; wrapMode: Text.WordWrap; width: parent.width }
-            Text { text: "Steam compatibility tool and resolution controls remain gated behind Steam's private API."; color: theme.muted; font.pixelSize: theme.bodySize; wrapMode: Text.WordWrap; width: parent.width }
+            Text { text: "Steam compatibility, resolution, and launch options are on the Compatibility page."; color: theme.muted; font.pixelSize: theme.bodySize; wrapMode: Text.WordWrap; width: parent.width }
         }
     }
 

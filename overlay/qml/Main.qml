@@ -12,9 +12,9 @@ Window {
     Theme { id: theme }
     property var uiTheme: theme
     property int pageIndex: 0
-    property var pageTitles: ["Status", "Power", "Fans", "Games", "Settings", "Calibration"]
-    property var pageIcons: ["status.svg", "power.svg", "fans.svg", "games.svg", "settings.svg", "calibration.svg"]
-    property var pageComponents: [statusPage, powerPage, fansPage, gamePage, settingsPage, calibrationPage]
+    property var pageTitles: ["Status", "Power", "Fans", "Games", "Compatibility", "Settings", "Calibration"]
+    property var pageIcons: ["status.svg", "power.svg", "fans.svg", "games.svg", "compatibility.svg", "settings.svg", "calibration.svg"]
+    property var pageComponents: [statusPage, powerPage, fansPage, gamePage, compatibilityPage, settingsPage, calibrationPage]
 
     function showPage(index) {
         pageIndex = index;
@@ -282,7 +282,15 @@ Window {
         SettingsPage {
             armada: armada
             theme: root.uiTheme
-            onOpenCalibration: root.showPage(5)
+            onOpenCalibration: root.showPage(6)
+        }
+    }
+
+    Component {
+        id: compatibilityPage
+        CompatibilityPage {
+            armada: armada
+            theme: root.uiTheme
         }
     }
 
