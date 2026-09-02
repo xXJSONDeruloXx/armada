@@ -34,6 +34,14 @@ experiment; the ten-cycle objective is exceeded by 11 clean current-image
 cycles, and remaining blind repetitions are deferred pending the read-only
 root-cause/instrumentation review.
 
+The first functional kernel opportunity A/B is recorded in
+[dwc3-skip-phy-ab.md](dwc3-skip-phy-ab.md). The reviewed Qualcomm DWC3
+skip-PHY-init candidate booted and suspended cleanly but produced no observable
+USB/PHY or relevant power/residency improvement in the matched cable-free
+deep run, so it was rolled back. Its device-local recipe is preserved in
+`device-kernel-layer-dwc3.Containerfile`; the unresolved RPMh/AOP question is
+independent of this negative result.
+
 The pre-update image used for the historical control runs was older than this
 checkout. Run a fresh read-only preflight before any future update, then use
 Armada's shipped update hook to check and stage the configured channel; the
@@ -216,6 +224,9 @@ tarball into a uniquely tagged on-device OCI layer, regenerates the initramfs,
 and applies it with bootc's containers-storage/downloaded-image flow. This
 keeps each iteration quick while preserving image provenance and rollback; it
 does not weaken the production signed update boundary.
+
+The DWC3 candidate used the same fast path with the candidate-specific
+`device-kernel-layer-dwc3.Containerfile`; it was not retained after the A/B.
 
 The `ufs-irq` trace profile resolves the live `ufshcd` IRQ from
 `/proc/interrupts` at run time. It never assumes a board IRQ number, which is

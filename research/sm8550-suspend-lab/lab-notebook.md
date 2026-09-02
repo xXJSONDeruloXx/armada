@@ -1478,6 +1478,112 @@ repetitions stay deferred, not cancelled.
   precise validation of the platform-specific qcom_stats semantics. No vote,
   qcom_aoss/QMP control, or firmware interface was written.
 
+## 2026-09-02 00:43 UTC — DWC3 control pair
+
+- Control run `20260902T004312Z-8ddc7114e866`, label
+  `sm8550-dwc3-control-deep`, used the current corrected diagnostic image with
+  no functional kernel change. It completed cleanly through Armada's
+  `suspend-dispatch`: boottime delta `45.595271 s`, monotonic delta
+  `2.545525 s`, signed separation `43.049745 s`, unchanged boot ID, deep
+  suspend markers, successful suspend stats, expected RTC wake, and no failed
+  units or new error-like lines. The top interrupt deltas were UFS IRQ 170
+  `+15,737` and `mmc0` IRQ 169 `+52`.
+- Control run `20260902T004451Z-3059aa2a8a40`, label
+  `sm8550-dwc3-control-s2idle`, likewise completed cleanly after the SSH
+  control connection timed out and the autonomous on-device agent was allowed
+  to finish. Boottime delta `46.176895 s`, monotonic delta `2.570843 s`, signed
+  separation `43.606052 s`, unchanged boot ID, s2idle marker, successful
+  suspend stats, expected RTC wake, and no failed units or new error-like
+  lines were observed. The top interrupt deltas were UFS IRQ 170 `+9,069` and
+  `mmc0` IRQ 169 `+52`. The raw device archive and recovery receipt are
+  preserved; the SSH timeout is not classified as a suspend failure.
+- These matched controls provide the pre-change deep and s2idle references for
+  the DWC3 skip-PHY-init candidate. The candidate is one variable only: the
+  reviewed Qualcomm software-node property that prevents the USB core from
+  taking an extra PHY init reference. No regulator, PCIe, RPMh, SDHCI, UFS,
+  DT, runtime-PM, autosuspend, or other functional change is included.
+
+## 2026-09-02 01:05–01:37 UTC — candidate build infrastructure receipt
+
+- The first local candidate build used Linux 7.2, the Armada package commit
+  base `f595f0f`, all 137 patch-series entries including
+  `0910-usb-dwc3-qcom-skip-phy.patch`, the existing diagnostic RSC patch, the
+  unchanged config, and the pinned Fedora builder input
+  `registry.fedoraproject.org/fedora@sha256:0c6072366ebf8ea1c8c0f3a118aad3e9a9247d3065d499e54d62968f69351966`. The
+  candidate-specific `drivers/usb/dwc3/dwc3-qcom.o` compiled successfully and
+  all 137 patches applied; the build failed only in the final module stage
+  with `ccache: ... /usr/bin/gcc failed: Input/output error`, followed by
+  Docker containerd metadata `input/output error`. No candidate archive was
+  produced and the previously verified `kernel/out` artifact was not used for
+  deployment.
+- At the failure, the host had only about `408 MiB` free. The bounded recovery
+  removed the exact disposable `armada-kernel-build-cache` created by this
+  attempt and two stale, unregistered Podman machine base-image cache files,
+  recovering about 3.8 GiB. Docker was restarted once; metadata/content-store
+  operations still returned I/O errors, so Docker repair stopped. The failed
+  build container was prevented from running further by stopping Docker; no
+  source checkout, Git state, run archive, verified kernel artifact, or device
+  rollback image was deleted.
+- Candidate commit `5aa8e4c` (`feat(kernel): skip qcom dwc3 usb-core phy init`)
+  was pushed to the fork. A clean native arm64 GitHub workflow run
+  `33580043873` was dispatched from that exact commit using the package's
+  existing workflow and pinned builder. The run is the clean disposable build
+  boundary; no local Docker retry is permitted while its metadata remains
+  corrupt.
+
+## 2026-09-02 02:21–02:32 UTC — DWC3 skip-PHY-init candidate A/B
+
+- The clean workflow completed successfully in 41m2s. The published carrier
+  digest was
+  `sha256:80d2ae7b5664c723cffcd477db784ea3a939f209bb9c1d0bdad2f1dc643a525e`.
+  The extracted archive
+  `sm8550-suspend-lab-runs/artifacts/dwc3-5aa8e4cf/carrier/kernel/armada-kernel-7.2.0.tar.zst`
+  passed SHA-256 (`dbe3f05b967374d5c4a7386ebfc22362fa107fa7b58f7653cc314a70a3fd5fe3`),
+  checksum-file, zstd, tar-entry, Nova-DTB, and source-metadata checks. It
+  reports Linux 7.2 and 137 applied Armada patches. The carrier was retrieved
+  with `skopeo`, leaving the corrupt local Docker store unused.
+- Pre-deployment preflight
+  `preflight-20260902T0220Z-before-dwc3-deploy.json` recorded the diagnostic
+  `pmcb4` image and 35 GiB free on `/var/home`. The archive and checksum were
+  copied to `/var/home/armada/sm8550-dwc3`; the device verified the checksum.
+  A new local OCI layer was built from `localhost/armada-rsc:20260901` with
+  tag `localhost/armada-dwc3:20260902-5aa8e4c`, image digest
+  `sha256:32e8f1f3b8c89443c5201258136ab4d0a45afaf53af7e091d72a2e4ad8184054`,
+  version `20260902.dwc3-5aa8e4c`, and OSTree commit
+  `e1851199a26f178aaafc0e352df000371226ed2abb12414f635f5feacfd133fc`.
+  `bootc switch --transport containers-storage --download-only` staged it;
+  `bootc switch --from-downloaded --apply` activated it on the next boot.
+- Candidate run `20260902T022513Z-59a89502b494`, label
+  `sm8550-dwc3-candidate-deep`, completed cleanly: boottime delta
+  `46.669971 s`, monotonic delta `2.579147 s`, separation `44.090824 s`
+  (`observed`), deep markers, unchanged boot ID, suspend success `+1`, RTC
+  IRQ/source wake, no failed units, and no new suspend error. Full qcom_stats,
+  runtime-PM, clocks, regulators, genpd, interconnect graph/summary, raw
+  traces, callback logs, wake sources, and power-supply snapshots are in the
+  run archive.
+- Against control `20260902T004312Z-8ddc7114e866`, `a600000.usb` remained
+  suspended before dispatch and active after resume; `88e8000.phy` remained
+  active with `power/control=on`; `usb3_phy_gdsc` stayed on and
+  `usb30_prim_gdsc` showed the same suspended/active transition with usage 0.
+  Filtered USB clock lines, USB regulator lines, USB genpd lines, and
+  post-resume DWC3 interconnect votes were identical. DWC3/combo-PHY callback
+  order and return status were identical, including successful
+  `dwc3_qcom_pm_resume`.
+- AOSD, CXSD, and scalar DDR stayed zero in both runs. The independent DDR
+  `0xd0` duration delta was `986707923` ticks in the control and `995380207`
+  ticks in the candidate, comparable and not used as a deep-residency claim.
+  Battery metrics were unavailable (`battery_metrics={}`); no short-run power
+  improvement is claimed. Unchanged Qualcomm counters are not, by themselves,
+  evidence against this patch, but there was no observable USB/PHY mechanism,
+  relevant ownership, residency, or power improvement either.
+- This is a negative result for the cable-free workload. Candidate s2idle was
+  not run under the predeclared gate. `bootc rollback --apply` restored the
+  known diagnostic image; post-rollback preflight
+  `preflight-20260902T023217Z-1381e03a5c7d` confirms
+  `localhost/armada-rsc:20260901-pmcb4`, version
+  `20260901.rsc-f595f0f-pmcb`, and kernel `7.2.0`. Full comparison and raw
+  paths are documented in `dwc3-skip-phy-ab.md`.
+
 ## Iteration rule
 
 The quickest safe kernel loop is now documented in

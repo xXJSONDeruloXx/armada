@@ -146,3 +146,20 @@ The corrected RSC run
 `20260902T002708Z-4e8666167435` are complete. The UFS evidence does not justify
 a storage patch; the next experiment must target the remaining RPMh/AOP or
 counter-semantics boundary rather than guess at a Linux device workaround.
+
+## Functional candidate boundary: DWC3 skip-PHY-init
+
+The reviewed Qualcomm DWC3 candidate was built separately from the diagnostic
+artifact as package commit `5aa8e4c` on branch
+`feat/sm8550-dwc3-skip-phy`, with exactly one additional kernel patch,
+`0910-usb-dwc3-qcom-skip-phy-init.patch`. The clean arm64 package workflow
+`33580043873` passed with the same Linux 7.2 source, pinned Fedora builder,
+diagnostic RSC patch, and config. The carrier and archive hashes, device layer
+digest, and full A/B evidence are in
+[`dwc3-skip-phy-ab.md`](dwc3-skip-phy-ab.md).
+
+The candidate was deployed only through the fast OCI/bootc path, tested once
+in a matched cable-free/off-radio deep cycle, and rolled back after no
+observable USB/PHY mechanism or relevant power/residency improvement was
+found. Candidate s2idle was intentionally not run under the predeclared gate;
+the unresolved RSC/AOP question remains separate.
