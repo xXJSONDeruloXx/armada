@@ -10,6 +10,10 @@ Item {
     property bool dirty: false
     property bool resetPending: false
     property bool restartPending: false
+    property bool coresCustom: false
+    property bool gamescopeCoresCustom: false
+    property string customCoresText: ""
+    property string customGamescopeCoresText: ""
     property string statusText: ""
     property int focusIndex: 0
     property var rows: []
@@ -38,7 +42,11 @@ Item {
         (armada.config.installedGames || []).forEach(function(game) {
             if (game && game.appid) result.push({appid: String(game.appid), name: game.name || ("App " + game.appid)});
         });
-        result.sort(function(a, b) { return a.appid === "" ? -1 : a.name.localeCompare(b.name); });
+        result.sort(function(a, b) {
+            if (a.appid === "") return -1;
+            if (b.appid === "") return 1;
+            return a.name.localeCompare(b.name);
+        });
         return result;
     }
     function targetName() {
@@ -79,6 +87,7 @@ Item {
         var profile = (armada.config.fexProfiles || {})[id] || (armada.config.fexProfiles || {}).default;
         return profile ? profile.config || {} : {};
     }
+    function fexValue(key) { return fexConfig()[key] === "1" ? "On" : "Off"; }
     function setFexProfile(id) {
         if (id === "custom") setSetting("fexConfig", clone(fexConfig()));
         setSetting("fexProfile", id);
@@ -93,6 +102,7 @@ Item {
         var values = effective("thunks") || {};
         return values[key] !== false;
     }
+    function thunkDisplay(key) { return thunkValue(key) ? "On" : "Off"; }
     function toggleThunk(key) {
         var next = clone(effective("thunks") || {});
         next[key] = !thunkValue(key);
@@ -101,10 +111,12 @@ Item {
     function optionValues(key) {
         var result = ["default"];
         (armada.config.perf && armada.config.perf.corePresets || []).forEach(function(item) { result.push(item.data); });
+        result.push("custom");
         return result;
     }
     function optionLabel(key, value) {
         if (!value || value === "default") return "Default";
+        if (value === "custom") return "Custom";
         var options = armada.config.perf && armada.config.perf.corePresets || [];
         var match = options.filter(function(item) { return item.data === value; });
         return match.length ? match[0].label : value;
@@ -114,7 +126,45 @@ Item {
         var current = String(effective(key) || "default");
         var index = values.indexOf(current);
         var next = values[(index + direction + values.length) % values.length];
-        setSetting(key, next === "default" ? undefined : next);
+        var custom = next === "custom";
+        if (key === "cores") coresCustom = custom;
+        else gamescopeCoresCustom = custom;
+        setSetting(key, custom ? (key === "cores" ? customCoresText : customGamescopeCoresText) : (next === "default" ? undefined : next));
+        rebuildRows();
+    }
+    function cpulistError(text) {
+        var seen = {};
+        var count = Number(armada.config.perf && armada.config.perf.cpuCount || 0);
+        var found = 0;
+        var parts = String(text || "").split(",");
+        function isDigits(value) { return /^[0-9]+$/.test(value); }
+        for (var i = 0; i < parts.length; i++) {
+            var item = parts[i].trim();
+            if (!item) continue;
+            var range = item.split("-");
+            if (range.length > 2 || !isDigits(range[0]) || (range.length === 2 && !isDigits(range[1]))) return "Invalid entry: " + item;
+            var low = Number(range[0]);
+            var high = range.length === 2 ? Number(range[1]) : low;
+            if (high < low) return "Invalid range: " + item;
+            for (var cpu = low; cpu <= high; cpu++) {
+                if (count && cpu >= count) return "No such CPU: " + cpu;
+                if (seen[cpu]) return "Duplicate CPU: " + cpu;
+                seen[cpu] = true;
+                found++;
+            }
+        }
+        return found ? "" : "Enter cores, e.g. 7,3-6";
+    }
+    function commitCustomCores(key, text) {
+        var error = cpulistError(text);
+        if (error) {
+            statusText = error;
+            return;
+        }
+        if (key === "cores") customCoresText = text.trim();
+        else customGamescopeCoresText = text.trim();
+        setSetting(key, text.trim());
+        statusText = "Custom core list staged";
     }
     function adjust(key, delta, minimum, maximum) {
         var current = Number(effective(key) || 0);
@@ -172,6 +222,22 @@ Item {
         draftTweaks = clone(armada.config.tweaks || {global: {}, games: {}});
         var values = games().map(function(item) { return item.appid; });
         if (values.indexOf(selectedAppid) < 0) selectedAppid = "";
+        var coreValue = String(effective("cores") || "");
+        var gamescopeCoreValue = String(effective("gamescopeCores") || "");
+        coresCustom = coreValue !== "" && optionValues("cores").indexOf(coreValue) < 0;
+        gamescopeCoresCustom = gamescopeCoreValue !== "" && optionValues("gamescopeCores").indexOf(gamescopeCoreValue) < 0;
+        customCoresText = coresCustom ? coreValue : "";
+        customGamescopeCoresText = gamescopeCoresCustom ? gamescopeCoreValue : "";
+        rebuildRows();
+    }
+    function rebuildRows() {
+        var nextRows = [targetRow, fexRow, fexTsoRow, fexX87Row, fexMultiblockRow, fexVectorRow, fexMemcpyRow,
+            fexBarrierRow, thunkVulkanRow, thunkGlRow, thunkAsoundRow, thunkDrmRow, thunkWaylandRow, cpuCoresRow];
+        if (coresCustom) nextRows.push(coreTextRow);
+        nextRows.push(cpuTopologyRow, niceRow, gamescopeCoresRow);
+        if (gamescopeCoresCustom) nextRows.push(gamescopeCoreTextRow);
+        nextRows.push(gamescopeNiceRow, gamescopeRealtimeRow, schedulerRow, reapplyRow, restartRow, resetRow, saveRow);
+        rows = nextRows;
         rows.forEach(function(item, index) { item.selected = index === focusIndex; });
     }
     function handleAction(action) {
@@ -190,9 +256,11 @@ Item {
             } else if (fexKnobRows.indexOf(row) >= 0) toggleFexKnob(fexKnobs[fexKnobRows.indexOf(row)].key);
             else if (thunkRows.indexOf(row) >= 0) toggleThunk(thunks[thunkRows.indexOf(row)].key);
             else if (row === cpuCoresRow) cycleOption("cores", direction);
+            else if (row === coreTextRow) statusText = "Press A to edit the custom CPU list";
             else if (row === cpuTopologyRow) setSetting("wineTopology", effective("wineTopology") === false ? undefined : false);
             else if (row === niceRow) adjust("nice", direction, -20, 19);
             else if (row === gamescopeCoresRow) cycleOption("gamescopeCores", direction);
+            else if (row === gamescopeCoreTextRow) statusText = "Press A to edit the custom Gamescope CPU list";
             else if (row === gamescopeNiceRow) adjust("gamescopeNice", direction, -20, 19);
             else if (row === gamescopeRealtimeRow) setSetting("gamescopeRr", !Boolean(effective("gamescopeRr")));
             else if (row === schedulerRow) {
@@ -203,7 +271,9 @@ Item {
                 setSetting("scheduler", nextScheduler === "default" ? undefined : nextScheduler);
             }
         } else if (action === "accept") {
-            if (row === reapplyRow) reapply();
+            if (row === coreTextRow) coreField.forceActiveFocus();
+            else if (row === gamescopeCoreTextRow) gamescopeCoreField.forceActiveFocus();
+            else if (row === reapplyRow) reapply();
             else if (row === restartRow) restartGameMode();
             else if (row === resetRow) resetTarget();
             else if (row === saveRow) save();
@@ -217,10 +287,6 @@ Item {
     Component.onCompleted: {
         fexKnobRows = [fexTsoRow, fexX87Row, fexMultiblockRow, fexVectorRow, fexMemcpyRow, fexBarrierRow];
         thunkRows = [thunkVulkanRow, thunkGlRow, thunkAsoundRow, thunkDrmRow, thunkWaylandRow];
-        rows = [targetRow, fexRow, fexTsoRow, fexX87Row, fexMultiblockRow, fexVectorRow, fexMemcpyRow,
-            fexBarrierRow, thunkVulkanRow, thunkGlRow, thunkAsoundRow, thunkDrmRow, thunkWaylandRow,
-            cpuCoresRow, cpuTopologyRow, niceRow, gamescopeCoresRow, gamescopeNiceRow,
-            gamescopeRealtimeRow, schedulerRow, reapplyRow, restartRow, resetRow, saveRow];
         sync();
     }
 
@@ -234,21 +300,25 @@ Item {
             Text { text: "Armada launch, FEX, and performance settings"; color: theme.muted; font.pixelSize: theme.bodySize; wrapMode: Text.WordWrap; width: parent.width }
             FocusRow { id: targetRow; width: parent.width; title: "Edit target"; value: root.targetName(); theme: root.theme }
             FocusRow { id: fexRow; width: parent.width; title: "FEX preset"; value: root.fexLabel(String(root.effective("fexProfile") || "default")); theme: root.theme }
-            FocusRow { id: fexTsoRow; width: parent.width; title: "TSO enabled"; value: root.fexConfig().TSOEnabled === "1" ? "On" : "Off"; theme: root.theme }
-            FocusRow { id: fexX87Row; width: parent.width; title: "X87 reduced precision"; value: root.fexConfig().X87ReducedPrecision === "1" ? "On" : "Off"; theme: root.theme }
-            FocusRow { id: fexMultiblockRow; width: parent.width; title: "Multiblock"; value: root.fexConfig().Multiblock === "1" ? "On" : "Off"; theme: root.theme }
-            FocusRow { id: fexVectorRow; width: parent.width; title: "Vector TSO enabled"; value: root.fexConfig().VectorTSOEnabled === "1" ? "On" : "Off"; theme: root.theme }
-            FocusRow { id: fexMemcpyRow; width: parent.width; title: "Memcpy TSO enabled"; value: root.fexConfig().MemcpySetTSOEnabled === "1" ? "On" : "Off"; theme: root.theme }
-            FocusRow { id: fexBarrierRow; width: parent.width; title: "Half barrier TSO"; value: root.fexConfig().HalfBarrierTSOEnabled === "1" ? "On" : "Off"; theme: root.theme }
-            FocusRow { id: thunkVulkanRow; width: parent.width; title: "Host Vulkan"; value: root.thunkValue("Vulkan") ? "On" : "Off"; theme: root.theme }
-            FocusRow { id: thunkGlRow; width: parent.width; title: "Host OpenGL"; value: root.thunkValue("GL") ? "On" : "Off"; theme: root.theme }
-            FocusRow { id: thunkAsoundRow; width: parent.width; title: "Host ALSA"; value: root.thunkValue("asound") ? "On" : "Off"; theme: root.theme }
-            FocusRow { id: thunkDrmRow; width: parent.width; title: "Host DRM"; value: root.thunkValue("drm") ? "On" : "Off"; theme: root.theme }
-            FocusRow { id: thunkWaylandRow; width: parent.width; title: "Host Wayland"; value: root.thunkValue("WaylandClient") ? "On" : "Off"; theme: root.theme }
-            FocusRow { id: cpuCoresRow; width: parent.width; title: "Game CPU cores"; value: root.optionLabel("cores", effective("cores")); theme: root.theme }
+            FocusRow { id: fexTsoRow; width: parent.width; title: "TSO enabled"; value: root.fexValue("TSOEnabled"); theme: root.theme }
+            FocusRow { id: fexX87Row; width: parent.width; title: "X87 reduced precision"; value: root.fexValue("X87ReducedPrecision"); theme: root.theme }
+            FocusRow { id: fexMultiblockRow; width: parent.width; title: "Multiblock"; value: root.fexValue("Multiblock"); theme: root.theme }
+            FocusRow { id: fexVectorRow; width: parent.width; title: "Vector TSO enabled"; value: root.fexValue("VectorTSOEnabled"); theme: root.theme }
+            FocusRow { id: fexMemcpyRow; width: parent.width; title: "Memcpy TSO enabled"; value: root.fexValue("MemcpySetTSOEnabled"); theme: root.theme }
+            FocusRow { id: fexBarrierRow; width: parent.width; title: "Half barrier TSO"; value: "On"; theme: root.theme }
+            FocusRow { id: thunkVulkanRow; width: parent.width; title: "Host Vulkan"; value: root.thunkDisplay("Vulkan"); theme: root.theme }
+            FocusRow { id: thunkGlRow; width: parent.width; title: "Host OpenGL"; value: root.thunkDisplay("GL"); theme: root.theme }
+            FocusRow { id: thunkAsoundRow; width: parent.width; title: "Host ALSA"; value: root.thunkDisplay("asound"); theme: root.theme }
+            FocusRow { id: thunkDrmRow; width: parent.width; title: "Host DRM"; value: root.thunkDisplay("drm"); theme: root.theme }
+            FocusRow { id: thunkWaylandRow; width: parent.width; title: "Host Wayland"; value: root.thunkDisplay("WaylandClient"); theme: root.theme }
+            FocusRow { id: cpuCoresRow; width: parent.width; title: "Game CPU cores"; value: root.coresCustom ? "Custom" : root.optionLabel("cores", effective("cores")); theme: root.theme }
+            FocusRow { id: coreTextRow; visible: root.coresCustom; width: parent.width; title: "Custom game CPU list"; value: root.customCoresText || "Edit"; theme: root.theme; onActivated: coreField.forceActiveFocus() }
+            TextField { id: coreField; visible: root.coresCustom; width: parent.width; text: root.customCoresText; placeholderText: "e.g. 7,3-6"; onEditingFinished: root.commitCustomCores("cores", text) }
             FocusRow { id: cpuTopologyRow; width: parent.width; title: "Wine CPU topology"; value: root.boolValue("wineTopology"); theme: root.theme }
             FocusRow { id: niceRow; width: parent.width; title: "Game priority"; value: String(effective("nice") === undefined ? 0 : effective("nice")); theme: root.theme }
-            FocusRow { id: gamescopeCoresRow; width: parent.width; title: "Gamescope CPU cores"; value: root.optionLabel("gamescopeCores", effective("gamescopeCores")); theme: root.theme }
+            FocusRow { id: gamescopeCoresRow; width: parent.width; title: "Gamescope CPU cores"; value: root.gamescopeCoresCustom ? "Custom" : root.optionLabel("gamescopeCores", effective("gamescopeCores")); theme: root.theme }
+            FocusRow { id: gamescopeCoreTextRow; visible: root.gamescopeCoresCustom; width: parent.width; title: "Custom Gamescope CPU list"; value: root.customGamescopeCoresText || "Edit"; theme: root.theme; onActivated: gamescopeCoreField.forceActiveFocus() }
+            TextField { id: gamescopeCoreField; visible: root.gamescopeCoresCustom; width: parent.width; text: root.customGamescopeCoresText; placeholderText: "e.g. 7,3-6"; onEditingFinished: root.commitCustomCores("gamescopeCores", text) }
             FocusRow { id: gamescopeNiceRow; width: parent.width; title: "Gamescope priority"; value: String(effective("gamescopeNice") === undefined ? 0 : effective("gamescopeNice")); theme: root.theme }
             FocusRow { id: gamescopeRealtimeRow; width: parent.width; title: "Gamescope realtime"; value: effective("gamescopeRr") ? "On" : "Off"; theme: root.theme }
             FocusRow { id: schedulerRow; width: parent.width; title: "CPU scheduler"; value: root.schedulerValue(); theme: root.theme }
