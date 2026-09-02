@@ -14,7 +14,7 @@ Window {
     property int pageIndex: 0
     property var pageTitles: ["Status", "Power", "Fans", "Games", "Settings", "Calibration"]
     property var pageIcons: ["status.svg", "power.svg", "fans.svg", "games.svg", "settings.svg", "calibration.svg"]
-    property var pageComponents: [statusPage, powerPage, fansPage, placeholderPage, settingsPage, calibrationPage]
+    property var pageComponents: [statusPage, powerPage, fansPage, gamePage, settingsPage, calibrationPage]
 
     function showPage(index) {
         pageIndex = index;
@@ -281,6 +281,14 @@ Window {
             armada: armada
             theme: root.uiTheme
             onOpenCalibration: root.showPage(5)
+        }
+    }
+
+    Component {
+        id: gamePage
+        GamePage {
+            armada: armada
+            theme: root.uiTheme
         }
     }
 
