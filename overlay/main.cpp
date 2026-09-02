@@ -3,10 +3,10 @@
 #include <QComboBox>
 #include <QDBusConnection>
 #include <QDir>
+#include <QFile>
 #include <QFileInfo>
 #include <QFormLayout>
 #include <QGroupBox>
-#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QKeyEvent>
@@ -16,12 +16,11 @@
 #include <QLocalSocket>
 #include <QMainWindow>
 #include <QPushButton>
-#include <QScrollArea>
+#include <QRegularExpression>
 #include <QSpinBox>
 #include <QTabWidget>
 #include <QTimer>
 #include <QVBoxLayout>
-#include <QWindow>
 #include <QStringList>
 #include <cstdlib>
 #include <cstring>
@@ -35,6 +34,17 @@ struct RpcResult {
     QJsonValue result;
     QString error;
 };
+
+struct GamescopeFocusState {
+    xcb_window_t overlayWindow = XCB_WINDOW_NONE;
+    xcb_window_t steamWindow = XCB_WINDOW_NONE;
+    uint32_t steamOverlay = 0;
+    uint32_t steamInputFocus = 0;
+    uint32_t steamNotification = 0;
+    bool saved = false;
+};
+
+GamescopeFocusState gamescopeFocusState;
 
 QString apiSocket()
 {
@@ -82,8 +92,140 @@ bool sendCommand(const QString &command)
     return socket.waitForBytesWritten(200);
 }
 
+bool gamescopeRootHasProperty(const QString &displayName, const char *propertyName)
+{
+    const QByteArray displayBytes = displayName.toLocal8Bit();
+    int screen = 0;
+    xcb_connection_t *connection = xcb_connect(displayBytes.constData(), &screen);
+    if (!connection || xcb_connection_has_error(connection)) {
+        if (connection)
+            xcb_disconnect(connection);
+        return false;
+    }
+    const auto atomCookie = xcb_intern_atom(connection, 0,
+        static_cast<uint16_t>(strlen(propertyName)), propertyName);
+    xcb_intern_atom_reply_t *atomReply = xcb_intern_atom_reply(connection, atomCookie, nullptr);
+    const xcb_atom_t property = atomReply ? atomReply->atom : static_cast<xcb_atom_t>(XCB_ATOM_NONE);
+    free(atomReply);
+    const xcb_screen_t *screenInfo = xcb_setup_roots_iterator(xcb_get_setup(connection)).data;
+    bool present = false;
+    if (property != XCB_ATOM_NONE && screenInfo) {
+        const auto cookie = xcb_get_property(connection, 0, screenInfo->root, property,
+            XCB_GET_PROPERTY_TYPE_ANY, 0, 1);
+        xcb_get_property_reply_t *reply = xcb_get_property_reply(connection, cookie, nullptr);
+        present = reply && reply->value_len > 0;
+        free(reply);
+    }
+    xcb_disconnect(connection);
+    return present;
+}
+
+QString discoverGamescopeDisplay()
+{
+    QString first;
+    const QRegularExpression displayPattern(QStringLiteral("^X(\\d+)$"));
+    const QStringList sockets = QDir(QStringLiteral("/tmp/.X11-unix"))
+        .entryList(QDir::System | QDir::NoDotAndDotDot, QDir::Name);
+    for (const QString &socket : sockets) {
+        const QRegularExpressionMatch match = displayPattern.match(socket);
+        if (!match.hasMatch())
+            continue;
+        const QString display = QStringLiteral(":") + match.captured(1);
+        if (first.isEmpty())
+            first = display;
+        if (gamescopeRootHasProperty(display, "GAMESCOPE_FOCUSED_WINDOW"))
+            return display;
+    }
+    return first;
+}
+
+QString gamescopeStateFile()
+{
+    return QFileInfo(controlSocket()).absolutePath() + QStringLiteral("/gamescope-focus.json");
+}
+
+bool getCardinal(xcb_connection_t *connection, xcb_window_t window, xcb_atom_t property, uint32_t *value)
+{
+    const auto cookie = xcb_get_property(connection, 0, window, property, XCB_ATOM_CARDINAL, 0, 1);
+    xcb_get_property_reply_t *reply = xcb_get_property_reply(connection, cookie, nullptr);
+    if (!reply || reply->format != 32 || reply->value_len < 1) {
+        free(reply);
+        return false;
+    }
+    *value = *static_cast<const uint32_t *>(xcb_get_property_value(reply));
+    free(reply);
+    return true;
+}
+
+void setCardinal(xcb_connection_t *connection, xcb_window_t window, xcb_atom_t property, uint32_t value)
+{
+    if (property != XCB_ATOM_NONE)
+        xcb_change_property(connection, XCB_PROP_MODE_REPLACE, window, property,
+            XCB_ATOM_CARDINAL, 32, 1, &value);
+}
+
+xcb_window_t findSteamWindow(xcb_connection_t *connection, xcb_window_t root, xcb_atom_t wmClass)
+{
+    const auto cookie = xcb_query_tree(connection, root);
+    xcb_query_tree_reply_t *tree = xcb_query_tree_reply(connection, cookie, nullptr);
+    if (!tree)
+        return XCB_WINDOW_NONE;
+    const int length = xcb_query_tree_children_length(tree);
+    const xcb_window_t *children = xcb_query_tree_children(tree);
+    for (int index = 0; index < length; ++index) {
+        const auto propertyCookie = xcb_get_property(connection, 0, children[index], wmClass,
+            XCB_GET_PROPERTY_TYPE_ANY, 0, 32);
+        xcb_get_property_reply_t *property = xcb_get_property_reply(connection, propertyCookie, nullptr);
+        if (!property)
+            continue;
+        const QByteArray value(static_cast<const char *>(xcb_get_property_value(property)),
+            xcb_get_property_value_length(property));
+        free(property);
+        if (value.contains("steamwebhelper") || value.contains("steam")) {
+            const xcb_window_t result = children[index];
+            free(tree);
+            return result;
+        }
+    }
+    free(tree);
+    return XCB_WINDOW_NONE;
+}
+
+void saveGamescopeFocusState()
+{
+    QJsonObject state;
+    state.insert(QStringLiteral("display"), qEnvironmentVariable("DISPLAY"));
+    state.insert(QStringLiteral("overlayWindow"), static_cast<qint64>(gamescopeFocusState.overlayWindow));
+    state.insert(QStringLiteral("steamWindow"), static_cast<qint64>(gamescopeFocusState.steamWindow));
+    state.insert(QStringLiteral("steamOverlay"), static_cast<int>(gamescopeFocusState.steamOverlay));
+    state.insert(QStringLiteral("steamInputFocus"), static_cast<int>(gamescopeFocusState.steamInputFocus));
+    state.insert(QStringLiteral("steamNotification"), static_cast<int>(gamescopeFocusState.steamNotification));
+    QFile file(gamescopeStateFile());
+    if (file.open(QIODevice::WriteOnly | QIODevice::Truncate))
+        file.write(QJsonDocument(state).toJson(QJsonDocument::Compact));
+}
+
+bool loadGamescopeFocusState()
+{
+    QFile file(gamescopeStateFile());
+    if (!file.open(QIODevice::ReadOnly))
+        return false;
+    QJsonParseError error;
+    const QJsonDocument document = QJsonDocument::fromJson(file.readAll(), &error);
+    if (error.error != QJsonParseError::NoError || !document.isObject())
+        return false;
+    const QJsonObject state = document.object();
+    gamescopeFocusState.steamWindow = static_cast<xcb_window_t>(state.value(QStringLiteral("steamWindow")).toInteger());
+    gamescopeFocusState.steamOverlay = static_cast<uint32_t>(state.value(QStringLiteral("steamOverlay")).toInt());
+    gamescopeFocusState.steamInputFocus = static_cast<uint32_t>(state.value(QStringLiteral("steamInputFocus")).toInt());
+    gamescopeFocusState.steamNotification = static_cast<uint32_t>(state.value(QStringLiteral("steamNotification")).toInt());
+    gamescopeFocusState.saved = true;
+    return true;
+}
+
 void markGamescopeOverlay(WId window)
 {
+    gamescopeFocusState.overlayWindow = static_cast<xcb_window_t>(window);
     int screen = 0;
     xcb_connection_t *connection = xcb_connect(nullptr, &screen);
     if (!connection || xcb_connection_has_error(connection)) {
@@ -95,26 +237,79 @@ void markGamescopeOverlay(WId window)
     auto atom = [connection](const char *name) {
         const auto cookie = xcb_intern_atom(connection, 0, static_cast<uint16_t>(strlen(name)), name);
         xcb_intern_atom_reply_t *reply = xcb_intern_atom_reply(connection, cookie, nullptr);
-        const xcb_atom_t value = reply ? reply->atom : XCB_ATOM_NONE;
+        const xcb_atom_t value = reply ? reply->atom : static_cast<xcb_atom_t>(XCB_ATOM_NONE);
         free(reply);
         return value;
     };
     const xcb_atom_t overlay = atom("STEAM_OVERLAY");
     const xcb_atom_t inputFocus = atom("STEAM_INPUT_FOCUS");
+    const xcb_atom_t notification = atom("STEAM_NOTIFICATION");
+    const xcb_atom_t wmClass = atom("WM_CLASS");
     const xcb_atom_t windowType = atom("_NET_WM_WINDOW_TYPE");
     const xcb_atom_t dockType = atom("_NET_WM_WINDOW_TYPE_DOCK");
     const uint32_t enabled = 1;
-    if (overlay != XCB_ATOM_NONE)
-        xcb_change_property(connection, XCB_PROP_MODE_REPLACE, window, overlay,
-            XCB_ATOM_CARDINAL, 32, 1, &enabled);
-    if (inputFocus != XCB_ATOM_NONE)
-        xcb_change_property(connection, XCB_PROP_MODE_REPLACE, window, inputFocus,
-            XCB_ATOM_CARDINAL, 32, 1, &enabled);
+    if (!gamescopeFocusState.saved) {
+        const xcb_screen_t *screenInfo = xcb_setup_roots_iterator(xcb_get_setup(connection)).data;
+        gamescopeFocusState.steamWindow = screenInfo
+            ? findSteamWindow(connection, screenInfo->root, wmClass)
+            : static_cast<xcb_window_t>(XCB_WINDOW_NONE);
+        if (gamescopeFocusState.steamWindow != XCB_WINDOW_NONE) {
+            getCardinal(connection, gamescopeFocusState.steamWindow, overlay, &gamescopeFocusState.steamOverlay);
+            getCardinal(connection, gamescopeFocusState.steamWindow, inputFocus, &gamescopeFocusState.steamInputFocus);
+            getCardinal(connection, gamescopeFocusState.steamWindow, notification, &gamescopeFocusState.steamNotification);
+            gamescopeFocusState.saved = true;
+            saveGamescopeFocusState();
+            setCardinal(connection, gamescopeFocusState.steamWindow, overlay, 0);
+            setCardinal(connection, gamescopeFocusState.steamWindow, inputFocus, 0);
+            setCardinal(connection, gamescopeFocusState.steamWindow, notification, 0);
+        }
+    }
+    setCardinal(connection, window, overlay, enabled);
+    setCardinal(connection, window, inputFocus, enabled);
     if (windowType != XCB_ATOM_NONE && dockType != XCB_ATOM_NONE)
         xcb_change_property(connection, XCB_PROP_MODE_REPLACE, window, windowType,
             XCB_ATOM_ATOM, 32, 1, &dockType);
     xcb_flush(connection);
     xcb_disconnect(connection);
+}
+
+void restoreGamescopeOverlay(WId window)
+{
+    if (!gamescopeFocusState.saved)
+        loadGamescopeFocusState();
+    int screen = 0;
+    xcb_connection_t *connection = xcb_connect(nullptr, &screen);
+    if (!connection || xcb_connection_has_error(connection)) {
+        if (connection)
+            xcb_disconnect(connection);
+        return;
+    }
+    const auto atom = [connection](const char *name) {
+        const auto cookie = xcb_intern_atom(connection, 0, static_cast<uint16_t>(strlen(name)), name);
+        xcb_intern_atom_reply_t *reply = xcb_intern_atom_reply(connection, cookie, nullptr);
+        const xcb_atom_t value = reply ? reply->atom : static_cast<xcb_atom_t>(XCB_ATOM_NONE);
+        free(reply);
+        return value;
+    };
+    if (window != XCB_WINDOW_NONE) {
+        setCardinal(connection, window, atom("STEAM_OVERLAY"), 0);
+        setCardinal(connection, window, atom("STEAM_INPUT_FOCUS"), 0);
+    }
+    if (gamescopeFocusState.steamWindow != XCB_WINDOW_NONE) {
+        setCardinal(connection, gamescopeFocusState.steamWindow, atom("STEAM_OVERLAY"), gamescopeFocusState.steamOverlay);
+        setCardinal(connection, gamescopeFocusState.steamWindow, atom("STEAM_INPUT_FOCUS"), gamescopeFocusState.steamInputFocus);
+        setCardinal(connection, gamescopeFocusState.steamWindow, atom("STEAM_NOTIFICATION"), gamescopeFocusState.steamNotification);
+    }
+    xcb_flush(connection);
+    xcb_disconnect(connection);
+    QFile::remove(gamescopeStateFile());
+    gamescopeFocusState = {};
+}
+
+void cleanupGamescopeState()
+{
+    if (loadGamescopeFocusState())
+        restoreGamescopeOverlay(XCB_WINDOW_NONE);
 }
 
 class OverlayWindow final : public QMainWindow {
@@ -158,7 +353,7 @@ public:
 
     ~OverlayWindow() override
     {
-        request(QStringLiteral("inputplumber_intercept"), {{QStringLiteral("mode"), QStringLiteral("reset")} });
+        hideOverlay();
         QLocalServer::removeServer(controlSocket());
     }
 
@@ -341,9 +536,9 @@ private slots:
         loading_ = false;
     }
 
-    void saveProfile(const QString &label)
+    void saveProfile(const QString &)
     {
-        if (loading_ || label.isEmpty())
+        if (loading_ || profile_->currentText().isEmpty())
             return;
         const QString profile = profile_->currentData().toString();
         QJsonObject power = config_.value(QStringLiteral("power")).toObject();
@@ -377,7 +572,6 @@ private slots:
         const RpcResult intercept = request(QStringLiteral("inputplumber_intercept"), {{QStringLiteral("mode"), QStringLiteral("overlay")} });
         if (!intercept.ok)
             status_->setText(intercept.error);
-        markGamescopeOverlay(winId());
         show();
         markGamescopeOverlay(winId());
         raise();
@@ -387,6 +581,7 @@ private slots:
     void hideOverlay()
     {
         request(QStringLiteral("inputplumber_intercept"), {{QStringLiteral("mode"), QStringLiteral("reset")} });
+        restoreGamescopeOverlay(winId());
         hide();
     }
 
@@ -419,6 +614,15 @@ int main(int argc, char **argv)
 {
     const bool persistent = argc > 1 && QString::fromLocal8Bit(argv[1]) == QStringLiteral("--persistent");
     const QString command = argc > 1 ? QString::fromLocal8Bit(argv[1]) : QString();
+    if (qEnvironmentVariableIsEmpty("DISPLAY")) {
+        const QString display = discoverGamescopeDisplay();
+        if (!display.isEmpty())
+            qputenv("DISPLAY", display.toLocal8Bit());
+    }
+    if (command == QStringLiteral("--cleanup")) {
+        cleanupGamescopeState();
+        return 0;
+    }
     if (command == QStringLiteral("--show") || command == QStringLiteral("--hide") || command == QStringLiteral("--toggle")) {
         if (sendCommand(command.mid(2)))
             return 0;

@@ -59,14 +59,21 @@ PYEOF
 
 grep -Fq 'ExecStart=/usr/bin/armada-control-overlay --persistent' \
     "$ROOT/system_files/usr/lib/systemd/user/armada-control-overlay.service"
-grep -Fq 'Environment=DISPLAY=:0' \
-    "$ROOT/system_files/usr/lib/systemd/user/armada-control-overlay.service"
+if grep -Fq 'Environment=DISPLAY=:0' \
+    "$ROOT/system_files/usr/lib/systemd/user/armada-control-overlay.service"; then
+    echo "unexpected hard-coded Gamescope display" >&2
+    exit 1
+fi
 grep -Fq 'ExecStopPost=-/usr/libexec/armada/inputplumber-intercept reset' \
+    "$ROOT/system_files/usr/lib/systemd/user/armada-control-overlay.service"
+grep -Fq -- '--cleanup' "$ROOT/system_files/usr/lib/systemd/user/armada-control-overlay.service"
+grep -Fq 'ExecStartPre=-/usr/bin/armada-control-overlay --cleanup' \
     "$ROOT/system_files/usr/lib/systemd/user/armada-control-overlay.service"
 grep -Fq 'qt6-qtbase-gui' "$ROOT/build_files/10-base-packages.sh"
 grep -Fq 'armada-control-overlay' "$ROOT/build_files/40-vendor-system-files.sh"
 grep -Fq 'SetInterceptActivation' "$ROOT/system_files/usr/libexec/armada/inputplumber-intercept"
 grep -Fq -- '--standalone' "$ROOT/system_files/usr/share/applications/armada-control-overlay.desktop"
+grep -Fq 'STEAM_OVERLAY' "$ROOT/overlay/main.cpp"
 grep -Fq 'STEAM_INPUT_FOCUS' "$ROOT/overlay/main.cpp"
 
 printf 'Armada overlay API tests passed\n'

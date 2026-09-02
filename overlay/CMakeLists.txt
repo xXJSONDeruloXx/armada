@@ -11,4 +11,5 @@ pkg_check_modules(XCB REQUIRED IMPORTED_TARGET xcb)
 
 add_executable(armada-control-overlay main.cpp)
 target_link_libraries(armada-control-overlay PRIVATE Qt6::Core Qt6::DBus Qt6::Gui Qt6::Widgets Qt6::Network PkgConfig::XCB)
+target_compile_options(armada-control-overlay PRIVATE -Wall -Wextra -Wpedantic)
 install(TARGETS armada-control-overlay RUNTIME DESTINATION bin)

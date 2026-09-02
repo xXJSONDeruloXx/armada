@@ -5,9 +5,10 @@ After=graphical-session.target
 Wants=graphical-session.target
 
 [Service]
-Environment=DISPLAY=:0
 Environment=QT_QPA_PLATFORM=xcb
+ExecStartPre=-/usr/bin/armada-control-overlay --cleanup
 ExecStart=/usr/bin/armada-control-overlay --persistent
+ExecStopPost=-/usr/bin/armada-control-overlay --cleanup
 ExecStopPost=-/usr/libexec/armada/inputplumber-intercept reset
 Restart=on-failure
 RestartSec=1
