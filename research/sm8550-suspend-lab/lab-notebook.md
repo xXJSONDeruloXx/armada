@@ -1622,6 +1622,15 @@ repetitions stay deferred, not cancelled.
   that happens, gameplay/input recovery remains unverified. Full raw archives,
   qcom_stats, PM, clock, IRQ, RSC, display, input, audio, and log snapshots
   are retained under each run ID.
+- A read-only visual-readback attempt after the s2idle game run used the
+  installed ffmpeg. X11 captures from both `DISPLAY=:0` and `DISPLAY=:1` were
+  valid 1280x960 PNGs but black except for the cursor. KMS capture failed with
+  `No handle set on framebuffer`, and the fbdev path rejected the input option;
+  no privileged capture or compositor change was attempted. The frames and
+  exact hashes are preserved under
+  `20260902T024422Z-254284611e94/functional/README.md`. This leaves the
+  visible-surface and actual touch/gamepad-response gates explicitly pending
+  manual confirmation.
 
 ## Iteration rule
 
