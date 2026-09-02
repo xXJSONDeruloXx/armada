@@ -66,6 +66,8 @@ assert "SpecifyCompatTool(id, isWindowsPin ? defaultTool : '')" in reset_express
 assert 'SetAppLaunchOptions(id, "/usr/libexec/armada/armada-game-launch %command%")' in reset_expression
 assert "const appType = window.appStore?.GetAppOverviewByAppID?.(id)?.app_type" in reset_expression
 assert 'SetAppResolutionOverride(id, "Default")' in reset_expression
+assert "RequestAppDetails" in reset_expression
+assert "setTimeout(resolve, 250)" in reset_expression
 
 assert bridge.main({"action": "sweep_compat", "games": [{"appid": "123"}], "tool": "proton"}) is True
 sweep_expression = expressions[-1]
@@ -73,6 +75,7 @@ assert "const ids = [123]" in sweep_expression
 assert "defaultLaunch + ' ' + existing.trim()" in sweep_expression
 assert "SpecifyCompatTool(id, availableTool)" in sweep_expression
 assert "results.every(Boolean)" in sweep_expression
+assert "RequestAppDetails" in sweep_expression
 
 try:
     bridge.main({"action": "set_resolution", "appid": "123", "value": "1920x1080"})

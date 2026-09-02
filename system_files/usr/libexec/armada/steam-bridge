@@ -87,6 +87,19 @@ def appids(raw):
     return result
 
 
+def details_js(game_id):
+    return (
+        f"let details = window.appDetailsStore?.GetAppDetails?.({game_id});"
+        " if (!details && window.appDetailsStore?.RequestAppDetails) {"
+        f" window.appDetailsStore.RequestAppDetails({game_id});"
+        " for (let attempt = 0; attempt < 5 && !details; attempt++) {"
+        " await new Promise((resolve) => setTimeout(resolve, 250));"
+        f" details = window.appDetailsStore?.GetAppDetails?.({game_id});"
+        " }"
+        " }"
+    )
+
+
 def tools(raw):
     if not isinstance(raw, list):
         return []
@@ -107,13 +120,15 @@ def main(request):
         ))}
     if action == "get_compat_state":
         result = evaluate(
-            f"(() => {{ const d = window.appDetailsStore?.GetAppDetails?.({appid(request.get('appid'))}) || {{}}; "
-            "return {tool: String(d.strCompatToolName || ''), priority: Number(d.nCompatToolPriority || 0)}; })()"
+            f"(async () => {{ {details_js(appid(request.get('appid')))} "
+            "details = details || {}; "
+            "return {tool: String(details.strCompatToolName || ''), priority: Number(details.nCompatToolPriority || 0)}; })()"
         )
         return result if isinstance(result, dict) else {"tool": "", "priority": 0}
     if action == "get_launch_options":
         result = evaluate(
-            f"String(window.appDetailsStore?.GetAppDetails?.({appid(request.get('appid'))})?.strLaunchOptions || '')"
+            f"(async () => {{ {details_js(appid(request.get('appid')))} "
+            "return String((details || {}).strLaunchOptions || ''); })()"
         )
         return {"options": str(result or "")}
     if action == "get_resolution":
@@ -160,7 +175,8 @@ def main(request):
             "(async () => {"
             f" const id = {game_id};"
             f" const defaultTool = {default_tool};"
-            " const details = window.appDetailsStore?.GetAppDetails?.(id) || {};"
+            f" {details_js('id')}"
+            " details = details || {};"
             " const currentTool = String(details.strCompatToolName || '');"
             " const rawGlobalTools = window.SteamClient.Settings.GetGlobalCompatTools?.() || [];"
             " const globalTools = Array.isArray(rawGlobalTools) ? rawGlobalTools : [];"
@@ -198,7 +214,8 @@ def main(request):
             " for (const id of ids) {"
             "   const type = window.appStore?.GetAppOverviewByAppID?.(id)?.app_type;"
             "   if (type !== undefined && type !== 1 && type !== 1073741824) { results.push(true); continue; }"
-            "   const details = window.appDetailsStore?.GetAppDetails?.(id) || {};"
+            f"   {details_js('id')}"
+            "   details = details || {};"
             "   const existing = String(details.strLaunchOptions || '');"
             "   let launch = true;"
             "   if (!existing.includes(wrapper)) {"
