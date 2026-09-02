@@ -314,23 +314,6 @@ Window {
     }
 
     Component {
-        id: placeholderPage
-        Item {
-            property var theme: root.uiTheme
-            function handleAction(action) {
-                if (action === "accept") root.showPage(0);
-            }
-            Column {
-                anchors.fill: parent
-                spacing: theme.spacing
-                Text { text: "Armada Control"; color: theme.text; font.pixelSize: theme.pageTitleSize }
-                Text { text: "This page is being migrated from the Decky client."; color: theme.muted; font.pixelSize: theme.bodySize; wrapMode: Text.WordWrap; width: parent.width }
-                FocusRow { width: parent.width; title: "Back to overview"; value: "A"; theme: root.uiTheme; onActivated: root.showPage(0) }
-            }
-        }
-    }
-
-    Component {
         id: settingsPage
         SettingsPage {
             armada: root.backend
@@ -399,10 +382,6 @@ Window {
             }
             function pointOptions() {
                 return points().map(function(point, index) { return {data: String(index), label: "Point " + (index + 1)}; });
-            }
-            function smoothingValue() {
-                if (!draft.fanSettings) return "—";
-                return Math.round(Number(draft.fanSettings.smoothing) * 100) + "%";
             }
             function setCurvePoints(nextPoints) {
                 var next = clone(draft);
@@ -532,7 +511,6 @@ Window {
                     else if (row === deleteCurveRow) deleteCurve();
                     else if (row === addPointRow) addPoint();
                     else if (row === removePointRow) removePoint();
-                    else if (row === fanStopRow) row.toggle();
                     else if (row === saveRow) saveChanges();
                     else if (row === revertRow) discardDraft();
                 }

@@ -22,14 +22,6 @@ Item {
     }
     function toolId(item) { return String(item && item.id !== undefined ? item.id : item); }
     function toolLabel(item) { return String(item && item.label !== undefined ? item.label : toolId(item)); }
-    function toolText(id) {
-        if (!id) return "Follow Steam";
-        for (var i = 0; i < tools.length; ++i)
-            if (toolId(tools[i]) === id) return toolLabel(tools[i]);
-        for (var j = 0; j < appTools.length; ++j)
-            if (toolId(appTools[j]) === id) return toolLabel(appTools[j]);
-        return id;
-    }
     function call(action, fields) {
         var reply = armada.steamCall(action, fields || {});
         if (!reply.ok) statusText = reply.error || "Steam settings unavailable";

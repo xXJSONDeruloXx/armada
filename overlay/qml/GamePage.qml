@@ -59,11 +59,6 @@ Item {
         var match = games().filter(function(game) { return game.appid === selectedAppid; });
         return match.length ? match[0].name : "Default";
     }
-    function targetDisplay() {
-        if (selectedAppid) return targetName();
-        var running = armada.config.game || {};
-        return running.name ? "Default · " + running.name : "Default";
-    }
     function ownSettings() {
         if (!selectedAppid) return draftTweaks.global || {};
         return (draftTweaks.games || {})[selectedAppid] || {};
