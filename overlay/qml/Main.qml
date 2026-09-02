@@ -181,6 +181,7 @@ Window {
             property var controller: armada
             property var theme: root.uiTheme
             property var draft: ({})
+            property string currentTemp: ""
             property int focusIndex: 0
             property bool resetPending: false
             property var rows: []
@@ -237,6 +238,11 @@ Window {
                 if (key === "gpu_max" && Number(profile.gpu_max) < Number(profile.gpu_min || 0)) profile.gpu_min = profile.gpu_max;
                 draft = next;
             }
+            function refreshTemperature() {
+                var result = armada.call("get_current_temp");
+                if (result.ok && result.result !== undefined && result.result !== null)
+                    currentTemp = String(result.result);
+            }
             function save() {
                 var result = armada.call("save_power_config", {data: draft.power});
                 if (!result.ok) status.text = result.error;
@@ -287,7 +293,11 @@ Window {
             Component.onCompleted: {
                 rows = [profileRow, fanRow, governorRow, underclockRow, cpuRow, gpuMinRow, gpuMaxRow, resetRow, saveRow];
                 sync();
+                refreshTemperature();
+                temperaturePoll.start();
             }
+            Component.onDestruction: temperaturePoll.stop()
+            Timer { id: temperaturePoll; interval: 1000; repeat: true; onTriggered: power.refreshTemperature() }
 
             ScrollView {
                 anchors.fill: parent
@@ -307,7 +317,7 @@ Window {
                     FocusRow { id: resetRow; width: parent.width; title: "Reset profile"; value: "A"; theme: power.theme }
                     FocusRow { id: saveRow; width: parent.width; title: "Save profile"; value: "A"; theme: power.theme; onActivated: power.save() }
                     Text { id: status; color: theme.muted; text: ""; width: parent.width; wrapMode: Text.WordWrap }
-                    Text { text: "Temperature: " + (armada.fanState.currentTemp === undefined ? "—" : armada.fanState.currentTemp + " °C"); color: theme.muted }
+                    Text { text: "Temperature: " + (power.currentTemp || "—") + (power.currentTemp ? " °C" : ""); color: theme.muted }
                 }
             }
         }

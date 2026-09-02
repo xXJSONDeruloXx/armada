@@ -120,7 +120,7 @@ QString discoverGamescopeDisplay()
     QString first;
     const QRegularExpression pattern(QStringLiteral("^X(\\d+)$"));
     const QStringList sockets = QDir(QStringLiteral("/tmp/.X11-unix"))
-        .entryList(QDir::System | QDir::NoDotAndDotDot, QDir::Name);
+        .entryList(QDir::AllEntries | QDir::NoDotAndDotDot, QDir::Name);
     for (const QString &socket : sockets) {
         const QRegularExpressionMatch match = pattern.match(socket);
         if (!match.hasMatch())
