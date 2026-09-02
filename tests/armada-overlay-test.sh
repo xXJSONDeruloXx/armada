@@ -114,6 +114,9 @@ grep -Fq 'navigationActive' "$ROOT/overlay/qml/Main.qml"
 grep -Fq 'SliderRow' "$ROOT/overlay/qml/Main.qml"
 grep -Fq 'ToggleRow' "$ROOT/overlay/qml/SettingsPage.qml"
 grep -Fq 'SelectRow' "$ROOT/overlay/qml/CompatibilityPage.qml"
+grep -Fq 'SelectRow' "$ROOT/overlay/qml/GamePage.qml"
+grep -Fq 'SliderRow' "$ROOT/overlay/qml/GamePage.qml"
+grep -Fq 'ToggleRow' "$ROOT/overlay/qml/GamePage.qml"
 for icon in status power fans games settings calibration; do
     test -f "$ROOT/overlay/qml/icons/$icon.svg"
 done

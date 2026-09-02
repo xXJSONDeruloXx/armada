@@ -190,6 +190,11 @@ Item {
         rebuildRows();
     }
     function fexProfiles() { return Object.keys(armada.config.fexProfiles || {}); }
+    function fexProfileOptions() {
+        var result = fexProfiles().map(function(id) { return {data: id, label: root.fexLabel(id)}; });
+        result.push({data: "custom", label: "Custom"});
+        return result;
+    }
     function fexLabel(id) {
         if (id === "custom") return "Custom";
         return (armada.config.fexProfiles || {})[id] ? armada.config.fexProfiles[id].label : (id || "Default");
@@ -200,14 +205,13 @@ Item {
         var profile = (armada.config.fexProfiles || {})[id] || (armada.config.fexProfiles || {}).default;
         return profile ? profile.config || {} : {};
     }
-    function fexValue(key) { return fexConfig()[key] === "1" ? "On" : "Off"; }
     function setFexProfile(id) {
         if (id === "custom") setSetting("fexConfig", clone(fexConfig()));
         setSetting("fexProfile", id);
     }
-    function toggleFexKnob(key) {
+    function setFexKnob(key, enabled) {
         var next = clone(fexConfig());
-        next[key] = next[key] === "1" ? "0" : "1";
+        next[key] = enabled ? "1" : "0";
         setSetting("fexProfile", "custom");
         setSetting("fexConfig", next);
     }
@@ -215,11 +219,18 @@ Item {
         var values = effective("thunks") || {};
         return values[key] !== false;
     }
-    function thunkDisplay(key) { return thunkValue(key) ? "On" : "Off"; }
-    function toggleThunk(key) {
+    function setThunk(key, enabled) {
         var next = clone(effective("thunks") || {});
-        next[key] = !thunkValue(key);
+        next[key] = enabled;
         setSetting("thunks", next);
+    }
+    function targetOptions() { return games().map(function(game) { return {data: game.appid, label: game.name}; }); }
+    function selectTargetValue(value) {
+        selectedAppid = String(value || "");
+        draftTweaks = clone(armada.config.tweaks || {global: {}, games: {}});
+        dirty = false;
+        resetPending = false;
+        restartPending = false;
     }
     function optionValues(key) {
         var result = ["default"];
@@ -234,11 +245,7 @@ Item {
         var match = options.filter(function(item) { return item.data === value; });
         return match.length ? match[0].label : value;
     }
-    function cycleOption(key, direction) {
-        var values = optionValues(key);
-        var current = String(effective(key) || "default");
-        var index = values.indexOf(current);
-        var next = values[(index + direction + values.length) % values.length];
+    function selectOption(key, next) {
         var custom = next === "custom";
         if (key === "cores") coresCustom = custom;
         else gamescopeCoresCustom = custom;
@@ -279,10 +286,6 @@ Item {
         setSetting(key, text.trim());
         statusText = "Custom core list staged";
     }
-    function adjust(key, delta, minimum, maximum) {
-        var current = Number(effective(key) || 0);
-        setSetting(key, Math.max(minimum, Math.min(maximum, current + delta)));
-    }
     function save() {
         var reply = armada.call("save_tweaks", {data: draftTweaks});
         if (!reply.ok) statusText = reply.error;
@@ -320,15 +323,6 @@ Item {
         var reply = armada.call("restart_game_mode");
         restartPending = false;
         statusText = reply.ok ? "Game Mode restart requested" : reply.error;
-    }
-    function selectTarget(direction) {
-        var values = games();
-        var current = values.map(function(item) { return item.appid; }).indexOf(selectedAppid);
-        selectedAppid = values[(current + direction + values.length) % values.length].appid;
-        draftTweaks = clone(armada.config.tweaks || {global: {}, games: {}});
-        dirty = false;
-        resetPending = false;
-        restartPending = false;
     }
     function sync() {
         if (dirty) return;
@@ -370,30 +364,22 @@ Item {
         else if (action === "down") focusIndex = Math.min(rows.length - 1, focusIndex + 1);
         else if (action === "left" || action === "right") {
             var direction = action === "right" ? 1 : -1;
-            if (row === targetRow) selectTarget(direction);
+            if (row === targetRow) row.adjust(direction);
             else if (row === fexRow) {
-                var values = fexProfiles().concat(["custom"]);
-                var current = values.indexOf(String(effective("fexProfile") || "default"));
-                setFexProfile(values[(current + direction + values.length) % values.length]);
-            } else if (fexKnobRows.indexOf(row) >= 0) toggleFexKnob(fexKnobs[fexKnobRows.indexOf(row)].key);
-            else if (thunkRows.indexOf(row) >= 0) toggleThunk(thunks[thunkRows.indexOf(row)].key);
-            else if (row === cpuCoresRow) cycleOption("cores", direction);
+                row.adjust(direction);
+            } else if (fexKnobRows.indexOf(row) >= 0) row.toggle();
+            else if (thunkRows.indexOf(row) >= 0) row.toggle();
+            else if (row === cpuCoresRow || row === gamescopeCoresRow || row === schedulerRow) row.adjust(direction);
             else if (row === coreTextRow) statusText = "Press A to edit the custom CPU list";
-            else if (row === cpuTopologyRow) setSetting("wineTopology", effective("wineTopology") === false ? undefined : false);
-            else if (row === niceRow) adjust("nice", direction, -20, 19);
-            else if (row === gamescopeCoresRow) cycleOption("gamescopeCores", direction);
+            else if (row === cpuTopologyRow) row.toggle();
+            else if (row === niceRow || row === gamescopeNiceRow) row.adjust(direction);
             else if (row === gamescopeCoreTextRow) statusText = "Press A to edit the custom Gamescope CPU list";
-            else if (row === gamescopeNiceRow) adjust("gamescopeNice", direction, -20, 19);
-            else if (row === gamescopeRealtimeRow) setSetting("gamescopeRr", !Boolean(effective("gamescopeRr")));
-            else if (row === schedulerRow) {
-                var schedulers = ["default"].concat((armada.config.perf && armada.config.perf.schedulers) || []);
-                var currentScheduler = String(effective("scheduler") || "default");
-                var schedulerIndex = schedulers.indexOf(currentScheduler);
-                var nextScheduler = schedulers[(schedulerIndex + direction + schedulers.length) % schedulers.length];
-                setSetting("scheduler", nextScheduler === "default" ? undefined : nextScheduler);
-            }
+            else if (row === gamescopeRealtimeRow) row.toggle();
         } else if (action === "accept") {
-            if (row === coreTextRow) coreField.forceActiveFocus();
+            if (row === targetRow || row === fexRow || row === cpuCoresRow || row === gamescopeCoresRow || row === schedulerRow) row.open();
+            else if (fexKnobRows.indexOf(row) >= 0 || thunkRows.indexOf(row) >= 0 || row === cpuTopologyRow || row === gamescopeRealtimeRow) row.toggle();
+            else if (row === niceRow || row === gamescopeNiceRow) row.activate();
+            else if (row === coreTextRow) coreField.forceActiveFocus();
             else if (row === gamescopeCoreTextRow) gamescopeCoreField.forceActiveFocus();
             else if (row === environmentRow) openEnvironmentEditor();
             else if (row === reapplyRow) reapply();
@@ -403,8 +389,6 @@ Item {
         }
         rows.forEach(function(item, index) { item.selected = index === focusIndex; });
     }
-    function schedulerValue() { return String(effective("scheduler") || "default").toUpperCase(); }
-    function boolValue(key) { return effective(key) === false ? "Off" : "On"; }
     function handleEnvironmentAction(action) {
         var row = rows[focusIndex];
         if (action === "up") focusIndex = Math.max(0, focusIndex - 1);
@@ -453,31 +437,31 @@ Item {
             spacing: theme.spacing
             Text { text: "Game settings"; color: theme.text; font.pixelSize: theme.pageTitleSize }
             Text { text: "Armada launch, FEX, and performance settings"; color: theme.muted; font.pixelSize: theme.bodySize; wrapMode: Text.WordWrap; width: parent.width }
-            FocusRow { id: targetRow; width: parent.width; title: "Edit target"; value: root.targetDisplay(); theme: root.theme }
+            SelectRow { id: targetRow; width: parent.width; title: "Game profile"; options: root.targetOptions(); currentValue: root.selectedAppid; theme: root.theme; onValueEdited: root.selectTargetValue(value) }
             Text { text: armada.config.game && armada.config.game.name ? "Running: " + armada.config.game.name : "No tracked game"; color: theme.muted; font.pixelSize: theme.bodySize; width: parent.width; elide: Text.ElideRight }
-            FocusRow { id: fexRow; width: parent.width; title: "FEX preset"; value: root.fexLabel(String(root.effective("fexProfile") || "default")); theme: root.theme }
-            FocusRow { id: fexTsoRow; width: parent.width; title: "TSO enabled"; value: root.fexValue("TSOEnabled"); theme: root.theme }
-            FocusRow { id: fexX87Row; width: parent.width; title: "X87 reduced precision"; value: root.fexValue("X87ReducedPrecision"); theme: root.theme }
-            FocusRow { id: fexMultiblockRow; width: parent.width; title: "Multiblock"; value: root.fexValue("Multiblock"); theme: root.theme }
-            FocusRow { id: fexVectorRow; width: parent.width; title: "Vector TSO enabled"; value: root.fexValue("VectorTSOEnabled"); theme: root.theme }
-            FocusRow { id: fexMemcpyRow; width: parent.width; title: "Memcpy TSO enabled"; value: root.fexValue("MemcpySetTSOEnabled"); theme: root.theme }
-            FocusRow { id: fexBarrierRow; width: parent.width; title: "Half barrier TSO"; value: "On"; theme: root.theme }
-            FocusRow { id: thunkVulkanRow; width: parent.width; title: "Host Vulkan"; value: root.thunkDisplay("Vulkan"); theme: root.theme }
-            FocusRow { id: thunkGlRow; width: parent.width; title: "Host OpenGL"; value: root.thunkDisplay("GL"); theme: root.theme }
-            FocusRow { id: thunkAsoundRow; width: parent.width; title: "Host ALSA"; value: root.thunkDisplay("asound"); theme: root.theme }
-            FocusRow { id: thunkDrmRow; width: parent.width; title: "Host DRM"; value: root.thunkDisplay("drm"); theme: root.theme }
-            FocusRow { id: thunkWaylandRow; width: parent.width; title: "Host Wayland"; value: root.thunkDisplay("WaylandClient"); theme: root.theme }
-            FocusRow { id: cpuCoresRow; width: parent.width; title: "Game CPU cores"; value: root.coresCustom ? "Custom" : root.optionLabel("cores", effective("cores")); theme: root.theme }
+            SelectRow { id: fexRow; width: parent.width; title: "FEX preset"; options: root.fexProfileOptions(); currentValue: String(root.effective("fexProfile") || "default"); theme: root.theme; onValueEdited: root.setFexProfile(value) }
+            ToggleRow { id: fexTsoRow; width: parent.width; title: "TSO enabled"; checked: root.fexConfig().TSOEnabled === "1"; theme: root.theme; onToggled: root.setFexKnob("TSOEnabled", checked) }
+            ToggleRow { id: fexX87Row; width: parent.width; title: "X87 reduced precision"; checked: root.fexConfig().X87ReducedPrecision === "1"; theme: root.theme; onToggled: root.setFexKnob("X87ReducedPrecision", checked) }
+            ToggleRow { id: fexMultiblockRow; width: parent.width; title: "Multiblock"; checked: root.fexConfig().Multiblock === "1"; theme: root.theme; onToggled: root.setFexKnob("Multiblock", checked) }
+            ToggleRow { id: fexVectorRow; width: parent.width; title: "Vector TSO enabled"; checked: root.fexConfig().VectorTSOEnabled === "1"; theme: root.theme; onToggled: root.setFexKnob("VectorTSOEnabled", checked) }
+            ToggleRow { id: fexMemcpyRow; width: parent.width; title: "Memcpy TSO enabled"; checked: root.fexConfig().MemcpySetTSOEnabled === "1"; theme: root.theme; onToggled: root.setFexKnob("MemcpySetTSOEnabled", checked) }
+            ToggleRow { id: fexBarrierRow; width: parent.width; title: "Half barrier TSO"; checked: root.fexConfig().HalfBarrierTSOEnabled === "1"; theme: root.theme; onToggled: root.setFexKnob("HalfBarrierTSOEnabled", checked) }
+            ToggleRow { id: thunkVulkanRow; width: parent.width; title: "Host Vulkan"; checked: root.thunkValue("Vulkan"); theme: root.theme; onToggled: root.setThunk("Vulkan", checked) }
+            ToggleRow { id: thunkGlRow; width: parent.width; title: "Host OpenGL"; checked: root.thunkValue("GL"); theme: root.theme; onToggled: root.setThunk("GL", checked) }
+            ToggleRow { id: thunkAsoundRow; width: parent.width; title: "Host ALSA"; checked: root.thunkValue("asound"); theme: root.theme; onToggled: root.setThunk("asound", checked) }
+            ToggleRow { id: thunkDrmRow; width: parent.width; title: "Host DRM"; checked: root.thunkValue("drm"); theme: root.theme; onToggled: root.setThunk("drm", checked) }
+            ToggleRow { id: thunkWaylandRow; width: parent.width; title: "Host Wayland"; checked: root.thunkValue("WaylandClient"); theme: root.theme; onToggled: root.setThunk("WaylandClient", checked) }
+            SelectRow { id: cpuCoresRow; width: parent.width; title: "Game CPU cores"; options: root.optionValues("cores").map(function(value) { return {data: value, label: root.optionLabel("cores", value)}; }); currentValue: root.coresCustom ? "custom" : String(root.effective("cores") || "default"); theme: root.theme; onValueEdited: root.selectOption("cores", value) }
             FocusRow { id: coreTextRow; visible: root.coresCustom; width: parent.width; title: "Custom game CPU list"; value: root.customCoresText || "Edit"; theme: root.theme; onActivated: coreField.forceActiveFocus() }
             TextField { id: coreField; visible: root.coresCustom; width: parent.width; text: root.customCoresText; placeholderText: "e.g. 7,3-6"; onEditingFinished: root.commitCustomCores("cores", text) }
-            FocusRow { id: cpuTopologyRow; width: parent.width; title: "Wine CPU topology"; value: root.boolValue("wineTopology"); theme: root.theme }
-            FocusRow { id: niceRow; width: parent.width; title: "Game priority"; value: String(effective("nice") === undefined ? 0 : effective("nice")); theme: root.theme }
-            FocusRow { id: gamescopeCoresRow; width: parent.width; title: "Gamescope CPU cores"; value: root.gamescopeCoresCustom ? "Custom" : root.optionLabel("gamescopeCores", effective("gamescopeCores")); theme: root.theme }
+            ToggleRow { id: cpuTopologyRow; width: parent.width; title: "Wine CPU topology"; checked: root.effective("wineTopology") !== false; theme: root.theme; onToggled: root.setSetting("wineTopology", checked ? undefined : false) }
+            SliderRow { id: niceRow; width: parent.width; title: "Game priority"; from: -20; to: 19; value: Number(root.effective("nice") || 0); valueText: Math.round(value); theme: root.theme; onValueEdited: root.setSetting("nice", Math.round(value)) }
+            SelectRow { id: gamescopeCoresRow; width: parent.width; title: "Gamescope CPU cores"; options: root.optionValues("gamescopeCores").map(function(value) { return {data: value, label: root.optionLabel("gamescopeCores", value)}; }); currentValue: root.gamescopeCoresCustom ? "custom" : String(root.effective("gamescopeCores") || "default"); theme: root.theme; onValueEdited: root.selectOption("gamescopeCores", value) }
             FocusRow { id: gamescopeCoreTextRow; visible: root.gamescopeCoresCustom; width: parent.width; title: "Custom Gamescope CPU list"; value: root.customGamescopeCoresText || "Edit"; theme: root.theme; onActivated: gamescopeCoreField.forceActiveFocus() }
             TextField { id: gamescopeCoreField; visible: root.gamescopeCoresCustom; width: parent.width; text: root.customGamescopeCoresText; placeholderText: "e.g. 7,3-6"; onEditingFinished: root.commitCustomCores("gamescopeCores", text) }
-            FocusRow { id: gamescopeNiceRow; width: parent.width; title: "Gamescope priority"; value: String(effective("gamescopeNice") === undefined ? 0 : effective("gamescopeNice")); theme: root.theme }
-            FocusRow { id: gamescopeRealtimeRow; width: parent.width; title: "Gamescope realtime"; value: effective("gamescopeRr") ? "On" : "Off"; theme: root.theme }
-            FocusRow { id: schedulerRow; width: parent.width; title: "CPU scheduler"; value: root.schedulerValue(); theme: root.theme }
+            SliderRow { id: gamescopeNiceRow; width: parent.width; title: "Gamescope priority"; from: -20; to: 19; value: Number(root.effective("gamescopeNice") || 0); valueText: Math.round(value); theme: root.theme; onValueEdited: root.setSetting("gamescopeNice", Math.round(value)) }
+            ToggleRow { id: gamescopeRealtimeRow; width: parent.width; title: "Gamescope realtime"; checked: Boolean(root.effective("gamescopeRr")); theme: root.theme; onToggled: root.setSetting("gamescopeRr", checked) }
+            SelectRow { id: schedulerRow; width: parent.width; title: "CPU scheduler"; options: [{data: "default", label: "Default"}].concat((armada.config.perf && armada.config.perf.schedulers || []).map(function(value) { return {data: value, label: value.toUpperCase()}; })); currentValue: String(root.effective("scheduler") || "default"); theme: root.theme; onValueEdited: root.setSetting("scheduler", value === "default" ? undefined : value) }
             FocusRow { id: environmentRow; width: parent.width; title: "Environment variables"; value: root.environmentKeys().length + " advanced"; theme: root.theme; onActivated: root.openEnvironmentEditor() }
             FocusRow { id: reapplyRow; width: parent.width; title: "Re-apply to running game"; value: "A"; theme: root.theme; onActivated: root.reapply() }
             FocusRow { id: restartRow; width: parent.width; title: "Restart Game Mode"; value: "A"; theme: root.theme; onActivated: root.restartGameMode() }
