@@ -30,6 +30,20 @@ Item {
     }
     function toolId(item) { return String(item && item.id !== undefined ? item.id : item); }
     function toolLabel(item) { return String(item && item.label !== undefined ? item.label : toolId(item)); }
+    function targetOptions() {
+        var result = [{data: "", label: "Default"}];
+        var seen = {};
+        (armada.config.installedGames || []).forEach(function(game) {
+            var id = String(game && game.appid || "");
+            if (!/^\d+$/.test(id) || seen[id]) return;
+            seen[id] = true;
+            result.push({data: id, label: String(game.name || ("App " + id))});
+        });
+        if (/^\d+$/.test(appid) && !seen[appid])
+            result.push({data: appid, label: "App " + appid});
+        result.push({data: "__manual", label: "Enter AppID manually"});
+        return result;
+    }
     function call(action, fields) {
         var reply = armada.steamCall(action, fields || {});
         if (!reply.ok) statusText = reply.error || "Steam settings unavailable";
@@ -145,8 +159,7 @@ Item {
             if (row === globalToolRow || row === globalResolutionRow || row === appToolRow || row === gameResolutionRow)
                 row.adjust(direction);
         } else if (action === "accept") {
-            if (row === globalToolRow || row === globalResolutionRow || row === appToolRow || row === gameResolutionRow) row.open();
-            else if (row === targetRow) { appidField.forceActiveFocus(); return; }
+            if (row === targetRow || row === globalToolRow || row === globalResolutionRow || row === appToolRow || row === gameResolutionRow) row.open();
             if (row === autoApplyRow) {
                 row.toggle();
             } else if (row === launchRow) launchField.forceActiveFocus();
@@ -155,6 +168,15 @@ Item {
             else if (row === resetAllRow) resetAllGames();
         }
         rows.forEach(function(item, index) { item.selected = index === focusIndex; });
+    }
+    function selectTarget(value) {
+        if (value === "__manual") {
+            appidField.forceActiveFocus();
+            return;
+        }
+        appid = String(value || "");
+        appidField.text = appid;
+        loadGame();
     }
     function handleBack() {
         if (appidField.activeFocus || launchField.activeFocus) { root.forceActiveFocus(); return true; }
@@ -179,7 +201,7 @@ Item {
             spacing: root.theme.spacing
             Text { text: "Steam compatibility"; color: root.theme.text; font.pixelSize: root.theme.pageTitleSize }
             Text { text: "Private Steam settings are isolated behind a fixed-action bridge."; color: root.theme.muted; font.pixelSize: root.theme.bodySize; wrapMode: Text.WordWrap; width: parent.width }
-            FocusRow { id: targetRow; width: parent.width; title: "Game AppID"; value: root.appid || "Default"; theme: root.theme; focusOwner: root }
+            SelectRow { id: targetRow; width: parent.width; title: "Game"; options: root.targetOptions(); currentValue: root.appid; theme: root.theme; focusOwner: root; onValueEdited: root.selectTarget(value) }
             TextField { id: appidField; width: parent.width; text: root.appid; placeholderText: "Running or installed AppID"; onEditingFinished: { root.appid = text.trim(); root.loadGame(); } }
             SelectRow { id: globalToolRow; width: parent.width; title: "Default Proton"; options: root.tools; currentValue: root.globalTool; theme: root.theme; focusOwner: root; onValueEdited: root.saveGlobalTool(value) }
             ToggleRow { id: autoApplyRow; width: parent.width; title: "Apply to new games"; checked: Boolean((((root.armada.config || {}).tweaks || {}).global || {}).autoApplyCompat); theme: root.theme; focusOwner: root; onToggled: root.saveAutoApply(checked) }

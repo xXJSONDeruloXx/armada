@@ -112,6 +112,8 @@ grep -Fq 'SetAppLaunchOptions' "$ROOT/system_files/usr/libexec/armada/steam-brid
 grep -Fq 'sweep_compat' "$ROOT/system_files/usr/libexec/armada/steam-bridge"
 grep -Fq 'migrate_compat' "$ROOT/system_files/usr/libexec/armada/steam-bridge"
 grep -Fq 'get_compat_mapped_appids' "$ROOT/overlay/qml/CompatibilityPage.qml"
+grep -Fq 'Enter AppID manually' "$ROOT/overlay/qml/CompatibilityPage.qml"
+grep -Fq 'targetOptions' "$ROOT/overlay/qml/CompatibilityPage.qml"
 grep -Fq 'compatibilitySweep' "$ROOT/overlay/main.cpp"
 grep -Fq 'compatibilityProcess_' "$ROOT/overlay/main.cpp"
 grep -Fq 'python3-websocket-client' "$ROOT/build_files/10-base-packages.sh"
