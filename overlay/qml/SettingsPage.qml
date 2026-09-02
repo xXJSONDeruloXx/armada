@@ -11,6 +11,13 @@ Item {
     property var rows: []
     signal openCalibration
 
+    function setFocusedRow(row) {
+        var index = rows.indexOf(row);
+        if (index < 0) return;
+        focusIndex = index;
+        rows.forEach(function(item, itemIndex) { item.selected = itemIndex === focusIndex; });
+    }
+
     function options(key) { return armada.config[key] || []; }
     function optionValue(item) { return item && item.data !== undefined ? item.data : String(item); }
     function optionLabel(item) { return item && item.label !== undefined ? item.label : optionValue(item); }
@@ -125,10 +132,11 @@ Item {
                 options: root.options("controllerTypes")
                 currentValue: root.armada.config.controllerType || "deck-uhid"
                 theme: root.theme
+                focusOwner: root
                 onValueEdited: root.setChoice("controllerType", "set_controller_type", value)
             }
             FocusRow { id: calibrationRow; width: parent.width; title: "Launch calibration"; value: "A"; theme: root.theme; onActivated: root.openCalibration() }
-            ToggleRow { id: sshRow; width: parent.width; title: "Enable SSH"; checked: Boolean(armada.config.sshEnabled); theme: root.theme; onToggled: root.setToggle("set_ssh_enabled", checked) }
+            ToggleRow { id: sshRow; width: parent.width; title: "Enable SSH"; checked: Boolean(armada.config.sshEnabled); theme: root.theme; focusOwner: root; onToggled: root.setToggle("set_ssh_enabled", checked) }
             FocusRow { id: osRow; width: parent.width; title: "OS version"; value: armada.config.osVersion || "unknown"; theme: root.theme }
             FocusRow { id: ablVersionRow; width: parent.width; title: "ABL version"; value: armada.config.ablVersion || "unknown"; theme: root.theme }
             SelectRow {
@@ -139,6 +147,7 @@ Item {
                 options: root.options("sleepModes")
                 currentValue: root.armada.config.sleepMode || "fake"
                 theme: root.theme
+                focusOwner: root
                 onValueEdited: root.setChoice("sleepMode", "set_sleep_mode", value)
             }
             SelectRow {
@@ -149,11 +158,12 @@ Item {
                 options: root.options("desktopModes")
                 currentValue: root.armada.config.desktopMode || "desktop"
                 theme: root.theme
+                focusOwner: root
                 onValueEdited: root.setChoice("desktopMode", "set_desktop_mode", value)
             }
-            ToggleRow { id: mtpRow; width: parent.width; title: "USB file transfer"; checked: Boolean(armada.config.mtpEnabled); theme: root.theme; onToggled: root.setToggle("set_mtp_enabled", checked) }
-            ToggleRow { id: ablRow; width: parent.width; title: "Automatic ABL updates"; checked: Boolean(armada.config.ablAutoEnabled); theme: root.theme; onToggled: root.setToggle("set_abl_auto_enabled", checked) }
-            ToggleRow { id: rgbEnabledRow; width: parent.width; title: "RGB lighting"; checked: Boolean(rgb.enabled); theme: root.theme; onToggled: root.setRgb({enabled: checked}) }
+            ToggleRow { id: mtpRow; width: parent.width; title: "USB file transfer"; checked: Boolean(armada.config.mtpEnabled); theme: root.theme; focusOwner: root; onToggled: root.setToggle("set_mtp_enabled", checked) }
+            ToggleRow { id: ablRow; width: parent.width; title: "Automatic ABL updates"; checked: Boolean(armada.config.ablAutoEnabled); theme: root.theme; focusOwner: root; onToggled: root.setToggle("set_abl_auto_enabled", checked) }
+            ToggleRow { id: rgbEnabledRow; width: parent.width; title: "RGB lighting"; checked: Boolean(rgb.enabled); theme: root.theme; focusOwner: root; onToggled: root.setRgb({enabled: checked}) }
             SliderRow {
                 id: rgbBrightnessRow
                 width: parent.width
@@ -164,6 +174,7 @@ Item {
                 valueText: Math.round(value) + "%"
                 enabled: Boolean(rgb.enabled)
                 theme: root.theme
+                focusOwner: root
                 onValueEdited: root.setRgb({brightness: Math.round(value)})
             }
             SliderRow {
@@ -176,6 +187,7 @@ Item {
                 valueText: Math.round(value) + "°"
                 enabled: Boolean(rgb.enabled)
                 theme: root.theme
+                focusOwner: root
                 onValueEdited: root.setRgb({color: root.rgbColor(Math.round(value))})
             }
             Text { text: root.statusText; color: theme.muted; font.pixelSize: theme.bodySize; wrapMode: Text.WordWrap; width: parent.width }

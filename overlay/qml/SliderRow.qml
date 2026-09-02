@@ -11,6 +11,7 @@ Item {
     property real stepSize: 1
     property string valueText: Math.round(value) + ""
     property var theme
+    property var focusOwner
     property bool selected: false
     signal activated
     signal focused
@@ -26,6 +27,10 @@ Item {
         root.valueEdited(next);
     }
     function activate() { slider.forceActiveFocus(); }
+    function requestFocus() {
+        if (focusOwner && focusOwner.setFocusedRow) focusOwner.setFocusedRow(root);
+        else root.forceActiveFocus();
+    }
 
     Rectangle {
         anchors.fill: parent
@@ -73,6 +78,6 @@ Item {
         anchors.top: parent.top
         anchors.bottom: parent.bottom
         width: Math.max(0, parent.width - slider.width - valueLabel.width - root.theme.spacing * 3)
-        onClicked: { root.focused(); root.activated(); }
+        onClicked: { root.requestFocus(); root.focused(); root.activated(); }
     }
 }

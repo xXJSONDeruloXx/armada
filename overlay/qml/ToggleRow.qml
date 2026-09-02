@@ -7,6 +7,7 @@ Item {
     property string description: ""
     property bool checked: false
     property var theme
+    property var focusOwner
     property bool selected: false
     signal activated
     signal focused
@@ -19,6 +20,10 @@ Item {
     function toggle() {
         toggleControl.checked = !toggleControl.checked;
         root.toggled(toggleControl.checked);
+    }
+    function requestFocus() {
+        if (focusOwner && focusOwner.setFocusedRow) focusOwner.setFocusedRow(root);
+        else root.forceActiveFocus();
     }
 
     Rectangle {
@@ -70,6 +75,6 @@ Item {
         anchors.top: parent.top
         anchors.bottom: parent.bottom
         width: Math.max(0, parent.width - toggleControl.width - root.theme.spacing * 2)
-        onClicked: { root.focused(); root.activated(); }
+        onClicked: { root.requestFocus(); root.focused(); root.activated(); }
     }
 }
