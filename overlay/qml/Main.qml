@@ -30,6 +30,8 @@ Window {
         if (action === "guide")
             return;
         if (action === "back") {
+            if (stack.currentItem && stack.currentItem.handleBack && stack.currentItem.handleBack())
+                return;
             if (pageIndex !== 0)
                 showPage(0);
             else

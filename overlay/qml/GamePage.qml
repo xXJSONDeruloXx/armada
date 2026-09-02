@@ -14,6 +14,12 @@ Item {
     property bool gamescopeCoresCustom: false
     property string customCoresText: ""
     property string customGamescopeCoresText: ""
+    property bool environmentMode: false
+    property var environmentEntries: []
+    property int environmentIndex: -1
+    property string environmentOriginalKey: ""
+    property string environmentKeyText: ""
+    property string environmentValueText: ""
     property string statusText: ""
     property int focusIndex: 0
     property var rows: []
@@ -75,6 +81,108 @@ Item {
         else target[key] = value;
         draftTweaks = next;
         dirty = true;
+    }
+    function environmentKeys() {
+        var keys = {};
+        var global = (draftTweaks.global || {}).env || {};
+        var own = (selectedAppid ? ownSettings() : draftTweaks.global || {}).env || {};
+        Object.keys(global).forEach(function(key) { keys[key] = true; });
+        Object.keys(own).forEach(function(key) { keys[key] = true; });
+        return Object.keys(keys).sort();
+    }
+    function effectiveEnvironmentValue(key) {
+        var own = ownSettings().env || {};
+        if (Object.prototype.hasOwnProperty.call(own, key)) return own[key] === null ? "" : String(own[key]);
+        return String(((draftTweaks.global || {}).env || {})[key] || "");
+    }
+    function openEnvironmentEditor() {
+        environmentMode = true;
+        focusIndex = 0;
+        environmentEntries = environmentKeys();
+        environmentIndex = environmentEntries.length ? 0 : -1;
+        loadEnvironmentEntry();
+        rebuildRows();
+    }
+    function loadEnvironmentEntry() {
+        environmentOriginalKey = environmentIndex >= 0 ? environmentEntries[environmentIndex] : "";
+        environmentKeyText = environmentOriginalKey;
+        environmentValueText = environmentOriginalKey ? effectiveEnvironmentValue(environmentOriginalKey) : "";
+        if (environmentKeyField) environmentKeyField.text = environmentKeyText;
+        if (environmentValueField) environmentValueField.text = environmentValueText;
+    }
+    function updateEnvironmentEntries() {
+        environmentEntries = environmentKeys();
+        if (environmentOriginalKey) {
+            var nextIndex = environmentEntries.indexOf(environmentOriginalKey);
+            environmentIndex = nextIndex;
+        }
+        if (environmentIndex < 0 && environmentEntries.length) environmentIndex = 0;
+        loadEnvironmentEntry();
+    }
+    function saveEnvironmentEntry() {
+        var key = String(environmentKeyField.text || "").trim();
+        var value = String(environmentValueField.text || "");
+        if (!key || key.indexOf("=") >= 0 || key.indexOf("\u0000") >= 0) {
+            statusText = "Invalid variable name";
+            return;
+        }
+        var next = clone(draftTweaks);
+        var target = selectedAppid ? ((next.games || {})[selectedAppid] || {name: targetName()}) : (next.global || {});
+        if (selectedAppid) {
+            if (!next.games) next.games = {};
+            next.games[selectedAppid] = target;
+        } else {
+            next.global = target;
+        }
+        var env = target.env || {};
+        if (environmentOriginalKey && environmentOriginalKey !== key) delete env[environmentOriginalKey];
+        env[key] = value;
+        target.env = env;
+        draftTweaks = next;
+        dirty = true;
+        environmentOriginalKey = key;
+        environmentKeyText = key;
+        environmentValueText = value;
+        updateEnvironmentEntries();
+        statusText = "Variable staged";
+    }
+    function deleteEnvironmentEntry() {
+        var key = environmentOriginalKey || String(environmentKeyField.text || "").trim();
+        if (!key) return;
+        var next = clone(draftTweaks);
+        var target = selectedAppid ? ((next.games || {})[selectedAppid] || {name: targetName()}) : (next.global || {});
+        if (selectedAppid && !Object.prototype.hasOwnProperty.call(target.env || {}, key)) {
+            if (!target.env) target.env = {};
+            target.env[key] = null;
+        } else {
+            var env = target.env || {};
+            delete env[key];
+            if (Object.keys(env).length) target.env = env;
+            else delete target.env;
+        }
+        if (selectedAppid) {
+            if (!next.games) next.games = {};
+            next.games[selectedAppid] = target;
+        } else {
+            next.global = target;
+        }
+        draftTweaks = next;
+        dirty = true;
+        updateEnvironmentEntries();
+        statusText = "Variable deleted; save to apply";
+    }
+    function newEnvironmentEntry() {
+        environmentIndex = -1;
+        environmentOriginalKey = "";
+        environmentKeyText = "";
+        environmentValueText = "";
+        environmentKeyField.text = "";
+        environmentValueField.text = "";
+        environmentKeyField.forceActiveFocus();
+    }
+    function closeEnvironmentEditor() {
+        environmentMode = false;
+        rebuildRows();
     }
     function fexProfiles() { return Object.keys(armada.config.fexProfiles || {}); }
     function fexLabel(id) {
@@ -231,16 +339,25 @@ Item {
         rebuildRows();
     }
     function rebuildRows() {
+        if (environmentMode) {
+            rows = [environmentKeyRow, environmentValueRow, environmentSaveRow, environmentDeleteRow, environmentNewRow, environmentBackRow];
+            rows.forEach(function(item, index) { item.selected = index === focusIndex; });
+            return;
+        }
         var nextRows = [targetRow, fexRow, fexTsoRow, fexX87Row, fexMultiblockRow, fexVectorRow, fexMemcpyRow,
             fexBarrierRow, thunkVulkanRow, thunkGlRow, thunkAsoundRow, thunkDrmRow, thunkWaylandRow, cpuCoresRow];
         if (coresCustom) nextRows.push(coreTextRow);
         nextRows.push(cpuTopologyRow, niceRow, gamescopeCoresRow);
         if (gamescopeCoresCustom) nextRows.push(gamescopeCoreTextRow);
-        nextRows.push(gamescopeNiceRow, gamescopeRealtimeRow, schedulerRow, reapplyRow, restartRow, resetRow, saveRow);
+        nextRows.push(gamescopeNiceRow, gamescopeRealtimeRow, schedulerRow, environmentRow, reapplyRow, restartRow, resetRow, saveRow);
         rows = nextRows;
         rows.forEach(function(item, index) { item.selected = index === focusIndex; });
     }
     function handleAction(action) {
+        if (environmentMode) {
+            handleEnvironmentAction(action);
+            return;
+        }
         var row = rows[focusIndex];
         if (action !== "accept" || row !== resetRow) resetPending = false;
         if (action !== "accept" || row !== restartRow) restartPending = false;
@@ -273,6 +390,7 @@ Item {
         } else if (action === "accept") {
             if (row === coreTextRow) coreField.forceActiveFocus();
             else if (row === gamescopeCoreTextRow) gamescopeCoreField.forceActiveFocus();
+            else if (row === environmentRow) openEnvironmentEditor();
             else if (row === reapplyRow) reapply();
             else if (row === restartRow) restartGameMode();
             else if (row === resetRow) resetTarget();
@@ -282,6 +400,38 @@ Item {
     }
     function schedulerValue() { return String(effective("scheduler") || "default").toUpperCase(); }
     function boolValue(key) { return effective(key) === false ? "Off" : "On"; }
+    function handleEnvironmentAction(action) {
+        var row = rows[focusIndex];
+        if (action === "up") focusIndex = Math.max(0, focusIndex - 1);
+        else if (action === "down") focusIndex = Math.min(rows.length - 1, focusIndex + 1);
+        else if (action === "left" || action === "right") {
+            var direction = action === "right" ? 1 : -1;
+            if (row === environmentKeyRow && environmentEntries.length) {
+                environmentIndex = (environmentIndex + direction + environmentEntries.length) % environmentEntries.length;
+                loadEnvironmentEntry();
+            }
+        } else if (action === "accept") {
+            if (row === environmentKeyRow) {
+                environmentKeyField.focus = true;
+            } else if (row === environmentValueRow) {
+                environmentValueField.focus = true;
+            } else if (row === environmentSaveRow) {
+                saveEnvironmentEntry();
+            } else if (row === environmentDeleteRow) {
+                deleteEnvironmentEntry();
+            } else if (row === environmentNewRow) {
+                newEnvironmentEntry();
+            } else if (row === environmentBackRow) {
+                closeEnvironmentEditor();
+            }
+        }
+        rows.forEach(function(item, index) { item.selected = index === focusIndex; });
+    }
+    function handleBack() {
+        if (!environmentMode) return false;
+        closeEnvironmentEditor();
+        return true;
+    }
 
     Connections { target: armada; function onConfigChanged() { root.sync(); } }
     Component.onCompleted: {
@@ -322,12 +472,34 @@ Item {
             FocusRow { id: gamescopeNiceRow; width: parent.width; title: "Gamescope priority"; value: String(effective("gamescopeNice") === undefined ? 0 : effective("gamescopeNice")); theme: root.theme }
             FocusRow { id: gamescopeRealtimeRow; width: parent.width; title: "Gamescope realtime"; value: effective("gamescopeRr") ? "On" : "Off"; theme: root.theme }
             FocusRow { id: schedulerRow; width: parent.width; title: "CPU scheduler"; value: root.schedulerValue(); theme: root.theme }
+            FocusRow { id: environmentRow; width: parent.width; title: "Environment variables"; value: root.environmentKeys().length + " advanced"; theme: root.theme; onActivated: root.openEnvironmentEditor() }
             FocusRow { id: reapplyRow; width: parent.width; title: "Re-apply to running game"; value: "A"; theme: root.theme; onActivated: root.reapply() }
             FocusRow { id: restartRow; width: parent.width; title: "Restart Game Mode"; value: "A"; theme: root.theme; onActivated: root.restartGameMode() }
             FocusRow { id: resetRow; width: parent.width; title: root.selectedAppid ? "Reset game settings" : "Reset all game settings"; value: "A"; theme: root.theme; onActivated: root.resetTarget() }
             FocusRow { id: saveRow; width: parent.width; title: root.dirty ? "Save changes *" : "Save changes"; value: "A"; theme: root.theme; onActivated: root.save() }
             Text { text: root.statusText; color: theme.muted; font.pixelSize: theme.bodySize; wrapMode: Text.WordWrap; width: parent.width }
             Text { text: "Steam compatibility tool and resolution controls remain gated behind Steam's private API."; color: theme.muted; font.pixelSize: theme.bodySize; wrapMode: Text.WordWrap; width: parent.width }
+        }
+    }
+
+    Rectangle {
+        visible: root.environmentMode
+        anchors.fill: parent
+        color: theme.panel
+        z: 10
+        Column {
+            anchors.fill: parent
+            spacing: theme.spacing
+            Text { text: "Environment variables"; color: theme.text; font.pixelSize: theme.pageTitleSize }
+            Text { text: "Advanced editor; keyboard entry may be required."; color: theme.muted; font.pixelSize: theme.bodySize; wrapMode: Text.WordWrap; width: parent.width }
+            FocusRow { id: environmentKeyRow; width: parent.width; title: "Name"; value: root.environmentKeyText || "New variable"; theme: root.theme; onActivated: environmentKeyField.forceActiveFocus() }
+            TextField { id: environmentKeyField; width: parent.width; text: root.environmentKeyText; placeholderText: "Variable name" }
+            FocusRow { id: environmentValueRow; width: parent.width; title: "Value"; value: root.environmentValueText || "Empty"; theme: root.theme; onActivated: environmentValueField.forceActiveFocus() }
+            TextField { id: environmentValueField; width: parent.width; text: root.environmentValueText; placeholderText: "Variable value" }
+            FocusRow { id: environmentSaveRow; width: parent.width; title: "Save variable"; value: "A"; theme: root.theme; onActivated: root.saveEnvironmentEntry() }
+            FocusRow { id: environmentDeleteRow; width: parent.width; title: "Delete variable"; value: "A"; theme: root.theme; onActivated: root.deleteEnvironmentEntry() }
+            FocusRow { id: environmentNewRow; width: parent.width; title: "New variable"; value: "A"; theme: root.theme; onActivated: root.newEnvironmentEntry() }
+            FocusRow { id: environmentBackRow; width: parent.width; title: "Back"; value: "B"; theme: root.theme; onActivated: root.closeEnvironmentEditor() }
         }
     }
 }
