@@ -104,6 +104,14 @@ grep -Fq 'ui_accept' "$ROOT/overlay/main.cpp"
 grep -Fq 'navigationActive' "$ROOT/overlay/qml/Main.qml"
 grep -Fq 'pageIcons' "$ROOT/overlay/qml/Main.qml"
 grep -Fq 'font.pixelSize: root.theme.bodySize' "$ROOT/overlay/qml/FocusRow.qml"
+for control in SelectRow SliderRow ToggleRow; do
+    test -f "$ROOT/overlay/qml/$control.qml"
+    grep -Fq "import QtQuick.Controls" "$ROOT/overlay/qml/$control.qml"
+done
+grep -Fq 'navigationActive' "$ROOT/overlay/qml/Main.qml"
+grep -Fq 'SliderRow' "$ROOT/overlay/qml/Main.qml"
+grep -Fq 'ToggleRow' "$ROOT/overlay/qml/SettingsPage.qml"
+grep -Fq 'SelectRow' "$ROOT/overlay/qml/CompatibilityPage.qml"
 for icon in status power fans games settings calibration; do
     test -f "$ROOT/overlay/qml/icons/$icon.svg"
 done

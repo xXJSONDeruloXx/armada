@@ -78,19 +78,8 @@ Item {
         if (/^\d+$/.test(appid)) rows = rows.concat([appToolRow, gameResolutionRow, launchRow, saveLaunchRow, resetRow]);
         rows.forEach(function(item, index) { item.selected = index === focusIndex; });
     }
-    function cycle(row, values, direction) {
-        if (!values.length) return;
-        var current = values.indexOf(row.value);
-        row.value = values[(current + direction + values.length) % values.length];
-        if (row === globalToolRow) saveGlobalTool(row.value);
-        else if (row === globalResolutionRow) saveGlobalResolution(row.value);
-        else if (row === appToolRow) saveAppTool(row.value);
-        else if (row === gameResolutionRow) saveGameResolution(row.value);
-    }
     function saveGlobalTool(label) {
-        var id = "";
-        for (var i = 0; i < tools.length; ++i) if (toolLabel(tools[i]) === label) id = toolId(tools[i]);
-        if (!id) id = label;
+        var id = String(label || "");
         var reply = call("set_global_compat_tool", {tool: id});
         if (!reply.ok) return;
         globalTool = id;
@@ -105,7 +94,7 @@ Item {
     }
     function saveAppTool(label) {
         if (!/^\d+$/.test(appid)) return;
-        var id = label === "Use Default" ? globalTool : (label === "Follow Steam" ? "" : label);
+        var id = label === "__default" ? globalTool : label;
         var reply = call("set_compat_tool", {appid: appid, tool: id});
         if (reply.ok) { currentTool = id; statusText = "Saved"; }
     }
@@ -131,17 +120,12 @@ Item {
         else if (action === "down") focusIndex = Math.min(rows.length - 1, focusIndex + 1);
         else if (action === "left" || action === "right") {
             var direction = action === "right" ? 1 : -1;
-            if (row === globalToolRow) cycle(row, tools.map(toolLabel), direction);
-            else if (row === globalResolutionRow) cycle(row, ["Default", "Native", "1280x720", "960x540"], direction);
-            else if (row === appToolRow) cycle(row, ["Use Default", "Follow Steam"].concat(appTools.map(toolLabel)), direction);
-            else if (row === gameResolutionRow) cycle(row, ["Default", "Native", "1280x720", "960x540"], direction);
+            if (row === globalToolRow || row === globalResolutionRow || row === appToolRow || row === gameResolutionRow)
+                row.adjust(direction);
         } else if (action === "accept") {
             if (row === targetRow) { appidField.forceActiveFocus(); return; }
             if (row === autoApplyRow) {
-                var next = JSON.parse(JSON.stringify(armada.config || {}));
-                next.tweaks.global.autoApplyCompat = !Boolean(next.tweaks.global.autoApplyCompat);
-                var saved = armada.call("save_tweaks", {data: next.tweaks});
-                if (saved.ok) { armada.refresh(); statusText = "Saved"; }
+                row.toggle();
             } else if (row === launchRow) launchField.forceActiveFocus();
             else if (row === saveLaunchRow) saveLaunch();
             else if (row === resetRow) resetGame();
@@ -151,6 +135,13 @@ Item {
     function handleBack() {
         if (appidField.activeFocus || launchField.activeFocus) { root.forceActiveFocus(); return true; }
         return false;
+    }
+    function saveAutoApply(enabled) {
+        var next = JSON.parse(JSON.stringify(armada.config || {}));
+        next.tweaks.global.autoApplyCompat = enabled;
+        var saved = armada.call("save_tweaks", {data: next.tweaks});
+        if (saved.ok) { armada.refresh(); statusText = "Saved"; }
+        else statusText = saved.error || "Save failed";
     }
 
     Connections { target: root.armada; function onConfigChanged() { root.rebuildRows(); } }
@@ -166,11 +157,20 @@ Item {
             Text { text: "Private Steam settings are isolated behind a fixed-action bridge."; color: root.theme.muted; font.pixelSize: root.theme.bodySize; wrapMode: Text.WordWrap; width: parent.width }
             FocusRow { id: targetRow; width: parent.width; title: "Game AppID"; value: root.appid || "Default"; theme: root.theme }
             TextField { id: appidField; width: parent.width; text: root.appid; placeholderText: "Running or installed AppID"; onEditingFinished: { root.appid = text.trim(); root.loadGame(); } }
-            FocusRow { id: globalToolRow; width: parent.width; title: "Default Proton"; value: root.toolText(root.globalTool); theme: root.theme }
-            FocusRow { id: autoApplyRow; width: parent.width; title: "Apply to new games"; value: Boolean((((root.armada.config || {}).tweaks || {}).global || {}).autoApplyCompat) === false ? "Off" : "On"; theme: root.theme }
-            FocusRow { id: globalResolutionRow; width: parent.width; title: "Default resolution"; value: root.globalResolution; theme: root.theme }
-            FocusRow { id: appToolRow; visible: /^\d+$/.test(root.appid); width: parent.width; title: "Compatibility tool"; value: root.currentTool ? root.toolText(root.currentTool) : "Follow Steam"; theme: root.theme }
-            FocusRow { id: gameResolutionRow; visible: /^\d+$/.test(root.appid); width: parent.width; title: "Game resolution"; value: root.gameResolution; theme: root.theme }
+            SelectRow { id: globalToolRow; width: parent.width; title: "Default Proton"; options: root.tools; currentValue: root.globalTool; theme: root.theme; onValueEdited: root.saveGlobalTool(value) }
+            ToggleRow { id: autoApplyRow; width: parent.width; title: "Apply to new games"; checked: Boolean((((root.armada.config || {}).tweaks || {}).global || {}).autoApplyCompat); theme: root.theme; onToggled: root.saveAutoApply(checked) }
+            SelectRow { id: globalResolutionRow; width: parent.width; title: "Default resolution"; options: ["Default", "Native", "1280x720", "960x540"]; currentValue: root.globalResolution; theme: root.theme; onValueEdited: root.saveGlobalResolution(value) }
+            SelectRow {
+                id: appToolRow
+                visible: /^\d+$/.test(root.appid)
+                width: parent.width
+                title: "Compatibility tool"
+                options: [{data: "__default", label: "Use Default"}, {data: "", label: "Follow Steam"}].concat(root.appTools)
+                currentValue: root.currentTool || ""
+                theme: root.theme
+                onValueEdited: root.saveAppTool(value)
+            }
+            SelectRow { id: gameResolutionRow; visible: /^\d+$/.test(root.appid); width: parent.width; title: "Game resolution"; options: ["Default", "Native", "1280x720", "960x540"]; currentValue: root.gameResolution; theme: root.theme; onValueEdited: root.saveGameResolution(value) }
             FocusRow { id: launchRow; visible: /^\d+$/.test(root.appid); width: parent.width; title: "Launch options"; value: root.launchOptions || "Empty"; theme: root.theme; onActivated: launchField.forceActiveFocus() }
             TextField { id: launchField; visible: /^\d+$/.test(root.appid); width: parent.width; text: root.launchOptions; placeholderText: "Steam launch options" }
             FocusRow { id: saveLaunchRow; visible: /^\d+$/.test(root.appid); width: parent.width; title: "Save launch options"; value: "A"; theme: root.theme; onActivated: root.saveLaunch() }

@@ -109,7 +109,8 @@ Window {
                         iconSource: "icons/" + root.pageIcons[index]
                         iconOnly: true
                         theme: root.uiTheme
-                        selected: ListView.isCurrentItem
+                        selected: ListView.isCurrentItem && root.navigationActive
+                        inactiveSelected: ListView.isCurrentItem && !root.navigationActive
                         onActivated: { root.showPage(index); root.focusNavigation(); }
                     }
                 }
@@ -121,6 +122,16 @@ Window {
                     initialItem: statusPage
                     replaceEnter: Transition { PropertyAnimation { property: "opacity"; from: 0; to: 1; duration: theme.replaceEnterMs } }
                     replaceExit: Transition { PropertyAnimation { property: "opacity"; from: 1; to: 0; duration: theme.replaceExitMs } }
+                }
+
+                Rectangle {
+                    anchors.left: stack.left
+                    anchors.top: stack.top
+                    anchors.right: stack.right
+                    anchors.bottom: stack.bottom
+                    z: 2
+                    visible: root.navigationActive
+                    color: "#66000000"
                 }
             }
         }
@@ -179,6 +190,24 @@ Window {
             function curves() {
                 return Object.keys((draft.power || {}).fan_curves || {});
             }
+            function profileOptions() {
+                return profiles().map(function(name) {
+                    var profile = ((draft.power || {}).profiles || {})[name] || {};
+                    return {data: name, label: profile.label || name};
+                });
+            }
+            function curveOptions() {
+                return curves().map(function(name) {
+                    var curve = ((draft.power || {}).fan_curves || {})[name] || {};
+                    return {data: name, label: curve.label || name};
+                });
+            }
+            function governorOptions() {
+                return ((draft.perf || {}).governors || []).map(function(name) { return {data: name, label: name}; });
+            }
+            function underclockOptions() {
+                return underclocks().map(function(name) { return {data: name, label: name}; });
+            }
             function underclocks() {
                 return Object.keys((((draft.power || {}).underclocks || {})[draft.cpuDeviceClass] || {}));
             }
@@ -190,12 +219,26 @@ Window {
                 next.power.profiles[profileRow.value][key] = value;
                 draft = next;
             }
+            function selectProfile(name) {
+                profileRow.value = name;
+                fanRow.value = currentProfile().fan_curve || curves()[0] || "";
+                governorRow.value = currentProfile().cpu_governor || "";
+                underclockRow.value = currentProfile().cpu_underclock || underclocks()[0] || "";
+            }
             function numberValue(key) {
                 return Number(currentProfile()[key] || 0);
             }
             function adjustPercent(key, direction) {
                 var value = Math.max(0, Math.min(1, numberValue(key) + direction * 0.05));
                 setProfileField(key, value.toFixed(2));
+            }
+            function setGpuValue(key, value) {
+                var next = JSON.parse(JSON.stringify(draft));
+                var profile = next.power.profiles[profileRow.value];
+                profile[key] = (Number(value) / 100).toFixed(2);
+                if (key === "gpu_min" && Number(profile.gpu_min) > Number(profile.gpu_max || 0)) profile.gpu_max = profile.gpu_min;
+                if (key === "gpu_max" && Number(profile.gpu_max) < Number(profile.gpu_min || 0)) profile.gpu_min = profile.gpu_max;
+                draft = next;
             }
             function cycle(row, values, direction) {
                 if (!values.length) return;
@@ -265,13 +308,13 @@ Window {
                     spacing: theme.spacing
                     Text { id: header; text: "Power profile"; color: theme.text; font.pixelSize: theme.pageTitleSize }
                 Text { text: "Use left/right to adjust the focused row."; color: theme.muted; font.pixelSize: theme.bodySize; wrapMode: Text.WordWrap; width: parent.width }
-                    FocusRow { id: profileRow; width: parent.width; title: "Profile"; value: ""; theme: power.theme }
-                    FocusRow { id: fanRow; width: parent.width; title: "Fan curve"; value: ""; theme: power.theme }
-                    FocusRow { id: governorRow; width: parent.width; title: "CPU governor"; value: ""; theme: power.theme }
-                    FocusRow { id: underclockRow; width: parent.width; title: "CPU underclock"; value: ""; theme: power.theme }
-                    FocusRow { id: cpuRow; width: parent.width; title: "CPU maximum"; value: Math.round(power.numberValue("cpu_max") * 100) + "%"; theme: power.theme }
-                    FocusRow { id: gpuMinRow; width: parent.width; title: "GPU minimum"; value: Math.round(power.numberValue("gpu_min") * 100) + "%"; theme: power.theme }
-                    FocusRow { id: gpuMaxRow; width: parent.width; title: "GPU maximum"; value: Math.round(power.numberValue("gpu_max") * 100) + "%"; theme: power.theme }
+                    SelectRow { id: profileRow; width: parent.width; title: "Profile"; options: power.profileOptions(); currentValue: ""; theme: power.theme; onValueEdited: power.selectProfile(value) }
+                    SelectRow { id: fanRow; width: parent.width; title: "Fan curve"; options: power.curveOptions(); currentValue: ""; theme: power.theme; onValueEdited: power.setProfileField("fan_curve", value) }
+                    SelectRow { id: governorRow; visible: power.governorOptions().length > 0; width: parent.width; title: "CPU governor"; options: power.governorOptions(); currentValue: ""; theme: power.theme; onValueEdited: power.setProfileField("cpu_governor", value) }
+                    SelectRow { id: underclockRow; visible: power.underclockOptions().length > 0; width: parent.width; title: "CPU underclock"; options: power.underclockOptions(); currentValue: ""; theme: power.theme; onValueEdited: power.setProfileField("cpu_underclock", value) }
+                    SliderRow { id: cpuRow; width: parent.width; title: "CPU maximum"; from: 35; to: 100; value: Math.round(power.numberValue("cpu_max") * 100); valueText: Math.round(value) + "%"; theme: power.theme; onValueEdited: power.setProfileField("cpu_max", (value / 100).toFixed(2)) }
+                    SliderRow { id: gpuMinRow; width: parent.width; title: "GPU minimum"; from: 0; to: 100; value: Math.round(power.numberValue("gpu_min") * 100); valueText: Math.round(value) + "%"; theme: power.theme; onValueEdited: power.setGpuValue("gpu_min", value) }
+                    SliderRow { id: gpuMaxRow; width: parent.width; title: "GPU maximum"; from: 35; to: 100; value: Math.round(power.numberValue("gpu_max") * 100); valueText: Math.round(value) + "%"; theme: power.theme; onValueEdited: power.setGpuValue("gpu_max", value) }
                     FocusRow { id: resetRow; width: parent.width; title: "Reset profile"; value: "A"; theme: power.theme }
                     FocusRow { id: saveRow; width: parent.width; title: "Save profile"; value: "A"; theme: power.theme; onActivated: power.save() }
                     Text { id: status; color: theme.muted; text: ""; width: parent.width; wrapMode: Text.WordWrap }
@@ -359,6 +402,15 @@ Window {
                     .map(function(point) { return Math.round(point.temp) + ":" + Math.round(point.pwm); }).join(",");
             }
             function points() { return parse(currentCurve().curve); }
+            function curveOptions() {
+                return curveNames().map(function(name) {
+                    var curve = (draft.fanCurves || {})[name] || {};
+                    return {data: name, label: curve.label || name};
+                });
+            }
+            function pointOptions() {
+                return points().map(function(point, index) { return {data: String(index), label: "Point " + (index + 1)}; });
+            }
             function smoothingValue() {
                 if (!draft.fanSettings) return "—";
                 return Math.round(Number(draft.fanSettings.smoothing) * 100) + "%";
@@ -377,16 +429,21 @@ Window {
                 point[key] = Math.max(key === "temp" ? 0 : 0, Math.min(key === "temp" ? 120 : 255, point[key] + delta));
                 setCurvePoints(nextPoints);
             }
+            function setPoint(key, value) {
+                var nextPoints = points();
+                if (!nextPoints.length) return;
+                nextPoints[Math.min(pointIndex, nextPoints.length - 1)][key] = Number(value);
+                setCurvePoints(nextPoints);
+            }
             function setSetting(key, value) {
                 var next = clone(draft);
                 next.fanSettings[key] = value;
                 draft = next;
                 dirty = true;
             }
-            function toggleFanStop() {
+            function toggleFanStop(enabled) {
                 var nextPoints = points();
                 if (!nextPoints.length) return;
-                var enabled = nextPoints[0].pwm !== 0;
                 if (enabled) {
                     var stopTemp = 60;
                     nextPoints.forEach(function(point) { if (point.temp <= stopTemp) point.pwm = 0; });
@@ -476,24 +533,14 @@ Window {
                 else if (action === "down") focusIndex = Math.min(rows.length - 1, focusIndex + 1);
                 else if (action === "left" || action === "right") {
                     var direction = action === "right" ? 1 : -1;
-                    if (row === curveRow) {
-                        var names = curveNames();
-                        var current = names.indexOf(curveRow.value);
-                        if (names.length) curveRow.value = names[(current + direction + names.length) % names.length];
-                    } else if (row === pointRow) {
-                        pointIndex = Math.max(0, Math.min(Math.max(0, points().length - 1), pointIndex + direction));
-                    } else if (row === tempRow) adjustPoint("temp", direction);
-                    else if (row === pwmRow) adjustPoint("pwm", direction * 5);
-                    else if (row === rampUpRow) setSetting("ramp_up", Math.max(1, Math.min(255, Number(draft.fanSettings.ramp_up || 1) + direction)));
-                    else if (row === rampDownRow) setSetting("ramp_down", Math.max(1, Math.min(255, Number(draft.fanSettings.ramp_down || 1) + direction)));
-                    else if (row === smoothingRow) setSetting("smoothing", Math.max(0, Math.min(0.99, Number(draft.fanSettings.smoothing || 0) + direction * 0.05)));
-                    else if (row === minPwmRow) setSetting("min_pwm", Math.max(0, Math.min(255, Number(draft.fanSettings.min_pwm || 0) + direction * 5)));
+                    if (row === curveRow || row === pointRow || row === tempRow || row === pwmRow || row === rampUpRow || row === rampDownRow || row === smoothingRow || row === minPwmRow)
+                        row.adjust(direction);
                 } else if (action === "accept") {
                     if (row === addCurveRow) addCurve();
                     else if (row === deleteCurveRow) deleteCurve();
                     else if (row === addPointRow) addPoint();
                     else if (row === removePointRow) removePoint();
-                    else if (row === fanStopRow) toggleFanStop();
+                    else if (row === fanStopRow) row.toggle();
                     else if (row === saveRow) saveChanges();
                     else if (row === revertRow) discardDraft();
                 }
@@ -514,17 +561,17 @@ Window {
                     spacing: theme.spacing
                     Text { text: "Fan curves"; color: theme.text; font.pixelSize: theme.pageTitleSize }
                     Text { text: "Select a row; left/right adjusts it, A activates actions."; color: theme.muted; font.pixelSize: theme.bodySize; wrapMode: Text.WordWrap; width: parent.width }
-                    FocusRow { id: curveRow; width: parent.width; title: "Curve"; value: ""; theme: fans.theme }
-                    FocusRow { id: pointRow; width: parent.width; title: "Point"; value: (fans.points().length ? (fans.pointIndex + 1) + " / " + fans.points().length : "—"); theme: fans.theme }
-                    FocusRow { id: tempRow; width: parent.width; title: "Point temperature"; value: fans.points().length ? fans.points()[fans.pointIndex].temp + " °C" : "—"; theme: fans.theme }
-                    FocusRow { id: pwmRow; width: parent.width; title: "Point PWM"; value: fans.points().length ? fans.points()[fans.pointIndex].pwm : "—"; theme: fans.theme }
+                    SelectRow { id: curveRow; width: parent.width; title: "Curve"; options: fans.curveOptions(); currentValue: ""; theme: fans.theme; onValueEdited: pointIndex = 0 }
+                    SelectRow { id: pointRow; width: parent.width; title: "Point"; options: fans.pointOptions(); currentValue: String(fans.pointIndex); theme: fans.theme; onValueEdited: fans.pointIndex = Number(value) }
+                    SliderRow { id: tempRow; width: parent.width; title: "Point temperature"; from: 0; to: 120; value: fans.points().length ? fans.points()[fans.pointIndex].temp : 0; valueText: Math.round(value) + " °C"; enabled: fans.points().length > 0; theme: fans.theme; onValueEdited: fans.setPoint("temp", value) }
+                    SliderRow { id: pwmRow; width: parent.width; title: "Point PWM"; from: 0; to: 255; stepSize: 5; value: fans.points().length ? fans.points()[fans.pointIndex].pwm : 0; valueText: Math.round(value); enabled: fans.points().length > 0; theme: fans.theme; onValueEdited: fans.setPoint("pwm", value) }
                     FocusRow { id: addPointRow; width: parent.width; title: "Add point"; value: "A"; theme: fans.theme }
                     FocusRow { id: removePointRow; width: parent.width; title: "Remove point"; value: "A"; theme: fans.theme }
-                    FocusRow { id: fanStopRow; width: parent.width; title: "Fan stop"; value: fans.points().length && fans.points()[0].pwm === 0 ? "On" : "Off"; theme: fans.theme }
-                    FocusRow { id: rampUpRow; width: parent.width; title: "Ramp up"; value: fans.draft.fanSettings ? fans.draft.fanSettings.ramp_up : "—"; theme: fans.theme }
-                    FocusRow { id: rampDownRow; width: parent.width; title: "Ramp down"; value: fans.draft.fanSettings ? fans.draft.fanSettings.ramp_down : "—"; theme: fans.theme }
-                    FocusRow { id: smoothingRow; width: parent.width; title: "Smoothing"; value: fans.smoothingValue(); theme: fans.theme }
-                    FocusRow { id: minPwmRow; width: parent.width; title: "Minimum PWM"; value: fans.draft.fanSettings ? fans.draft.fanSettings.min_pwm : "—"; theme: fans.theme }
+                    ToggleRow { id: fanStopRow; width: parent.width; title: "Fan stop"; checked: fans.points().length > 0 && fans.points()[0].pwm === 0; theme: fans.theme; onToggled: fans.toggleFanStop(checked) }
+                    SliderRow { id: rampUpRow; width: parent.width; title: "Ramp up"; from: 1; to: 255; value: Number(fans.draft.fanSettings ? fans.draft.fanSettings.ramp_up : 1); valueText: Math.round(value); theme: fans.theme; onValueEdited: fans.setSetting("ramp_up", Math.round(value)) }
+                    SliderRow { id: rampDownRow; width: parent.width; title: "Ramp down"; from: 1; to: 255; value: Number(fans.draft.fanSettings ? fans.draft.fanSettings.ramp_down : 1); valueText: Math.round(value); theme: fans.theme; onValueEdited: fans.setSetting("ramp_down", Math.round(value)) }
+                    SliderRow { id: smoothingRow; width: parent.width; title: "Smoothing"; from: 0; to: 99; value: Math.round(Number(fans.draft.fanSettings ? fans.draft.fanSettings.smoothing : 0) * 100); valueText: Math.round(value) + "%"; theme: fans.theme; onValueEdited: fans.setSetting("smoothing", Math.round(value) / 100) }
+                    SliderRow { id: minPwmRow; width: parent.width; title: "Minimum PWM"; from: 0; to: 255; stepSize: 5; value: Number(fans.draft.fanSettings ? fans.draft.fanSettings.min_pwm : 0); valueText: Math.round(value); theme: fans.theme; onValueEdited: fans.setSetting("min_pwm", Math.round(value)) }
                     FocusRow { id: addCurveRow; width: parent.width; title: "Create curve"; value: "A"; theme: fans.theme }
                     FocusRow { id: deleteCurveRow; width: parent.width; title: "Delete curve"; value: "A"; theme: fans.theme }
                     FocusRow { id: saveRow; width: parent.width; title: fans.dirty ? "Save changes *" : "Save changes"; value: "A"; theme: fans.theme; onActivated: fans.saveChanges() }

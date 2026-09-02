@@ -8,6 +8,7 @@ Item {
     property url iconSource
     property bool iconOnly: false
     property bool selected: activeFocus
+    property bool inactiveSelected: false
     signal activated
     signal adjusted(int direction)
     width: parent ? parent.width : 0
@@ -18,9 +19,9 @@ Item {
     Rectangle {
         anchors.fill: parent
         radius: root.theme.radius
-        color: root.selected ? root.theme.rowFocused : root.theme.row
-        border.color: root.selected ? root.theme.accent : root.theme.transparent
-        border.width: root.selected ? root.theme.borderWidth : 0
+        color: root.selected ? root.theme.rowFocused : root.inactiveSelected ? root.theme.panelRaised : root.theme.row
+        border.color: root.selected ? root.theme.accent : root.inactiveSelected ? root.theme.muted : root.theme.transparent
+        border.width: root.selected || root.inactiveSelected ? root.theme.borderWidth : 0
     }
     Text {
         visible: !root.iconOnly
@@ -39,7 +40,7 @@ Item {
         height: root.theme.iconSize
         source: root.iconSource
         sourceSize: Qt.size(root.theme.iconSize, root.theme.iconSize)
-        opacity: root.selected ? 1 : 0.72
+        opacity: root.selected ? 1 : root.inactiveSelected ? 0.92 : 0.72
         fillMode: Image.PreserveAspectFit
     }
     Text {

@@ -164,9 +164,10 @@ Item {
                 spacing: theme.spacing
                 Item {
                     width: (parent.width - parent.spacing) / 2
-                    height: 150
+                    height: 180
                     Text { anchors.horizontalCenter: parent.horizontalCenter; text: "Left stick"; color: theme.text; font.pixelSize: theme.bodySize }
                     Rectangle {
+                        id: leftPlot
                         anchors.bottom: parent.bottom
                         anchors.horizontalCenter: parent.horizontalCenter
                         width: Math.min(132, parent.width)
@@ -185,12 +186,21 @@ Item {
                             border.width: 2
                         }
                     }
+                    Text {
+                        anchors.top: leftPlot.bottom
+                        anchors.topMargin: 6
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        text: "X " + Math.round(root.value("left_x")) + " · Y " + Math.round(root.value("left_y"))
+                        color: theme.muted
+                        font.pixelSize: theme.bodySize - 2
+                    }
                 }
                 Item {
                     width: (parent.width - parent.spacing) / 2
-                    height: 150
+                    height: 180
                     Text { anchors.horizontalCenter: parent.horizontalCenter; text: "Right stick"; color: theme.text; font.pixelSize: theme.bodySize }
                     Rectangle {
+                        id: rightPlot
                         anchors.bottom: parent.bottom
                         anchors.horizontalCenter: parent.horizontalCenter
                         width: Math.min(132, parent.width)
@@ -208,6 +218,14 @@ Item {
                             border.color: theme.text
                             border.width: 2
                         }
+                    }
+                    Text {
+                        anchors.top: rightPlot.bottom
+                        anchors.topMargin: 6
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        text: "X " + Math.round(root.value("right_x")) + " · Y " + Math.round(root.value("right_y"))
+                        color: theme.muted
+                        font.pixelSize: theme.bodySize - 2
                     }
                 }
             }
@@ -227,6 +245,14 @@ Item {
                             border.color: theme.panelRaised
                             border.width: theme.borderWidth
                             Rectangle { width: parent.width * root.progress(modelData.name); height: parent.height; color: theme.accent }
+                        }
+                        Text {
+                            anchors.right: parent.right
+                            anchors.rightMargin: 6
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: Math.round(root.progress(modelData.name) * 100) + "%"
+                            color: theme.text
+                            font.pixelSize: theme.bodySize - 2
                         }
                     }
                 }

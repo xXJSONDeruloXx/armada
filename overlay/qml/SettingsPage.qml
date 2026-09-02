@@ -24,6 +24,16 @@ Item {
         if (!reply.ok) statusText = reply.error;
         else { statusText = "Saved"; armada.refresh(); }
     }
+    function setChoice(key, action, value) {
+        var reply = armada.call(action, {value: value});
+        if (!reply.ok) statusText = reply.error;
+        else { statusText = "Saved"; armada.refresh(); }
+    }
+    function setToggle(action, checked) {
+        var reply = armada.call(action, {enabled: checked});
+        if (!reply.ok) statusText = reply.error;
+        else { statusText = "Saved"; armada.refresh(); }
+    }
     function toggle(key, action) {
         var next = !Boolean(armada.config[key]);
         var reply = armada.call(action, {enabled: next});
@@ -106,18 +116,66 @@ Item {
             spacing: theme.spacing
             Text { text: "Settings"; color: theme.text; font.pixelSize: theme.pageTitleSize }
             Text { text: "Controller, system, and experimental controls"; color: theme.muted; font.pixelSize: theme.bodySize; wrapMode: Text.WordWrap; width: parent.width }
-            FocusRow { id: controllerRow; width: parent.width; title: "Emulation"; value: root.optionLabel((root.options("controllerTypes") || []).find(function(item) { return root.optionValue(item) === root.armada.config.controllerType; })); theme: root.theme }
+            SelectRow {
+                id: controllerRow
+                width: parent.width
+                title: "Emulation"
+                options: root.options("controllerTypes")
+                currentValue: root.armada.config.controllerType || "deck-uhid"
+                theme: root.theme
+                onValueEdited: root.setChoice("controllerType", "set_controller_type", value)
+            }
             FocusRow { id: calibrationRow; width: parent.width; title: "Launch calibration"; value: "A"; theme: root.theme; onActivated: root.openCalibration() }
-            FocusRow { id: sshRow; width: parent.width; title: "Enable SSH"; value: armada.config.sshEnabled ? "On" : "Off"; theme: root.theme }
+            ToggleRow { id: sshRow; width: parent.width; title: "Enable SSH"; checked: Boolean(armada.config.sshEnabled); theme: root.theme; onToggled: root.setToggle("set_ssh_enabled", checked) }
             FocusRow { id: osRow; width: parent.width; title: "OS version"; value: armada.config.osVersion || "unknown"; theme: root.theme }
             FocusRow { id: ablVersionRow; width: parent.width; title: "ABL version"; value: armada.config.ablVersion || "unknown"; theme: root.theme }
-            FocusRow { id: sleepRow; width: parent.width; title: "Sleep mode"; value: root.optionLabel((root.options("sleepModes") || []).find(function(item) { return root.optionValue(item) === root.armada.config.sleepMode; })); theme: root.theme }
-            FocusRow { id: desktopRow; width: parent.width; title: "Desktop mode"; value: root.optionLabel((root.options("desktopModes") || []).find(function(item) { return root.optionValue(item) === root.armada.config.desktopMode; })); theme: root.theme }
-            FocusRow { id: mtpRow; width: parent.width; title: "USB file transfer"; value: armada.config.mtpEnabled ? "On" : "Off"; theme: root.theme }
-            FocusRow { id: ablRow; width: parent.width; title: "Automatic ABL updates"; value: armada.config.ablAutoEnabled ? "On" : "Off"; theme: root.theme }
-            FocusRow { id: rgbEnabledRow; width: parent.width; title: "RGB lighting"; value: rgb.enabled ? "On" : "Off"; theme: root.theme }
-            FocusRow { id: rgbBrightnessRow; width: parent.width; title: "RGB brightness"; value: rgb.brightness === undefined ? "—" : rgb.brightness + "%"; theme: root.theme }
-            FocusRow { id: rgbHueRow; width: parent.width; title: "RGB color"; value: rgb.color ? rgbHue(rgb.color) + "°" : "—"; theme: root.theme }
+            SelectRow {
+                id: sleepRow
+                visible: root.options("sleepModes").length > 1
+                width: parent.width
+                title: "Sleep mode"
+                options: root.options("sleepModes")
+                currentValue: root.armada.config.sleepMode || "fake"
+                theme: root.theme
+                onValueEdited: root.setChoice("sleepMode", "set_sleep_mode", value)
+            }
+            SelectRow {
+                id: desktopRow
+                visible: root.options("desktopModes").length > 1
+                width: parent.width
+                title: "Desktop mode"
+                options: root.options("desktopModes")
+                currentValue: root.armada.config.desktopMode || "desktop"
+                theme: root.theme
+                onValueEdited: root.setChoice("desktopMode", "set_desktop_mode", value)
+            }
+            ToggleRow { id: mtpRow; width: parent.width; title: "USB file transfer"; checked: Boolean(armada.config.mtpEnabled); theme: root.theme; onToggled: root.setToggle("set_mtp_enabled", checked) }
+            ToggleRow { id: ablRow; width: parent.width; title: "Automatic ABL updates"; checked: Boolean(armada.config.ablAutoEnabled); theme: root.theme; onToggled: root.setToggle("set_abl_auto_enabled", checked) }
+            ToggleRow { id: rgbEnabledRow; width: parent.width; title: "RGB lighting"; checked: Boolean(rgb.enabled); theme: root.theme; onToggled: root.setRgb({enabled: checked}) }
+            SliderRow {
+                id: rgbBrightnessRow
+                width: parent.width
+                title: "RGB brightness"
+                from: 0
+                to: 100
+                value: Number(rgb.brightness || 0)
+                valueText: Math.round(value) + "%"
+                enabled: Boolean(rgb.enabled)
+                theme: root.theme
+                onValueEdited: root.setRgb({brightness: Math.round(value)})
+            }
+            SliderRow {
+                id: rgbHueRow
+                width: parent.width
+                title: "RGB color"
+                from: 0
+                to: 359
+                value: root.rgb.color ? root.rgbHue(root.rgb.color) : 0
+                valueText: Math.round(value) + "°"
+                enabled: Boolean(rgb.enabled)
+                theme: root.theme
+                onValueEdited: root.setRgb({color: root.rgbColor(Math.round(value))})
+            }
             Text { text: root.statusText; color: theme.muted; font.pixelSize: theme.bodySize; wrapMode: Text.WordWrap; width: parent.width }
         }
     }
