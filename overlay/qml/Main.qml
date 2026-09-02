@@ -676,8 +676,9 @@ Window {
             function rebuildRows() {
                 var next = [curveRow, pointRow, tempRow, pwmRow];
                 if (belowMinPwm()) next.push(fixMinPwmRow);
-                next.push(addPointRow, removePointRow, fanStopRow,
-                    fanStopTempRow, rampUpRow, rampDownRow, smoothingRow, minPwmRow, resetCurveRow,
+                next.push(addPointRow, removePointRow, fanStopRow);
+                if (fanStopEnabled()) next.push(fanStopTempRow);
+                next.push(rampUpRow, rampDownRow, smoothingRow, minPwmRow, resetCurveRow,
                     addCurveRow, deleteCurveRow, saveRow, revertRow);
                 rows = next;
                 focusIndex = Math.min(focusIndex, Math.max(0, rows.length - 1));
