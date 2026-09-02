@@ -2,6 +2,13 @@
 set -euxo pipefail
 
 cp -a /ctx/system_files/. /
+install -d -m 0755 /usr/lib/armada
+cp -a /ctx/decky/armada-control/py_modules/armada_control /usr/lib/armada/
+install -Dpm 0755 /packages/overlay-build/armada-control-overlay /usr/bin/armada-control-overlay
+install -Dpm 0644 /ctx/system_files/usr/share/applications/armada-control-overlay.desktop \
+    /usr/share/applications/armada-control-overlay.desktop
+install -Dpm 0644 /ctx/system_files/usr/lib/systemd/user/armada-control-overlay.service \
+    /usr/lib/systemd/user/armada-control-overlay.service
 install -Dpm 0755 /packages/extest/libextest.so /usr/lib/extest/libextest.so
 
 # The vendored entries land after the RPM scriptlets ran, so mimeinfo.cache
@@ -87,6 +94,7 @@ systemctl enable armada-powerd.service
 systemctl enable armada-control.service
 systemctl enable armada-steamos-manager.service
 systemctl --global enable armada-steamos-manager.service
+systemctl --global enable armada-control-overlay.service
 systemctl enable armada-bootimg-sync.service
 systemctl enable armada-esp-rename.service
 systemctl enable armada-flatpak-setup.service

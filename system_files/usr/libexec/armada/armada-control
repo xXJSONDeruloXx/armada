@@ -10,15 +10,20 @@ import subprocess
 import sys
 import tempfile
 import time
+from contextlib import contextmanager
 from pathlib import Path
 
 sys.path.insert(0, "/usr/lib/armada")
 import armada_perf
 
 SOCKET = Path("/run/armada/control.sock")
+OVERLAY_SOCKET = Path("/run/armada/overlay.sock")
 SESSION_SOCKET = Path(armada_perf.SESSION_SOCKET)
 ABL_VERSION_TOOL = "/usr/lib/armada/abl-version"
 RGB_TOOL = "/usr/bin/armada-rgb"
+INPUTPLUMBER_HELPER = os.environ.get(
+    "ARMADA_INPUTPLUMBER_INTERCEPT", "/usr/libexec/armada/inputplumber-intercept"
+)
 ABL_CONFIG = Path("/etc/armada/abl.conf")
 ABL_MANIFEST = Path("/usr/lib/armada/abl/manifest")
 ABL_PARTITIONS = (
@@ -357,7 +362,12 @@ def action_inputplumber_intercept(request):
     mode = str(request.get("mode", ""))
     if mode not in INTERCEPT_MODES:
         raise ValueError("invalid intercept mode")
-    run(["/usr/libexec/armada/inputplumber-intercept", mode], timeout=5)
+    run([INPUTPLUMBER_HELPER, mode], timeout=5)
+    return {"ok": True}
+
+
+def action_set_overlay_activation(request):
+    run([INPUTPLUMBER_HELPER, "activation"], timeout=5)
     return {"ok": True}
 
 
@@ -593,6 +603,185 @@ def handle_session(request, conn):
     raise ValueError("unknown action")
 
 
+def _shared_control_path():
+    configured = os.environ.get("ARMADA_CONTROL_SHARED_PATH")
+    if configured and (Path(configured) / "armada_control").is_dir():
+        return Path(configured)
+    installed = Path("/usr/lib/armada")
+    if (installed / "armada_control").is_dir():
+        return installed
+    # Keep the source-tree service testable without copying the plugin package
+    # into /usr/lib first.
+    source = Path(__file__).resolve().parents[4] / "decky/armada-control/py_modules"
+    if (source / "armada_control").is_dir():
+        return source
+    raise RuntimeError("Armada Control shared modules are not installed")
+
+
+def _ensure_shared_modules():
+    import sys as _sys
+
+    path = str(_shared_control_path())
+    if path not in _sys.path:
+        _sys.path.insert(0, path)
+
+
+@contextmanager
+def _direct_shared_modules():
+    _ensure_shared_modules()
+    from armada_control import calibration, config, fan_curves, power, tweaks
+    from armada_control import system as system_module
+
+    def direct_call(action, **payload):
+        request = {"action": action, **payload}
+        return ACTIONS[action](request)
+
+    patched = []
+    for module in (calibration, power, fan_curves, tweaks, system_module):
+        patched.append((module, "call", module.call))
+        module.call = direct_call
+    patched.extend((
+        (config, "device_env", config.device_env),
+        (config, "abl_auto_enabled", config.abl_auto_enabled),
+        (config, "controller_type", config.controller_type),
+        (config, "ssh_enabled", config.ssh_enabled),
+        (config, "mtp_enabled", config.mtp_enabled),
+        (config, "desktop_mode", config.desktop_mode),
+    ))
+    config.device_env = lambda: device_env()
+    config.abl_auto_enabled = lambda: bool(action_get_abl_auto_enabled({})["enabled"])
+    config.controller_type = lambda: action_get_controller_type({})["value"]
+    config.ssh_enabled = lambda: bool(action_get_ssh_enabled({})["enabled"])
+    config.mtp_enabled = lambda: bool(action_get_mtp_enabled({})["enabled"])
+    config.desktop_mode = lambda: action_get_desktop_mode({})["value"]
+    try:
+        yield calibration, config, fan_curves, power, tweaks
+    finally:
+        for module, name, value in reversed(patched):
+            setattr(module, name, value)
+
+
+def overlay_get_config(request):
+    with _direct_shared_modules() as (_calibration, config, _fan_curves, _power, _tweaks):
+        return config.build_config(False)
+
+
+def overlay_save_power_config(request):
+    with _direct_shared_modules() as (_calibration, _config, _fan_curves, power, _tweaks):
+        power.save_power_config(request.get("data"))
+    return overlay_get_config({})
+
+
+def overlay_save_tweaks(request):
+    with _direct_shared_modules() as (_calibration, _config, _fan_curves, _power, tweaks):
+        tweaks.save_tweaks(request.get("data"))
+    return overlay_get_config({})
+
+
+def overlay_get_fans_state(request):
+    with _direct_shared_modules() as (_calibration, _config, fan_curves, _power, _tweaks):
+        return fan_curves.get_state()
+
+
+def overlay_save_fan_curves(request):
+    with _direct_shared_modules() as (_calibration, _config, fan_curves, _power, _tweaks):
+        return fan_curves.save_all(request.get("fanCurves"), request.get("fanSettings"))
+
+
+def overlay_get_controller_state(request):
+    with _direct_shared_modules() as (calibration, _config, _fan_curves, _power, _tweaks):
+        return calibration.controller_state()
+
+
+def overlay_save_calibration(request):
+    with _direct_shared_modules() as (calibration, _config, _fan_curves, _power, _tweaks):
+        return calibration.save_calibration(request.get("capture"))
+
+
+def overlay_reset_calibration(request):
+    with _direct_shared_modules() as (calibration, _config, _fan_curves, _power, _tweaks):
+        return calibration.reset_calibration_params()
+
+
+def overlay_begin_calibration(request):
+    with _direct_shared_modules() as (calibration, _config, _fan_curves, _power, _tweaks):
+        return {"ok": bool(calibration.begin_session(request.get("token")))}
+
+
+def overlay_end_calibration(request):
+    with _direct_shared_modules() as (calibration, _config, _fan_curves, _power, _tweaks):
+        return {"ok": bool(calibration.end_session(request.get("token")))}
+
+
+def overlay_save_compat_applied(request):
+    with _direct_shared_modules() as (_calibration, _config, _fan_curves, _power, tweaks):
+        return tweaks.save_compat_applied(request.get("appids"))
+
+
+def overlay_actions():
+    # This is deliberately separate from ACTIONS: the socket is group-readable
+    # for the session user, while ACTIONS includes root-only maintenance.
+    _ensure_shared_modules()
+    return {
+        "get_capabilities": lambda request: {
+            "api": 1,
+            "features": [
+                "power", "fans", "rgb", "controller", "calibration",
+                "system", "games", "performance",
+            ],
+        },
+        "get_config": overlay_get_config,
+        "get_installed_games": lambda request: __import__(
+            "armada_control.steam", fromlist=["installed_games"]
+        ).installed_games(),
+        "get_compat_mapped_appids": lambda request: __import__(
+            "armada_control.steam", fromlist=["compat_mapped_appids"]
+        ).compat_mapped_appids(str(request.get("tool", ""))),
+        "save_power_config": overlay_save_power_config,
+        "save_tweaks": overlay_save_tweaks,
+        "get_compat_applied": lambda request: __import__(
+            "armada_control.tweaks", fromlist=["load_compat_applied"]
+        ).load_compat_applied(),
+        "save_compat_applied": overlay_save_compat_applied,
+        "get_rgb": action_get_rgb,
+        "set_rgb": action_set_rgb,
+        "get_controller_type": action_get_controller_type,
+        "set_controller_type": action_set_controller_type,
+        "get_controller_state": overlay_get_controller_state,
+        "save_calibration": overlay_save_calibration,
+        "reset_calibration": overlay_reset_calibration,
+        "begin_calibration_session": overlay_begin_calibration,
+        "end_calibration_session": overlay_end_calibration,
+        "get_fans_state": overlay_get_fans_state,
+        "save_fan_curves": overlay_save_fan_curves,
+        "get_current_temp": lambda request: __import__(
+            "armada_control.fan_sensors", fromlist=["get_current_temp"]
+        ).get_current_temp(),
+        "get_ssh_enabled": action_get_ssh_enabled,
+        "set_ssh_enabled": action_set_ssh_enabled,
+        "get_mtp_enabled": action_get_mtp_enabled,
+        "set_mtp_enabled": action_set_mtp_enabled,
+        "get_abl_auto_enabled": action_get_abl_auto_enabled,
+        "set_abl_auto_enabled": action_set_abl_auto_enabled,
+        "get_desktop_mode": action_get_desktop_mode,
+        "set_desktop_mode": action_set_desktop_mode,
+        "set_sleep_mode": action_set_sleep_mode,
+        "get_device_env": action_get_device_env,
+        "get_abl_version": action_get_abl_version,
+        "inputplumber_intercept": action_inputplumber_intercept,
+        "set_overlay_activation": action_set_overlay_activation,
+        "reapply_perf": action_reapply_perf,
+        "restart_game_mode": action_restart_game_mode,
+    }
+
+
+def handle_overlay(request, _conn=None):
+    action = overlay_actions().get(request.get("action"))
+    if action is None:
+        raise ValueError("unsupported overlay action")
+    return action(request)
+
+
 def serve_client(conn, handler):
     # absolute deadline re-derived per recv: a drip-feeding client must not
     # hold the event loop (and pidfd restores) past CLIENT_TIMEOUT
@@ -644,8 +833,9 @@ def main():
     SOCKET.parent.mkdir(parents=True, exist_ok=True)
     selector = selectors.DefaultSelector()
     PERF = PerfManager(selector)
-    # Root-only socket; config rendering still belongs to the plugin client.
+    # Root-only socket; the overlay gets a separate group-scoped API below.
     control = bind_socket(SOCKET, 0o600)
+    overlay = bind_socket(OVERLAY_SOCKET, 0o660, group="armada")
     session = bind_socket(SESSION_SOCKET, 0o660, group="armada")
 
     def accept_control():
@@ -656,7 +846,12 @@ def main():
         conn, _ = session.accept()
         serve_client(conn, handle_session)
 
+    def accept_overlay():
+        conn, _ = overlay.accept()
+        serve_client(conn, handle_overlay)
+
     selector.register(control, selectors.EVENT_READ, accept_control)
+    selector.register(overlay, selectors.EVENT_READ, accept_overlay)
     selector.register(session, selectors.EVENT_READ, accept_session)
     while True:
         for key, _events in selector.select():
