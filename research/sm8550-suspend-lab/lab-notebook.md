@@ -1631,6 +1631,57 @@ repetitions stay deferred, not cancelled.
   `20260902T024422Z-254284611e94/functional/README.md`. This leaves the
   visible-surface and actual touch/gamepad-response gates explicitly pending
   manual confirmation.
+- The user then confirmed that the real Nova was visibly showing the game and
+  that the framebuffer/X11 captures were not representative of the handheld's
+  visible output. This confirms rendered game presence by direct device
+  observation, but does not claim a measured touch/gamepad event response.
+  The device-side game launch log was copied into
+  `20260902T024238Z-e1dab9c98808/functional/geometry-wars-launch.log` with
+  SHA-256 `8a363c42495bd4246088e47093ae2deb9a7f9fb406a9a1ede1144e93f98e6140`.
+- A live read-only post-run check also captured
+  `dwc3-qcom a600000.usb: port-1 HS-PHY not in L2` at kernel timestamp
+  `689.444032`, about 5.8 seconds after the s2idle run's `PM: suspend exit`
+  at `683.615414`. The warning was also visible in prior persistent logs, so
+  it is an important DWC3 resume symptom but not yet a causal regression or a
+  justification for another patch. A later persistent log recorded
+  `GeometryWars.exe` SIGSEGV after the run; because it was not timestamped to
+  the suspend boundary, it is retained as a workload-health observation, not
+  attributed to suspend. The complete command output and screenshots/raw
+  frames remain preserved under the run archive.
+
+## 2026-09-02 02:53–03:00 UTC — upstream restore and device cleanup
+
+- The user confirmed that the real Nova visibly showed the game; the host-side
+  framebuffer/X11 captures were not representative of the handheld display.
+  This direct observation is retained separately from the automated process
+  and display-inventory evidence.
+- A fresh preflight recorded the lab image before restoration:
+  `preflight-20260902T025315Z-4720de683f51`. Armada's supported channel selector
+  was set to `main` using `/usr/bin/steamos-select-branch main`. The supported
+  `/usr/bin/steamos-update check` resolved `20260830.71e45aa`; stage/apply were
+  performed through the supported update path, not by copying kernel or boot
+  files.
+- Post-update inspection confirms the Nova is booted into
+  `ghcr.io/armada-os/armada:testing` (the Armada `main` channel target), version
+  `20260830.71e45aa`, kernel `7.2.0`, image digest
+  `sha256:cae66b751f6376c7a2da84e7bca7fa81293e9689f7cc9b6bd682ebe83d852c25`,
+  with no staged deployment. The prior diagnostic deployment was only the
+  rollback entry at that point.
+- After upstream boot verification, the exact lab images/tags and unreferenced
+  layers were removed: `armada-dwc3:20260902-5aa8e4c`,
+  `armada-rsc:20260901`, `pmcb`, `pmcb2`, `pmcb3`, and `pmcb4`, plus the
+  dangling lab image. The exact device staging/workload directories
+  `/var/home/armada/sm8550-dwc3`, `/var/home/armada/sm8550-rsc-pmcb`, and
+  `/var/home/armada/sm8550-workload` were removed after relevant evidence was
+  copied to host archives. `/var/home` free space increased from 32 GiB to
+  40 GiB. Steam/user data and installed games were not removed.
+- The temporary `/etc/sudoers.d/90-sm8550-suspend-lab` rule was removed. A
+  read-only verification confirms the file is absent and `sudo -n true` fails;
+  no generic passwordless sudo remains from the lab. The empty
+  `/var/lib/sm8550-suspend-lab` path is retained as a zero-byte system path.
+- All host source checkouts, Git history, verified kernel artifacts, raw run
+  archives, failed-run receipts, and documentation remain preserved. The
+  cleanup is complete without deleting experiment evidence or user content.
 
 ## Iteration rule
 

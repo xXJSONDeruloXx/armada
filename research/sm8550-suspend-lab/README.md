@@ -42,6 +42,12 @@ deep run, so it was rolled back. Its device-local recipe is preserved in
 `device-kernel-layer-dwc3.Containerfile`; the unresolved RPMh/AOP question is
 independent of this negative result.
 
+After the workload validation, the Nova was restored through Armada's
+supported `main` selector/update path. It is currently on
+`ghcr.io/armada-os/armada:testing`, version `20260830.71e45aa`; temporary lab
+images, staging files, and the lab sudo rule were removed. Host-side raw
+archives and verified artifacts remain preserved.
+
 The pre-update image used for the historical control runs was older than this
 checkout. Run a fresh read-only preflight before any future update, then use
 Armada's shipped update hook to check and stage the configured channel; the
