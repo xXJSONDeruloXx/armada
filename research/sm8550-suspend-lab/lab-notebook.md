@@ -1584,6 +1584,45 @@ repetitions stay deferred, not cancelled.
   `20260901.rsc-f595f0f-pmcb`, and kernel `7.2.0`. Full comparison and raw
   paths are documented in `dwc3-skip-phy-ab.md`.
 
+## 2026-09-02 02:40–02:45 UTC — Steam and real-game workload validation
+
+- Run `20260902T024026Z-cf3ff260ae4e`, label
+  `sm8550-workload-steam-ui-deep`, exercised the live Steam/gamescope UI on
+  the restored diagnostic image with radios temporarily off and no external
+  cable. It completed cleanly in observed deep mode: boottime delta
+  `46.662533 s`, monotonic delta `2.340043 s`, separation `44.322490 s`,
+  unchanged boot ID, RTC wake, suspend success `+1`, no failed units, and no
+  suspend error. Steam/gamescope, PipeWire/WirePlumber, DSI-1, and the input
+  inventory remained present after resume. ALSA reported no soundcards, so no
+  audio playback gate was claimed.
+- Geometry Wars (AppID 8400) was launched from the installed Steam library
+  under Proton/pressure-vessel. Steam logged `Fully Installed,App Running`,
+  with the Wine executable and `GeometryWars.exe` present. Run
+  `20260902T024238Z-e1dab9c98808`, label
+  `sm8550-workload-geometry-wars-deep`, then completed cleanly in deep mode:
+  boottime delta `47.077548 s`, monotonic delta `2.214649 s`, separation
+  `44.862898 s`, unchanged boot ID, RTC wake, suspend success `+1`, and no
+  failed units. The Geometry Wars process tree, Steam service, PipeWire
+  processes, DSI-1 connected/enabled state, and eight input devices were still
+  present after resume.
+- Run `20260902T024422Z-254284611e94`, label
+  `sm8550-workload-geometry-wars-s2idle`, repeated the live game workload in
+  s2idle. It completed cleanly: boottime delta `46.887604 s`, monotonic delta
+  `2.517194 s`, separation `44.370410 s`, s2idle markers, unchanged boot ID,
+  RTC wake, suspend success `+1`, and no failed units. The Geometry Wars
+  process tree and Steam session remained present; DSI-1 and all eight input
+  devices remained enumerated. The run's s2idle CPU-sleep deltas were small
+  but nonzero on every CPU, and are retained as independent evidence.
+- These are real workload/process and suspend-health passes, not a visual or
+  input acceptance claim. SSH has no trustworthy display-surface readback, and
+  the gamepad's physical event node is permission-restricted while the
+  virtual mapper is readable. The remaining manual gate is to look at the Nova
+  after resume and confirm that Geometry Wars is visibly rendered, then tap
+  the screen or press one gamepad button and confirm the game responds. Until
+  that happens, gameplay/input recovery remains unverified. Full raw archives,
+  qcom_stats, PM, clock, IRQ, RSC, display, input, audio, and log snapshots
+  are retained under each run ID.
+
 ## Iteration rule
 
 The quickest safe kernel loop is now documented in
