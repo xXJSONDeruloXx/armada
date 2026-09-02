@@ -454,6 +454,8 @@ signals:
 private slots:
     void compatibilitySweep()
     {
+        if (compatibilityProcess_.state() != QProcess::NotRunning)
+            return;
         const QVariantMap tweaks = config_.value(QStringLiteral("tweaks")).toMap();
         const QVariantMap global = tweaks.value(QStringLiteral("global")).toMap();
         const RpcResult latestGames = request(QStringLiteral("get_installed_games"));
@@ -467,7 +469,23 @@ private slots:
             {QStringLiteral("tool"), global.value(QStringLiteral("windowsCompatTool")).toString()},
             {QStringLiteral("auto_apply"), global.value(QStringLiteral("autoApplyCompat"), true).toBool()},
         };
-        steamCall(QStringLiteral("sweep_compat"), fields);
+        QJsonObject payload = QJsonObject::fromVariantMap(fields);
+        payload.insert(QStringLiteral("action"), QStringLiteral("sweep_compat"));
+        compatibilityProcess_.setProgram(qEnvironmentVariable("ARMADA_STEAM_BRIDGE", "/usr/libexec/armada/steam-bridge"));
+        compatibilityProcess_.start();
+        if (!compatibilityProcess_.waitForStarted(500)) {
+            compatibilityProcess_.kill();
+            compatibilityProcess_.waitForFinished(500);
+            return;
+        }
+        compatibilityProcess_.write(QJsonDocument(payload).toJson(QJsonDocument::Compact) + '\n');
+        compatibilityProcess_.closeWriteChannel();
+        QTimer::singleShot(7000, this, [this] {
+            if (compatibilityProcess_.state() != QProcess::NotRunning) {
+                compatibilityProcess_.kill();
+                compatibilityProcess_.waitForFinished(500);
+            }
+        });
     }
 
     void onInputEvent(const QString &event, double value)
@@ -531,6 +549,7 @@ private:
     QVariantMap config_;
     QVariantMap fanState_;
     QTimer compatibilityTimer_;
+    QProcess compatibilityProcess_;
     QString calibrationSessionToken_;
     bool calibrationSessionActive_ = false;
 };
