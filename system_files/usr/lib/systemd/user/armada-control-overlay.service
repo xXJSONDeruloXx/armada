@@ -2,6 +2,7 @@
 Description=Armada Control game-mode overlay
 PartOf=gamescope-session-plus@steam.service
 After=graphical-session.target
+After=gamescope-session-plus@steam.service
 Wants=graphical-session.target
 
 [Service]

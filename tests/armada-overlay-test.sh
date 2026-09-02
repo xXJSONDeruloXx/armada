@@ -70,6 +70,8 @@ grep -Fq 'ExecStopPost=-/usr/libexec/armada/inputplumber-intercept reset' \
 grep -Fq -- '--cleanup' "$ROOT/system_files/usr/lib/systemd/user/armada-control-overlay.service"
 grep -Fq 'ExecStartPre=-/usr/bin/armada-control-overlay --cleanup' \
     "$ROOT/system_files/usr/lib/systemd/user/armada-control-overlay.service"
+grep -Fq 'After=gamescope-session-plus@steam.service' \
+    "$ROOT/system_files/usr/lib/systemd/user/armada-control-overlay.service"
 grep -Fq 'qt6-qtbase-gui' "$ROOT/build_files/10-base-packages.sh"
 grep -Fq 'qt6-qtdeclarative' "$ROOT/build_files/10-base-packages.sh"
 grep -Fq 'qt6-qtsvg' "$ROOT/build_files/10-base-packages.sh"
