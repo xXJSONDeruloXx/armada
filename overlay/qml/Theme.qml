@@ -9,6 +9,8 @@ QtObject {
     readonly property color muted: "#aeb6c2"
     readonly property color accent: "#66c0f4"
     readonly property color error: "#d15d5d"
+    readonly property color errorPanel: "#3b2225"
+    readonly property color scrim: "#66000000"
     readonly property color transparent: "transparent"
     readonly property int spacing: 12
     readonly property int rowHeight: 64

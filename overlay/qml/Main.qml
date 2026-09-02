@@ -80,7 +80,7 @@ Window {
 
     Rectangle {
         anchors.fill: parent
-        color: "transparent"
+        color: theme.transparent
 
         Rectangle {
             id: panel
@@ -137,7 +137,7 @@ Window {
                     anchors.bottom: stack.bottom
                     z: 2
                     visible: root.navigationActive
-                    color: "#66000000"
+                    color: theme.scrim
                 }
             }
 
@@ -148,7 +148,7 @@ Window {
                 anchors.margins: theme.spacing
                 height: root.errorText ? theme.rowHeight - 12 : 0
                 visible: root.errorText !== ""
-                color: "#3b2225"
+                color: theme.errorPanel
                 border.color: theme.error
                 border.width: theme.borderWidth
                 radius: theme.radius
