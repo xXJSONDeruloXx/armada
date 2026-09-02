@@ -403,6 +403,10 @@ Window {
             property bool deletePending: false
             property string currentTemp: ""
             property var rows: []
+            property bool resetPending: false
+            property var preFanStopPoints: null
+            property string preFanStopCurveName: ""
+            property int preFanStopMinPwm: -1
 
             function setFocusedRow(row) {
                 var index = rows.indexOf(row);
@@ -427,6 +431,41 @@ Window {
                     .map(function(point) { return Math.round(point.temp) + ":" + Math.round(point.pwm); }).join(",");
             }
             function points() { return parse(currentCurve().curve); }
+            function factoryCurve() { return (draft.factoryFanCurves || {})[curveRow.value] || null; }
+            function belowMinPwm() {
+                var minimum = Number((draft.fanSettings || {}).min_pwm || 0);
+                return points().some(function(point) { return point.pwm < minimum; });
+            }
+            function fanStopEnabled() {
+                var curvePoints = points();
+                return curvePoints.length > 0 && curvePoints[0].pwm === 0;
+            }
+            function fanStopTemp() {
+                var curvePoints = points();
+                var end = 0;
+                while (end < curvePoints.length && curvePoints[end].pwm === 0) end++;
+                return end > 0 ? curvePoints[end - 1].temp : 60;
+            }
+            function restoreFanStopPoints(allPoints, runEnd) {
+                if (runEnd <= 0) return allPoints;
+                var zeroRun = allPoints.slice(0, runEnd);
+                var rest = allPoints.slice(runEnd);
+                var restorePwm = rest.length ? rest[0].pwm : 128;
+                var restored = zeroRun.map(function(point) { return {temp: point.temp, pwm: restorePwm || 128}; });
+                if (rest.length) return restored.concat(rest);
+                var lastTemp = restored.length ? restored[restored.length - 1].temp : 60;
+                return restored.concat([{temp: Math.min(120, lastTemp + 10), pwm: 128}]);
+            }
+            function buildFanStopPoints(stopTemp, allPoints) {
+                var zeroed = allPoints.filter(function(point) { return point.temp <= stopTemp; })
+                    .map(function(point) { return {temp: point.temp, pwm: 0}; });
+                var above = allPoints.filter(function(point) { return point.temp > stopTemp; });
+                var hasBoundary = zeroed.some(function(point) { return point.temp === stopTemp; });
+                var zone = hasBoundary ? zeroed : zeroed.concat([{temp: stopTemp, pwm: 0}]);
+                if (above.length) return zone.concat(above);
+                var fallback = allPoints.length ? allPoints[allPoints.length - 1].pwm : 128;
+                return zone.concat([{temp: Math.min(120, stopTemp + 10), pwm: fallback || 128}]);
+            }
             function refreshTemperature() {
                 var result = armada.call("get_current_temp");
                 if (result.ok && result.result !== undefined && result.result !== null)
@@ -448,6 +487,7 @@ Window {
                 draft = next;
                 dirty = true;
                 pointIndex = Math.min(pointIndex, Math.max(0, nextPoints.length - 1));
+                rebuildRows();
             }
             function adjustPoint(key, delta) {
                 var nextPoints = points();
@@ -467,20 +507,77 @@ Window {
                 next.fanSettings[key] = value;
                 draft = next;
                 dirty = true;
+                rebuildRows();
+            }
+            function fixMinPwm() {
+                var curvePoints = points();
+                if (!curvePoints.length) return;
+                var minimum = Math.min.apply(null, curvePoints.map(function(point) { return point.pwm; }));
+                setSetting("min_pwm", Math.max(0, Math.min(255, Math.round(minimum))));
+                fanStatus.text = "Minimum PWM adjusted; save to apply";
+            }
+            function resetCurve() {
+                if (!factoryCurve()) {
+                    fanStatus.text = "No factory default for this curve";
+                    return;
+                }
+                if (!resetPending) {
+                    resetPending = true;
+                    fanStatus.text = "Press A again to reset this curve";
+                    return;
+                }
+                var next = clone(draft);
+                next.fanCurves[curveRow.value] = clone(factoryCurve());
+                draft = next;
+                pointIndex = 0;
+                resetPending = false;
+                preFanStopPoints = null;
+                preFanStopCurveName = "";
+                preFanStopMinPwm = -1;
+                dirty = true;
+                fanStatus.text = "Curve reset; save to apply";
+                rebuildRows();
             }
             function toggleFanStop(enabled) {
-                var nextPoints = points();
-                if (!nextPoints.length) return;
+                var currentPoints = points();
+                if (!currentPoints.length) return;
+                var nextPoints;
+                var next = clone(draft);
                 if (enabled) {
-                    var stopTemp = 60;
-                    nextPoints.forEach(function(point) { if (point.temp <= stopTemp) point.pwm = 0; });
-                    if (nextPoints[0].temp > stopTemp) nextPoints.unshift({temp: stopTemp, pwm: 0});
-                    else nextPoints[0].pwm = 0;
-                    setSetting("min_pwm", 0);
+                    preFanStopPoints = clone(currentPoints);
+                    preFanStopCurveName = curveRow.value;
+                    preFanStopMinPwm = Number((draft.fanSettings || {}).min_pwm || 0);
+                    nextPoints = buildFanStopPoints(60, currentPoints);
+                    next.fanSettings.min_pwm = 0;
                 } else {
-                    nextPoints.forEach(function(point) { if (point.pwm === 0) point.pwm = 128; });
+                    var cached = preFanStopCurveName === curveRow.value ? preFanStopPoints : null;
+                    var zeroRun = 0;
+                    while (zeroRun < currentPoints.length && currentPoints[zeroRun].pwm === 0) zeroRun++;
+                    nextPoints = cached || restoreFanStopPoints(currentPoints, zeroRun);
+                    var anotherCurveStops = Object.keys(next.fanCurves || {}).some(function(name) {
+                        if (name === curveRow.value) return false;
+                        var other = parse(next.fanCurves[name].curve);
+                        return other.length > 0 && other[0].pwm === 0;
+                    });
+                    if (!anotherCurveStops && next.fanSettings)
+                        next.fanSettings.min_pwm = preFanStopMinPwm >= 0 ? preFanStopMinPwm : Number((next.factoryFanSettings || {}).min_pwm || 0);
+                    preFanStopPoints = null;
+                    preFanStopCurveName = "";
+                    preFanStopMinPwm = -1;
                 }
-                setCurvePoints(nextPoints);
+                next.fanCurves[curveRow.value].curve = format(nextPoints);
+                draft = next;
+                dirty = true;
+                rebuildRows();
+            }
+            function setFanStopTemp(value) {
+                var stopTemp = Math.max(0, Math.min(120, Number(value)));
+                var currentPoints = points();
+                var zeroRun = 0;
+                while (zeroRun < currentPoints.length && currentPoints[zeroRun].pwm === 0) zeroRun++;
+                var base = preFanStopCurveName === curveRow.value && preFanStopPoints
+                    ? clone(preFanStopPoints) : restoreFanStopPoints(currentPoints, zeroRun);
+                setCurvePoints(buildFanStopPoints(stopTemp, base));
             }
             function addPoint() {
                 var nextPoints = points();
@@ -508,6 +605,7 @@ Window {
                 curveRow.value = name;
                 pointIndex = 0;
                 dirty = true;
+                rebuildRows();
             }
             function deleteCurve() {
                 if ((draft.factoryFanCurves || {})[curveRow.value]) {
@@ -538,6 +636,17 @@ Window {
                 dirty = true;
                 deletePending = false;
                 fanStatus.text = "Deleted; save to apply";
+                rebuildRows();
+            }
+            function rebuildRows() {
+                var next = [curveRow, pointRow, tempRow, pwmRow];
+                if (belowMinPwm()) next.push(fixMinPwmRow);
+                next.push(addPointRow, removePointRow, fanStopRow,
+                    fanStopTempRow, rampUpRow, rampDownRow, smoothingRow, minPwmRow, resetCurveRow,
+                    addCurveRow, deleteCurveRow, saveRow, revertRow);
+                rows = next;
+                focusIndex = Math.min(focusIndex, Math.max(0, rows.length - 1));
+                rows.forEach(function(item, index) { item.selected = index === focusIndex; });
             }
             function saveChanges() {
                 var result = armada.call("save_fan_curves", {fanCurves: draft.fanCurves, fanSettings: draft.fanSettings});
@@ -551,23 +660,26 @@ Window {
                 var names = curveNames();
                 if (names.indexOf(curveRow.value) < 0) curveRow.value = names[0] || "";
                 pointIndex = Math.min(pointIndex, Math.max(0, points().length - 1));
-                rows.forEach(function(item, index) { item.selected = index === focusIndex; });
+                rebuildRows();
             }
             function handleAction(action) {
                 var row = rows[focusIndex];
                 if (action !== "accept" || row !== deleteCurveRow) deletePending = false;
+                if (action !== "accept" || row !== resetCurveRow) resetPending = false;
                 if (action === "up") focusIndex = Math.max(0, focusIndex - 1);
                 else if (action === "down") focusIndex = Math.min(rows.length - 1, focusIndex + 1);
                 else if (action === "left" || action === "right") {
                     var direction = action === "right" ? 1 : -1;
-                    if (row === curveRow || row === pointRow || row === tempRow || row === pwmRow || row === rampUpRow || row === rampDownRow || row === smoothingRow || row === minPwmRow)
+                    if (row === curveRow || row === pointRow || row === tempRow || row === pwmRow || row === fanStopTempRow || row === rampUpRow || row === rampDownRow || row === smoothingRow || row === minPwmRow)
                         row.adjust(direction);
                 } else if (action === "accept") {
                     if (row === curveRow || row === pointRow) row.open();
-                    else if (row === tempRow || row === pwmRow || row === rampUpRow || row === rampDownRow || row === smoothingRow || row === minPwmRow) row.activate();
+                    else if (row === tempRow || row === pwmRow || row === fanStopTempRow || row === rampUpRow || row === rampDownRow || row === smoothingRow || row === minPwmRow) row.activate();
+                    else if (row === fixMinPwmRow) fixMinPwm();
                     else if (row === fanStopRow) row.toggle();
                     else if (row === addCurveRow) addCurve();
                     else if (row === deleteCurveRow) deleteCurve();
+                    else if (row === resetCurveRow) resetCurve();
                     else if (row === addPointRow) addPoint();
                     else if (row === removePointRow) removePoint();
                     else if (row === saveRow) saveChanges();
@@ -580,8 +692,6 @@ Window {
             onCurrentTempChanged: if (curveGraph) curveGraph.requestPaint()
             Connections { target: armada; function onFanStateChanged() { fans.sync(); } }
             Component.onCompleted: {
-                rows = [curveRow, pointRow, tempRow, pwmRow, addPointRow, removePointRow, fanStopRow,
-                    rampUpRow, rampDownRow, smoothingRow, minPwmRow, addCurveRow, deleteCurveRow, saveRow, revertRow];
                 sync();
                 refreshTemperature();
                 temperaturePoll.start();
@@ -668,17 +778,20 @@ Window {
                         }
                     }
                     Text { text: "Live temperature: " + (fans.currentTemp || "—") + (fans.currentTemp ? " °C" : ""); color: theme.muted; font.pixelSize: theme.bodySize - 2 }
-                    SelectRow { id: curveRow; width: parent.width; title: "Curve"; options: fans.curveOptions(); currentValue: ""; theme: fans.theme; focusOwner: fans; onValueEdited: pointIndex = 0 }
+                    SelectRow { id: curveRow; width: parent.width; title: "Curve"; options: fans.curveOptions(); currentValue: ""; theme: fans.theme; focusOwner: fans; onValueEdited: { pointIndex = 0; fans.resetPending = false; fans.rebuildRows(); } }
                     SelectRow { id: pointRow; width: parent.width; title: "Point"; options: fans.pointOptions(); currentValue: String(fans.pointIndex); theme: fans.theme; focusOwner: fans; onValueEdited: fans.pointIndex = Number(value) }
                     SliderRow { id: tempRow; width: parent.width; title: "Point temperature"; from: 0; to: 120; value: fans.points().length ? fans.points()[fans.pointIndex].temp : 0; valueText: Math.round(value) + " °C"; enabled: fans.points().length > 0; theme: fans.theme; focusOwner: fans; onValueEdited: fans.setPoint("temp", value) }
                     SliderRow { id: pwmRow; width: parent.width; title: "Point PWM"; from: 0; to: 255; stepSize: 5; value: fans.points().length ? fans.points()[fans.pointIndex].pwm : 0; valueText: Math.round(value); enabled: fans.points().length > 0; theme: fans.theme; focusOwner: fans; onValueEdited: fans.setPoint("pwm", value) }
+                    FocusRow { id: fixMinPwmRow; width: parent.width; title: "Fix minimum PWM"; value: "A"; theme: fans.theme; focusOwner: fans; visible: fans.belowMinPwm(); onActivated: fans.fixMinPwm() }
                     FocusRow { id: addPointRow; width: parent.width; title: "Add point"; value: "A"; theme: fans.theme; focusOwner: fans }
                     FocusRow { id: removePointRow; width: parent.width; title: "Remove point"; value: "A"; theme: fans.theme; focusOwner: fans }
-                    ToggleRow { id: fanStopRow; width: parent.width; title: "Fan stop"; checked: fans.points().length > 0 && fans.points()[0].pwm === 0; theme: fans.theme; focusOwner: fans; onToggled: fans.toggleFanStop(checked) }
+                    ToggleRow { id: fanStopRow; width: parent.width; title: "Fan stop"; checked: fans.fanStopEnabled(); theme: fans.theme; focusOwner: fans; onToggled: fans.toggleFanStop(checked) }
+                    SliderRow { id: fanStopTempRow; width: parent.width; title: "Fan stop temperature"; from: 0; to: 120; value: fans.fanStopTemp(); valueText: Math.round(value) + " °C"; visible: fans.fanStopEnabled(); theme: fans.theme; focusOwner: fans; onValueEdited: fans.setFanStopTemp(value) }
                     SliderRow { id: rampUpRow; width: parent.width; title: "Ramp up"; from: 1; to: 255; value: Number(fans.draft.fanSettings ? fans.draft.fanSettings.ramp_up : 1); valueText: Math.round(value); theme: fans.theme; focusOwner: fans; onValueEdited: fans.setSetting("ramp_up", Math.round(value)) }
                     SliderRow { id: rampDownRow; width: parent.width; title: "Ramp down"; from: 1; to: 255; value: Number(fans.draft.fanSettings ? fans.draft.fanSettings.ramp_down : 1); valueText: Math.round(value); theme: fans.theme; focusOwner: fans; onValueEdited: fans.setSetting("ramp_down", Math.round(value)) }
                     SliderRow { id: smoothingRow; width: parent.width; title: "Smoothing"; from: 0; to: 99; value: Math.round(Number(fans.draft.fanSettings ? fans.draft.fanSettings.smoothing : 0) * 100); valueText: Math.round(value) + "%"; theme: fans.theme; focusOwner: fans; onValueEdited: fans.setSetting("smoothing", Math.round(value) / 100) }
                     SliderRow { id: minPwmRow; width: parent.width; title: "Minimum PWM"; from: 0; to: 255; stepSize: 5; value: Number(fans.draft.fanSettings ? fans.draft.fanSettings.min_pwm : 0); valueText: Math.round(value); theme: fans.theme; focusOwner: fans; onValueEdited: fans.setSetting("min_pwm", Math.round(value)) }
+                    FocusRow { id: resetCurveRow; width: parent.width; title: "Reset curve to factory"; value: "A"; theme: fans.theme; focusOwner: fans; visible: fans.factoryCurve() !== null; onActivated: fans.resetCurve() }
                     FocusRow { id: addCurveRow; width: parent.width; title: "Create curve"; value: "A"; theme: fans.theme; focusOwner: fans }
                     FocusRow { id: deleteCurveRow; width: parent.width; title: "Delete curve"; value: "A"; theme: fans.theme; focusOwner: fans }
                     FocusRow { id: saveRow; width: parent.width; title: fans.dirty ? "Save changes *" : "Save changes"; value: "A"; theme: fans.theme; focusOwner: fans; onActivated: fans.saveChanges() }
