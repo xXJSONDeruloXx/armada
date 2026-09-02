@@ -80,7 +80,7 @@ Item {
         contentItem: Text {
             leftPadding: 10
             rightPadding: 28
-            text: selector.displayText
+            text: root.options.length ? root.optionLabel(root.options[root.indexForValue(root.currentValue)]) : root.currentValue
             color: root.theme.text
             font.pixelSize: root.theme.bodySize
             verticalAlignment: Text.AlignVCenter

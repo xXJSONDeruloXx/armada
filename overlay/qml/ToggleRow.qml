@@ -45,6 +45,24 @@ Item {
         anchors.verticalCenter: parent.verticalCenter
         checked: root.checked
         enabled: root.enabled
+        indicator: Rectangle {
+            implicitWidth: 48
+            implicitHeight: 28
+            x: toggleControl.leftPadding
+            y: parent.height / 2 - height / 2
+            radius: height / 2
+            color: toggleControl.checked ? root.theme.accent : root.theme.panelRaised
+            border.color: toggleControl.checked ? root.theme.accent : root.theme.muted
+            border.width: root.theme.borderWidth
+            Rectangle {
+                width: 22
+                height: 22
+                radius: 11
+                anchors.verticalCenter: parent.verticalCenter
+                x: toggleControl.checked ? parent.width - width - 3 : 3
+                color: root.theme.text
+            }
+        }
         onClicked: root.toggled(checked)
     }
     MouseArea {

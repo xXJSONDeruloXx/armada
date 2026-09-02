@@ -11,6 +11,7 @@ Window {
 
     Theme { id: theme }
     property var uiTheme: theme
+    property var backend: armada
     property int pageIndex: 0
     property bool navigationActive: true
     property var pageTitles: ["Status", "Power", "Fans", "Games", "Compatibility", "Settings", "Calibration"]
@@ -344,7 +345,7 @@ Window {
     Component {
         id: settingsPage
         SettingsPage {
-            armada: armada
+            armada: root.backend
             theme: root.uiTheme
             onOpenCalibration: root.showPage(6)
         }
@@ -353,7 +354,7 @@ Window {
     Component {
         id: compatibilityPage
         CompatibilityPage {
-            armada: armada
+            armada: root.backend
             theme: root.uiTheme
         }
     }
@@ -361,7 +362,7 @@ Window {
     Component {
         id: gamePage
         GamePage {
-            armada: armada
+            armada: root.backend
             theme: root.uiTheme
         }
     }
@@ -369,7 +370,7 @@ Window {
     Component {
         id: calibrationPage
         CalibrationPage {
-            armada: armada
+            armada: root.backend
             theme: root.uiTheme
         }
     }
