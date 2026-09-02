@@ -71,6 +71,7 @@ grep -Fq 'ExecStartPre=-/usr/bin/armada-control-overlay --cleanup' \
     "$ROOT/system_files/usr/lib/systemd/user/armada-control-overlay.service"
 grep -Fq 'qt6-qtbase-gui' "$ROOT/build_files/10-base-packages.sh"
 grep -Fq 'qt6-qtdeclarative' "$ROOT/build_files/10-base-packages.sh"
+grep -Fq 'qt6-qtsvg' "$ROOT/build_files/10-base-packages.sh"
 grep -Fq 'armada-control-overlay' "$ROOT/build_files/40-vendor-system-files.sh"
 grep -Fq '/usr/share/armada/overlay' "$ROOT/build_files/40-vendor-system-files.sh"
 grep -Fq 'SetInterceptActivation' "$ROOT/system_files/usr/libexec/armada/inputplumber-intercept"

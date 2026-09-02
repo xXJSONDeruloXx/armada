@@ -55,6 +55,7 @@ dnf5 -y install --setopt=install_weak_deps=False \
     qt6-qttools \
     qt6-qtbase-gui \
     qt6-qtdeclarative \
+    qt6-qtsvg \
     qt6-qtvirtualkeyboard \
     zenity \
     seatd \
