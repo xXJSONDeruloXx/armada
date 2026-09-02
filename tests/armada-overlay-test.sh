@@ -117,6 +117,8 @@ grep -Fq 'SelectRow' "$ROOT/overlay/qml/CompatibilityPage.qml"
 grep -Fq 'SelectRow' "$ROOT/overlay/qml/GamePage.qml"
 grep -Fq 'SliderRow' "$ROOT/overlay/qml/GamePage.qml"
 grep -Fq 'ToggleRow' "$ROOT/overlay/qml/GamePage.qml"
+grep -Fq 'Vulkan realtime queue' "$ROOT/overlay/qml/GamePage.qml"
+grep -Fq 'Reset all game compatibility' "$ROOT/overlay/qml/CompatibilityPage.qml"
 for icon in status power fans games settings calibration; do
     test -f "$ROOT/overlay/qml/icons/$icon.svg"
 done

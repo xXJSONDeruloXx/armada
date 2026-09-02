@@ -16,6 +16,7 @@ Item {
     property string statusText: ""
     property int focusIndex: 0
     property var rows: []
+    property bool resetAllPending: false
 
     function result(reply) {
         return reply && reply.ok ? (reply.result || {}) : null;
@@ -68,6 +69,7 @@ Item {
     function rebuildRows() {
         rows = [targetRow, globalToolRow, autoApplyRow, globalResolutionRow];
         if (/^\d+$/.test(appid)) rows = rows.concat([appToolRow, gameResolutionRow, launchRow, saveLaunchRow, resetRow]);
+        rows.push(resetAllRow);
         rows.forEach(function(item, index) { item.selected = index === focusIndex; });
     }
     function saveGlobalTool(label) {
@@ -106,6 +108,25 @@ Item {
         var third = call("set_resolution", {appid: appid, value: "Default"});
         if (first.ok && second.ok && third.ok) { currentTool = ""; launchOptions = ""; gameResolution = "Default"; statusText = "Reset"; }
     }
+    function resetAllGames() {
+        if (!resetAllPending) {
+            resetAllPending = true;
+            statusText = "Press A again to reset Steam compatibility for all games";
+            return;
+        }
+        resetAllPending = false;
+        var games = (armada.config.installedGames || []).filter(function(game) { return game && /^\d+$/.test(String(game.appid || "")); });
+        var failed = 0;
+        games.forEach(function(game) {
+            var id = String(game.appid);
+            if (!call("set_compat_tool", {appid: id, tool: ""}).ok) failed++;
+            if (!call("set_launch_options", {appid: id, options: ""}).ok) failed++;
+            if (!call("set_resolution", {appid: id, value: "Default"}).ok) failed++;
+        });
+        armada.call("save_compat_applied", {appids: []});
+        statusText = failed ? "Reset completed with errors" : "Reset " + games.length + " games";
+        if (/^\d+$/.test(appid)) loadGame();
+    }
     function handleAction(action) {
         var row = rows[focusIndex];
         if (action === "up") focusIndex = Math.max(0, focusIndex - 1);
@@ -122,6 +143,7 @@ Item {
             } else if (row === launchRow) launchField.forceActiveFocus();
             else if (row === saveLaunchRow) saveLaunch();
             else if (row === resetRow) resetGame();
+            else if (row === resetAllRow) resetAllGames();
         }
         rows.forEach(function(item, index) { item.selected = index === focusIndex; });
     }
@@ -168,6 +190,7 @@ Item {
             TextField { id: launchField; visible: /^\d+$/.test(root.appid); width: parent.width; text: root.launchOptions; placeholderText: "Steam launch options" }
             FocusRow { id: saveLaunchRow; visible: /^\d+$/.test(root.appid); width: parent.width; title: "Save launch options"; value: "A"; theme: root.theme; onActivated: root.saveLaunch() }
             FocusRow { id: resetRow; visible: /^\d+$/.test(root.appid); width: parent.width; title: "Reset game compatibility"; value: "A"; theme: root.theme; onActivated: root.resetGame() }
+            FocusRow { id: resetAllRow; width: parent.width; title: "Reset all game compatibility"; value: "A"; theme: root.theme; onActivated: root.resetAllGames() }
             Text { text: root.statusText; color: root.theme.muted; font.pixelSize: root.theme.bodySize; wrapMode: Text.WordWrap; width: parent.width }
         }
     }

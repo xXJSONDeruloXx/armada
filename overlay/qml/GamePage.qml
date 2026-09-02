@@ -82,6 +82,15 @@ Item {
         draftTweaks = next;
         dirty = true;
     }
+    function setGlobalBoolean(key, enabled) {
+        var next = clone(draftTweaks);
+        if (!next.global) next.global = {};
+        if (enabled) next.global[key] = true;
+        else delete next.global[key];
+        draftTweaks = next;
+        dirty = true;
+        statusText = "Saved; restart Game Mode to apply";
+    }
     function environmentKeys() {
         var keys = {};
         var global = (draftTweaks.global || {}).env || {};
@@ -344,6 +353,7 @@ Item {
         nextRows.push(cpuTopologyRow, niceRow, gamescopeCoresRow);
         if (gamescopeCoresCustom) nextRows.push(gamescopeCoreTextRow);
         nextRows.push(gamescopeNiceRow, gamescopeRealtimeRow, schedulerRow, environmentRow, reapplyRow, restartRow, resetRow, saveRow);
+        if (!selectedAppid) nextRows.splice(nextRows.indexOf(schedulerRow), 0, gamescopeVulkanRealtimeRow);
         rows = nextRows;
         rows.forEach(function(item, index) { item.selected = index === focusIndex; });
     }
@@ -370,9 +380,10 @@ Item {
             else if (row === niceRow || row === gamescopeNiceRow) row.adjust(direction);
             else if (row === gamescopeCoreTextRow) statusText = "Press A to edit the custom Gamescope CPU list";
             else if (row === gamescopeRealtimeRow) row.toggle();
+            else if (row === gamescopeVulkanRealtimeRow) row.toggle();
         } else if (action === "accept") {
             if (row === targetRow || row === fexRow || row === cpuCoresRow || row === gamescopeCoresRow || row === schedulerRow) row.open();
-            else if (fexKnobRows.indexOf(row) >= 0 || thunkRows.indexOf(row) >= 0 || row === cpuTopologyRow || row === gamescopeRealtimeRow) row.toggle();
+            else if (fexKnobRows.indexOf(row) >= 0 || thunkRows.indexOf(row) >= 0 || row === cpuTopologyRow || row === gamescopeRealtimeRow || row === gamescopeVulkanRealtimeRow) row.toggle();
             else if (row === niceRow || row === gamescopeNiceRow) row.activate();
             else if (row === coreTextRow) coreField.forceActiveFocus();
             else if (row === gamescopeCoreTextRow) gamescopeCoreField.forceActiveFocus();
@@ -456,6 +467,7 @@ Item {
             TextField { id: gamescopeCoreField; visible: root.gamescopeCoresCustom; width: parent.width; text: root.customGamescopeCoresText; placeholderText: "e.g. 7,3-6"; onEditingFinished: root.commitCustomCores("gamescopeCores", text) }
             SliderRow { id: gamescopeNiceRow; width: parent.width; title: "Gamescope priority"; from: -20; to: 19; value: Number(root.effective("gamescopeNice") || 0); valueText: Math.round(value); theme: root.theme; onValueEdited: root.setSetting("gamescopeNice", Math.round(value)) }
             ToggleRow { id: gamescopeRealtimeRow; width: parent.width; title: "Gamescope realtime"; checked: Boolean(root.effective("gamescopeRr")); theme: root.theme; onToggled: root.setSetting("gamescopeRr", checked) }
+            ToggleRow { id: gamescopeVulkanRealtimeRow; visible: !root.selectedAppid; width: parent.width; title: "Vulkan realtime queue"; checked: Boolean((root.draftTweaks.global || {}).gamescopeVulkanRealtime); theme: root.theme; onToggled: root.setGlobalBoolean("gamescopeVulkanRealtime", checked) }
             SelectRow { id: schedulerRow; width: parent.width; title: "CPU scheduler"; options: [{data: "default", label: "Default"}].concat((armada.config.perf && armada.config.perf.schedulers || []).map(function(value) { return {data: value, label: value.toUpperCase()}; })); currentValue: String(root.effective("scheduler") || "default"); theme: root.theme; onValueEdited: root.setSetting("scheduler", value === "default" ? undefined : value) }
             FocusRow { id: environmentRow; width: parent.width; title: "Environment variables"; value: root.environmentKeys().length + " advanced"; theme: root.theme; onActivated: root.openEnvironmentEditor() }
             FocusRow { id: reapplyRow; width: parent.width; title: "Re-apply to running game"; value: "A"; theme: root.theme; onActivated: root.reapply() }
