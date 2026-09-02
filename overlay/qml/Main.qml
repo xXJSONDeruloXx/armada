@@ -12,6 +12,7 @@ Window {
     Theme { id: theme }
     property var uiTheme: theme
     property int pageIndex: 0
+    property bool navigationActive: true
     property var pageTitles: ["Status", "Power", "Fans", "Games", "Compatibility", "Settings", "Calibration"]
     property var pageIcons: ["status.svg", "power.svg", "fans.svg", "games.svg", "compatibility.svg", "settings.svg", "calibration.svg"]
     property var pageComponents: [statusPage, powerPage, fansPage, gamePage, compatibilityPage, settingsPage, calibrationPage]
@@ -22,6 +23,11 @@ Window {
         stack.replace(pageComponents[index]);
     }
 
+    function focusNavigation() {
+        navigationActive = true;
+        navigation.forceActiveFocus();
+    }
+
     function movePage(direction) {
         showPage(Math.max(0, Math.min(pageTitles.length - 1, navigation.currentIndex + direction)));
     }
@@ -30,6 +36,12 @@ Window {
         if (action === "guide")
             return;
         if (action === "back") {
+            if (!navigationActive) {
+                if (stack.currentItem && stack.currentItem.handleBack && stack.currentItem.handleBack())
+                    return;
+                focusNavigation();
+                return;
+            }
             if (stack.currentItem && stack.currentItem.handleBack && stack.currentItem.handleBack())
                 return;
             if (pageIndex !== 0)
@@ -39,11 +51,19 @@ Window {
             return;
         }
         if (action === "previous") {
+            focusNavigation();
             movePage(-1);
             return;
         }
         if (action === "next") {
+            focusNavigation();
             movePage(1);
+            return;
+        }
+        if (navigationActive) {
+            if (action === "up") movePage(-1);
+            else if (action === "down") movePage(1);
+            else if (action === "accept") navigationActive = false;
             return;
         }
         if (stack.currentItem && stack.currentItem.handleAction)
@@ -80,6 +100,7 @@ Window {
                     height: parent.height
                     model: root.pageTitles
                     currentIndex: root.pageIndex
+                    focus: root.navigationActive
                     spacing: 4
                     delegate: FocusRow {
                         width: navigation.width
@@ -89,7 +110,7 @@ Window {
                         iconOnly: true
                         theme: root.uiTheme
                         selected: ListView.isCurrentItem
-                        onActivated: root.showPage(index)
+                        onActivated: { root.showPage(index); root.focusNavigation(); }
                     }
                 }
 

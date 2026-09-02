@@ -468,6 +468,14 @@ private slots:
             {QStringLiteral("Gamepad:Button:RightBumper"), QStringLiteral("next")},
             {QStringLiteral("Gamepad:Button:South"), QStringLiteral("accept")},
             {QStringLiteral("Gamepad:Button:East"), QStringLiteral("back")},
+            {QStringLiteral("ui_up"), QStringLiteral("up")},
+            {QStringLiteral("ui_down"), QStringLiteral("down")},
+            {QStringLiteral("ui_left"), QStringLiteral("left")},
+            {QStringLiteral("ui_right"), QStringLiteral("right")},
+            {QStringLiteral("ui_l1"), QStringLiteral("previous")},
+            {QStringLiteral("ui_r1"), QStringLiteral("next")},
+            {QStringLiteral("ui_accept"), QStringLiteral("accept")},
+            {QStringLiteral("ui_back"), QStringLiteral("back")},
         };
         const auto action = actions.constFind(event);
         if (action != actions.constEnd())
