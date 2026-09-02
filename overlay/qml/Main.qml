@@ -481,6 +481,41 @@ Window {
             function pointOptions() {
                 return points().map(function(point, index) { return {data: String(index), label: "Point " + (index + 1)}; });
             }
+            function graphPointAt(mouseX, mouseY) {
+                var left = 34;
+                var right = curveGraph.width - 12;
+                var top = 14;
+                var bottom = curveGraph.height - 28;
+                var temp = Math.max(0, Math.min(120, (mouseX - left) / Math.max(1, right - left) * 120));
+                var pwm = Math.max(0, Math.min(255, (bottom - mouseY) / Math.max(1, bottom - top) * 255));
+                return {temp: Math.round(temp), pwm: Math.round(pwm)};
+            }
+            function selectGraphPoint(mouseX, mouseY) {
+                var curvePoints = points();
+                if (!curvePoints.length) return;
+                var left = 34;
+                var right = curveGraph.width - 12;
+                var top = 14;
+                var bottom = curveGraph.height - 28;
+                var closest = 0;
+                var distance = Number.POSITIVE_INFINITY;
+                curvePoints.forEach(function(point, index) {
+                    var px = left + point.temp / 120 * Math.max(1, right - left);
+                    var py = bottom - point.pwm / 255 * Math.max(1, bottom - top);
+                    var dx = px - mouseX;
+                    var dy = py - mouseY;
+                    if (dx * dx + dy * dy < distance) { distance = dx * dx + dy * dy; closest = index; }
+                });
+                pointIndex = closest;
+                setFocusedRow(pointRow);
+            }
+            function setGraphPoint(mouseX, mouseY) {
+                var nextPoints = points();
+                if (!nextPoints.length) return;
+                var next = graphPointAt(mouseX, mouseY);
+                nextPoints[Math.min(pointIndex, nextPoints.length - 1)] = next;
+                setCurvePoints(nextPoints);
+            }
             function setCurvePoints(nextPoints) {
                 var next = clone(draft);
                 next.fanCurves[curveRow.value].curve = format(nextPoints);
@@ -776,8 +811,17 @@ Window {
                                 ctx.beginPath(); ctx.moveTo(liveX, top); ctx.lineTo(liveX, bottom); ctx.stroke();
                             }
                         }
+                        MouseArea {
+                            anchors.fill: parent
+                            preventStealing: true
+                            onPressed: {
+                                fans.selectGraphPoint(mouse.x, mouse.y);
+                                mouse.accepted = true;
+                            }
+                            onPositionChanged: if (pressed) fans.setGraphPoint(mouse.x, mouse.y)
+                        }
                     }
-                    Text { text: "Live temperature: " + (fans.currentTemp || "—") + (fans.currentTemp ? " °C" : ""); color: theme.muted; font.pixelSize: theme.bodySize - 2 }
+                    Text { text: "Live temperature: " + (fans.currentTemp || "—") + (fans.currentTemp ? " °C" : "") + " · Tap or drag a point"; color: theme.muted; font.pixelSize: theme.bodySize - 2 }
                     SelectRow { id: curveRow; width: parent.width; title: "Curve"; options: fans.curveOptions(); currentValue: ""; theme: fans.theme; focusOwner: fans; onValueEdited: { pointIndex = 0; fans.resetPending = false; fans.rebuildRows(); } }
                     SelectRow { id: pointRow; width: parent.width; title: "Point"; options: fans.pointOptions(); currentValue: String(fans.pointIndex); theme: fans.theme; focusOwner: fans; onValueEdited: fans.pointIndex = Number(value) }
                     SliderRow { id: tempRow; width: parent.width; title: "Point temperature"; from: 0; to: 120; value: fans.points().length ? fans.points()[fans.pointIndex].temp : 0; valueText: Math.round(value) + " °C"; enabled: fans.points().length > 0; theme: fans.theme; focusOwner: fans; onValueEdited: fans.setPoint("temp", value) }
