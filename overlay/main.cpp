@@ -452,14 +452,11 @@ private slots:
     {
         if (value <= 0.5)
             return;
-        if (event == QStringLiteral("Gamepad:Button:Guide")) {
-            toggleOverlay();
-            emit inputAction(QStringLiteral("guide"));
-            return;
-        }
-        if (!window_ || !window_->isVisible())
-            return;
         static const QHash<QString, QString> actions = {
+            {QStringLiteral("Gamepad:Button:Guide"), QStringLiteral("guide")},
+            {QStringLiteral("Gamepad:Button:QuickAccess"), QStringLiteral("guide")},
+            {QStringLiteral("ui_guide"), QStringLiteral("guide")},
+            {QStringLiteral("ui_quick_access"), QStringLiteral("guide")},
             {QStringLiteral("Gamepad:Button:DPadUp"), QStringLiteral("up")},
             {QStringLiteral("Gamepad:Button:DPadDown"), QStringLiteral("down")},
             {QStringLiteral("Gamepad:Button:DPadLeft"), QStringLiteral("left")},
@@ -478,6 +475,13 @@ private slots:
             {QStringLiteral("ui_back"), QStringLiteral("back")},
         };
         const auto action = actions.constFind(event);
+        if (action != actions.constEnd() && action.value() == QStringLiteral("guide")) {
+            toggleOverlay();
+            emit inputAction(QStringLiteral("guide"));
+            return;
+        }
+        if (!window_ || !window_->isVisible())
+            return;
         if (action != actions.constEnd())
             emit inputAction(action.value());
     }
