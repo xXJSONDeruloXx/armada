@@ -103,6 +103,8 @@ grep -Fq 'ui_up' "$ROOT/overlay/main.cpp"
 grep -Fq 'ui_accept' "$ROOT/overlay/main.cpp"
 grep -Fq 'navigationActive' "$ROOT/overlay/qml/Main.qml"
 grep -Fq 'pageIcons' "$ROOT/overlay/qml/Main.qml"
+grep -Fq 'property var backend: armada' "$ROOT/overlay/qml/Main.qml"
+grep -Fq 'armada: root.backend' "$ROOT/overlay/qml/Main.qml"
 grep -Fq 'font.pixelSize: root.theme.bodySize' "$ROOT/overlay/qml/FocusRow.qml"
 for control in SelectRow SliderRow ToggleRow; do
     test -f "$ROOT/overlay/qml/$control.qml"
