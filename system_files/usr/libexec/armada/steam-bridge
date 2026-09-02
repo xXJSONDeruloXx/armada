@@ -69,6 +69,12 @@ def js_string(value):
     return json.dumps(text)
 
 
+def evaluation_succeeded(value):
+    # Steam setters have varied between Boolean and void/Promise<void> returns;
+    # the CDP call itself already raises on an evaluation failure.
+    return value is not False
+
+
 def appids(raw):
     if not isinstance(raw, list) or len(raw) > 512:
         raise ValueError("invalid games")
@@ -122,29 +128,29 @@ def main(request):
         return {"value": str(result or "Default")}
     if action == "set_global_compat_tool":
         tool = js_string(request.get("tool", ""))
-        return bool(evaluate(f"window.SteamClient.Settings.SpecifyGlobalCompatTool({tool})"))
+        return evaluation_succeeded(evaluate(f"window.SteamClient.Settings.SpecifyGlobalCompatTool({tool})"))
     if action == "set_compat_tool":
         tool = js_string(request.get("tool", ""))
-        return bool(evaluate(
+        return evaluation_succeeded(evaluate(
             f"window.SteamClient.Apps.SpecifyCompatTool({appid(request.get('appid'))}, {tool})"
         ))
     if action == "set_launch_options":
         options = js_string(request.get("options", ""))
-        return bool(evaluate(
+        return evaluation_succeeded(evaluate(
             f"window.SteamClient.Apps.SetAppLaunchOptions({appid(request.get('appid'))}, {options})"
         ))
     if action == "set_resolution":
         resolution = str(request.get("value", "Default"))
         if resolution not in ALLOWED_RESOLUTIONS:
             raise ValueError("invalid resolution")
-        return bool(evaluate(
+        return evaluation_succeeded(evaluate(
             f"window.SteamClient.Apps.SetAppResolutionOverride({appid(request.get('appid'))}, {js_string(resolution)})"
         ))
     if action == "set_global_resolution":
         resolution = str(request.get("value", "Default"))
         if resolution not in ALLOWED_RESOLUTIONS:
             raise ValueError("invalid resolution")
-        return bool(evaluate(
+        return evaluation_succeeded(evaluate(
             f"window.settingsStore?.GetClientSetting?.({js_string(GLOBAL_RESOLUTION_KEY)})?.[1]?.({js_string(resolution)})"
         ))
     if action == "reset_game":
@@ -159,13 +165,15 @@ def main(request):
             " const rawGlobalTools = window.SteamClient.Settings.GetGlobalCompatTools?.() || [];"
             " const globalTools = Array.isArray(rawGlobalTools) ? rawGlobalTools : [];"
             " const isWindowsPin = globalTools.some((item) => String(item?.strToolName || '') === currentTool);"
-            " const compat = await Promise.resolve(window.SteamClient.Apps.SpecifyCompatTool(id, isWindowsPin ? defaultTool : ''));"
+            " const compatResult = await Promise.resolve(window.SteamClient.Apps.SpecifyCompatTool(id, isWindowsPin ? defaultTool : ''));"
+            " const compat = compatResult !== false;"
             " const appType = window.appStore?.GetAppOverviewByAppID?.(id)?.app_type;"
             " const launch = appType === 1073741824"
             "   ? true"
-            f"   : await Promise.resolve(window.SteamClient.Apps.SetAppLaunchOptions(id, {js_string(DEFAULT_LAUNCH_OPTIONS)}));"
-            f" const resolution = await Promise.resolve(window.SteamClient.Apps.SetAppResolutionOverride(id, {js_string('Default')}));"
-            " return Boolean(compat) && Boolean(launch) && Boolean(resolution);"
+            f"   : (await Promise.resolve(window.SteamClient.Apps.SetAppLaunchOptions(id, {js_string(DEFAULT_LAUNCH_OPTIONS)}))) !== false;"
+            f" const resolutionResult = await Promise.resolve(window.SteamClient.Apps.SetAppResolutionOverride(id, {js_string('Default')}));"
+            " const resolution = resolutionResult !== false;"
+            " return compat && launch && resolution;"
             "})()"
         )
         return bool(evaluate(expression))
@@ -197,15 +205,15 @@ def main(request):
             "     const next = existing.includes('%command%')"
             "       ? existing.replace('%command%', defaultLaunch)"
             "       : (existing.trim() ? defaultLaunch + ' ' + existing.trim() : defaultLaunch);"
-            "     launch = await Promise.resolve(window.SteamClient.Apps.SetAppLaunchOptions(id, next));"
+            "     launch = (await Promise.resolve(window.SteamClient.Apps.SetAppLaunchOptions(id, next))) !== false;"
             "   }"
             "   let compat = true;"
             "   const priority = Number(details.nCompatToolPriority || 0);"
             "   const currentTool = String(details.strCompatToolName || '');"
             "   const isWindowsPin = globalTools.some((item) => String(item?.strToolName || '') === currentTool);"
             "   if (type !== 1073741824 && autoApply && priority < 250 && isWindowsPin && availableTool)"
-            "     compat = await Promise.resolve(window.SteamClient.Apps.SpecifyCompatTool(id, availableTool));"
-            "   results.push(Boolean(launch) && Boolean(compat));"
+            "     compat = (await Promise.resolve(window.SteamClient.Apps.SpecifyCompatTool(id, availableTool))) !== false;"
+            "   results.push(launch && compat);"
             " }"
             " return results.every(Boolean);"
             "})()"

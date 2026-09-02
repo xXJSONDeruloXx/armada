@@ -53,6 +53,9 @@ def evaluate(expression):
     return "Default"
 
 bridge.evaluate = evaluate
+assert bridge.evaluation_succeeded(None) is True
+assert bridge.evaluation_succeeded(True) is True
+assert bridge.evaluation_succeeded(False) is False
 assert bridge.main({"action": "get_global_compat_tools"}) == {"tools": [{"id": "proton", "label": "Proton"}]}
 assert bridge.main({"action": "set_launch_options", "appid": "123", "options": "%command%; $(id)"}) is True
 assert expressions[-1] == 'window.SteamClient.Apps.SetAppLaunchOptions(123, "%command%; $(id)")'
