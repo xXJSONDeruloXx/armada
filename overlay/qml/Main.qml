@@ -229,10 +229,6 @@ Window {
             function numberValue(key) {
                 return Number(currentProfile()[key] || 0);
             }
-            function adjustPercent(key, direction) {
-                var value = Math.max(0, Math.min(1, numberValue(key) + direction * 0.05));
-                setProfileField(key, value.toFixed(2));
-            }
             function setGpuValue(key, value) {
                 var next = JSON.parse(JSON.stringify(draft));
                 var profile = next.power.profiles[profileRow.value];
@@ -240,11 +236,6 @@ Window {
                 if (key === "gpu_min" && Number(profile.gpu_min) > Number(profile.gpu_max || 0)) profile.gpu_max = profile.gpu_min;
                 if (key === "gpu_max" && Number(profile.gpu_max) < Number(profile.gpu_min || 0)) profile.gpu_min = profile.gpu_max;
                 draft = next;
-            }
-            function cycle(row, values, direction) {
-                if (!values.length) return;
-                var current = values.indexOf(row.value);
-                row.value = values[(current + direction + values.length) % values.length];
             }
             function save() {
                 var result = armada.call("save_power_config", {data: draft.power});
@@ -261,14 +252,11 @@ Window {
                 else if (action === "down") focusIndex = Math.min(rows.length - 1, focusIndex + 1);
                 else if (action === "left" || action === "right") {
                     var direction = action === "right" ? 1 : -1;
-                    if (row === profileRow) cycle(row, profiles(), direction);
-                    else if (row === fanRow) { cycle(row, curves(), direction); setProfileField("fan_curve", row.value); }
-                    else if (row === governorRow) { cycle(row, (draft.perf || {}).governors || [], direction); setProfileField("cpu_governor", row.value); }
-                    else if (row === underclockRow) { cycle(row, underclocks(), direction); setProfileField("cpu_underclock", row.value); }
-                    else if (row === cpuRow) adjustPercent("cpu_max", direction);
-                    else if (row === gpuMinRow) adjustPercent("gpu_min", direction);
-                    else if (row === gpuMaxRow) adjustPercent("gpu_max", direction);
-                } else if (action === "accept" && row === saveRow) save();
+                    if (row === profileRow || row === fanRow || row === governorRow || row === underclockRow || row === cpuRow || row === gpuMinRow || row === gpuMaxRow)
+                        row.adjust(direction);
+                } else if (action === "accept" && (row === profileRow || row === fanRow || row === governorRow || row === underclockRow)) row.open();
+                else if (action === "accept" && (row === cpuRow || row === gpuMinRow || row === gpuMaxRow)) row.activate();
+                else if (action === "accept" && row === saveRow) save();
                 else if (action === "accept" && row === resetRow) {
                     if (!resetPending) {
                         resetPending = true;
@@ -537,7 +525,10 @@ Window {
                     if (row === curveRow || row === pointRow || row === tempRow || row === pwmRow || row === rampUpRow || row === rampDownRow || row === smoothingRow || row === minPwmRow)
                         row.adjust(direction);
                 } else if (action === "accept") {
-                    if (row === addCurveRow) addCurve();
+                    if (row === curveRow || row === pointRow) row.open();
+                    else if (row === tempRow || row === pwmRow || row === rampUpRow || row === rampDownRow || row === smoothingRow || row === minPwmRow) row.activate();
+                    else if (row === fanStopRow) row.toggle();
+                    else if (row === addCurveRow) addCurve();
                     else if (row === deleteCurveRow) deleteCurve();
                     else if (row === addPointRow) addPoint();
                     else if (row === removePointRow) removePoint();

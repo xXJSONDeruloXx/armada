@@ -83,7 +83,9 @@ Item {
             else if (row === rgbBrightnessRow && rgb.enabled) setRgb({brightness: Math.max(0, Math.min(100, Number(rgb.brightness || 0) + direction * 5))});
             else if (row === rgbHueRow && rgb.enabled) setRgb({color: rgbColor((rgbHue(rgb.color) + direction + 360) % 360)});
         } else if (action === "accept") {
-            if (row === calibrationRow) openCalibration();
+            if (row === controllerRow || row === sleepRow || row === desktopRow) row.open();
+            else if (row === rgbBrightnessRow || row === rgbHueRow) row.activate();
+            else if (row === calibrationRow) openCalibration();
             else if (row === sshRow) toggle("sshEnabled", "set_ssh_enabled");
             else if (row === mtpRow) toggle("mtpEnabled", "set_mtp_enabled");
             else if (row === ablRow) toggle("ablAutoEnabled", "set_abl_auto_enabled");

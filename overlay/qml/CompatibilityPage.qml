@@ -123,7 +123,8 @@ Item {
             if (row === globalToolRow || row === globalResolutionRow || row === appToolRow || row === gameResolutionRow)
                 row.adjust(direction);
         } else if (action === "accept") {
-            if (row === targetRow) { appidField.forceActiveFocus(); return; }
+            if (row === globalToolRow || row === globalResolutionRow || row === appToolRow || row === gameResolutionRow) row.open();
+            else if (row === targetRow) { appidField.forceActiveFocus(); return; }
             if (row === autoApplyRow) {
                 row.toggle();
             } else if (row === launchRow) launchField.forceActiveFocus();
