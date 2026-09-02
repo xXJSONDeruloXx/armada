@@ -115,7 +115,7 @@ Window {
                         theme: root.uiTheme
                         selected: ListView.isCurrentItem && root.navigationActive
                         inactiveSelected: ListView.isCurrentItem && !root.navigationActive
-                        onActivated: { root.showPage(index); root.focusNavigation(); }
+                        onActivated: { root.showPage(index); root.navigationActive = false; }
                     }
                 }
 
