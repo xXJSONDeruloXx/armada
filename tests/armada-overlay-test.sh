@@ -105,6 +105,8 @@ grep -Fq 'FROM ${BASE_IMAGE} AS overlay-build' "$ROOT/Containerfile"
 grep -Fq 'COPY overlay/ ./' "$ROOT/Containerfile"
 grep -Fq 'cmake --install build --prefix /build/overlay/install' "$ROOT/Containerfile"
 grep -Fq 'source=/build/overlay/install,target=/packages/overlay-build' "$ROOT/Containerfile"
+test "$(grep -n 'WORKDIR /build/armada-store' "$ROOT/Containerfile" | cut -d: -f1)" -lt \
+    "$(grep -n 'FROM ${BASE_IMAGE} AS overlay-build' "$ROOT/Containerfile" | cut -d: -f1)"
 grep -Fq 'QQmlApplicationEngine' "$ROOT/overlay/main.cpp"
 grep -Fq 'inputAction' "$ROOT/overlay/main.cpp"
 grep -Fq 'ui_up' "$ROOT/overlay/main.cpp"

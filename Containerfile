@@ -45,16 +45,17 @@ RUN npm ci
 COPY decky/armada-control/ ./
 RUN npm run build
 
-FROM ${BASE_IMAGE} AS overlay-build
-RUN dnf5 -y install --setopt=install_weak_deps=False cmake gcc-c++ make qt6-qtbase-devel qt6-qtdeclarative-devel
-WORKDIR /build/overlay
-COPY overlay/ ./
-RUN cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build --parallel && cmake --install build --prefix /build/overlay/install
 WORKDIR /build/armada-store
 COPY decky/armada-store/package.json decky/armada-store/package-lock.json ./
 RUN npm ci
 COPY decky/armada-store/ ./
 RUN npm run build
+
+FROM ${BASE_IMAGE} AS overlay-build
+RUN dnf5 -y install --setopt=install_weak_deps=False cmake gcc-c++ make qt6-qtbase-devel qt6-qtdeclarative-devel
+WORKDIR /build/overlay
+COPY overlay/ ./
+RUN cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build --parallel && cmake --install build --prefix /build/overlay/install
 
 FROM scratch AS ctx
 COPY abl /abl/
