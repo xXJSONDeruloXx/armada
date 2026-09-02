@@ -82,5 +82,10 @@ grep -Fq 'transparent' "$ROOT/overlay/qml/Main.qml"
 grep -Fq 'save_power_config' "$ROOT/overlay/qml/Main.qml"
 grep -Fq 'QQmlApplicationEngine' "$ROOT/overlay/main.cpp"
 grep -Fq 'inputAction' "$ROOT/overlay/main.cpp"
+grep -Fq 'pageIcons' "$ROOT/overlay/qml/Main.qml"
+grep -Fq 'font.pixelSize: root.theme.bodySize' "$ROOT/overlay/qml/FocusRow.qml"
+for icon in status power fans games settings calibration; do
+    test -f "$ROOT/overlay/qml/icons/$icon.svg"
+done
 
 printf 'Armada overlay API tests passed\n'

@@ -13,6 +13,7 @@ Window {
     property var uiTheme: theme
     property int pageIndex: 0
     property var pageTitles: ["Status", "Power", "Fans", "Games", "Settings", "Calibration"]
+    property var pageIcons: ["status.svg", "power.svg", "fans.svg", "games.svg", "settings.svg", "calibration.svg"]
     property var pageComponents: [statusPage, powerPage, fansPage, placeholderPage, placeholderPage, placeholderPage]
 
     function showPage(index) {
@@ -59,8 +60,8 @@ Window {
         Rectangle {
             id: panel
             anchors.centerIn: parent
-            width: Math.min(760, parent.width - 96)
-            height: Math.min(680, parent.height - 72)
+            width: Math.min(880, parent.width - 40)
+            height: Math.min(760, parent.height - 32)
             color: theme.panel
             border.color: theme.panelRaised
             border.width: theme.borderWidth
@@ -73,15 +74,17 @@ Window {
 
                 ListView {
                     id: navigation
-                    width: 112
+                    width: theme.navWidth
                     height: parent.height
                     model: root.pageTitles
                     currentIndex: root.pageIndex
                     spacing: 4
                     delegate: FocusRow {
                         width: navigation.width
-                        title: modelData
+                        title: ""
                         value: ""
+                        iconSource: "icons/" + root.pageIcons[index]
+                        iconOnly: true
                         theme: root.uiTheme
                         selected: ListView.isCurrentItem
                         onActivated: root.showPage(index)
@@ -114,8 +117,8 @@ Window {
                 anchors.fill: parent
                 spacing: theme.spacing
                 Text { text: "Armada Control"; color: theme.text; font.pixelSize: theme.pageTitleSize }
-                Text { text: "API v1 · " + ((armada.config.cpuDeviceClass || "device unavailable")); color: theme.muted }
-                Text { text: "Choose a page with D-pad and press A to open."; color: theme.muted; wrapMode: Text.WordWrap; width: parent.width }
+                Text { text: "API v1 · " + ((armada.config.cpuDeviceClass || "device unavailable")); color: theme.muted; font.pixelSize: theme.bodySize }
+                Text { text: "Choose a page with D-pad and press A to open."; color: theme.muted; font.pixelSize: theme.bodySize; wrapMode: Text.WordWrap; width: parent.width }
                 Item { width: 1; height: 1 }
                 FocusRow {
                     id: openPower
@@ -238,7 +241,7 @@ Window {
                     width: power.width
                     spacing: theme.spacing
                     Text { id: header; text: "Power profile"; color: theme.text; font.pixelSize: theme.pageTitleSize }
-                    Text { text: "Use left/right to adjust the focused row."; color: theme.muted; wrapMode: Text.WordWrap; width: parent.width }
+                Text { text: "Use left/right to adjust the focused row."; color: theme.muted; font.pixelSize: theme.bodySize; wrapMode: Text.WordWrap; width: parent.width }
                     FocusRow { id: profileRow; width: parent.width; title: "Profile"; value: ""; theme: power.theme }
                     FocusRow { id: fanRow; width: parent.width; title: "Fan curve"; value: ""; theme: power.theme }
                     FocusRow { id: governorRow; width: parent.width; title: "CPU governor"; value: ""; theme: power.theme }
@@ -266,7 +269,7 @@ Window {
                 anchors.fill: parent
                 spacing: theme.spacing
                 Text { text: "Armada Control"; color: theme.text; font.pixelSize: theme.pageTitleSize }
-                Text { text: "This page is being migrated from the Decky client."; color: theme.muted; wrapMode: Text.WordWrap; width: parent.width }
+                Text { text: "This page is being migrated from the Decky client."; color: theme.muted; font.pixelSize: theme.bodySize; wrapMode: Text.WordWrap; width: parent.width }
                 FocusRow { width: parent.width; title: "Back to overview"; value: "A"; theme: root.uiTheme; onActivated: root.showPage(0) }
             }
         }
@@ -454,7 +457,7 @@ Window {
                     width: fans.width
                     spacing: theme.spacing
                     Text { text: "Fan curves"; color: theme.text; font.pixelSize: theme.pageTitleSize }
-                    Text { text: "Select a row; left/right adjusts it, A activates actions."; color: theme.muted; wrapMode: Text.WordWrap; width: parent.width }
+                    Text { text: "Select a row; left/right adjusts it, A activates actions."; color: theme.muted; font.pixelSize: theme.bodySize; wrapMode: Text.WordWrap; width: parent.width }
                     FocusRow { id: curveRow; width: parent.width; title: "Curve"; value: ""; theme: fans.theme }
                     FocusRow { id: pointRow; width: parent.width; title: "Point"; value: (fans.points().length ? (fans.pointIndex + 1) + " / " + fans.points().length : "—"); theme: fans.theme }
                     FocusRow { id: tempRow; width: parent.width; title: "Point temperature"; value: fans.points().length ? fans.points()[fans.pointIndex].temp + " °C" : "—"; theme: fans.theme }

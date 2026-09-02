@@ -5,6 +5,8 @@ Item {
     property string title
     property string value
     property var theme
+    property url iconSource
+    property bool iconOnly: false
     property bool selected: activeFocus
     signal activated
     signal adjusted(int direction)
@@ -21,12 +23,24 @@ Item {
         border.width: root.selected ? root.theme.borderWidth : 0
     }
     Text {
+        visible: !root.iconOnly
         anchors.left: parent.left
         anchors.leftMargin: root.theme.spacing
         anchors.verticalCenter: parent.verticalCenter
         text: root.title
         color: root.theme.text
+        font.pixelSize: root.theme.bodySize
         elide: Text.ElideRight
+    }
+    Image {
+        visible: root.iconSource.toString() !== ""
+        anchors.centerIn: parent
+        width: root.theme.iconSize
+        height: root.theme.iconSize
+        source: root.iconSource
+        sourceSize: Qt.size(root.theme.iconSize, root.theme.iconSize)
+        opacity: root.selected ? 1 : 0.72
+        fillMode: Image.PreserveAspectFit
     }
     Text {
         anchors.right: parent.right
@@ -34,6 +48,8 @@ Item {
         anchors.verticalCenter: parent.verticalCenter
         text: root.value
         color: root.theme.muted
+        font.pixelSize: root.theme.bodySize
+        visible: !root.iconOnly
         elide: Text.ElideLeft
     }
     MouseArea {
