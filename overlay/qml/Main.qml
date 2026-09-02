@@ -407,6 +407,7 @@ Window {
             property var preFanStopPoints: null
             property string preFanStopCurveName: ""
             property int preFanStopMinPwm: -1
+            property bool newCurveMode: false
 
             function setFocusedRow(row) {
                 var index = rows.indexOf(row);
@@ -416,6 +417,9 @@ Window {
             }
 
             function clone(value) { return JSON.parse(JSON.stringify(value)); }
+            function curveSlug(value) {
+                return String(value || "").trim().toLowerCase().replace(/[^a-z0-9_]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 32);
+            }
             function curveNames() { return Object.keys(draft.fanCurves || {}).sort(); }
             function currentCurve() { return (draft.fanCurves || {})[curveRow.value] || {}; }
             function parse(text) {
@@ -630,16 +634,28 @@ Window {
                 setCurvePoints(nextPoints);
             }
             function addCurve() {
+                newCurveMode = true;
+                newCurveNameField.text = "";
+                rebuildRows();
+                newCurveNameField.forceActiveFocus();
+            }
+            function saveNewCurve() {
+                var label = String(newCurveNameField.text || "").trim();
+                var name = curveSlug(label);
+                if (!name) { fanStatus.text = "Enter a curve name"; return; }
                 var names = curveNames();
-                var name = "custom";
-                var suffix = 1;
-                while (names.indexOf(name) >= 0) name = "custom_" + suffix++;
+                if (names.indexOf(name) >= 0) { fanStatus.text = "That curve name already exists"; return; }
                 var next = clone(draft);
-                next.fanCurves[name] = {label: "Custom " + (suffix - 1), curve: "60:128,80:200"};
+                next.fanCurves[name] = {label: label || name, curve: "60:128,80:200"};
                 draft = next;
                 curveRow.value = name;
                 pointIndex = 0;
                 dirty = true;
+                newCurveMode = false;
+                rebuildRows();
+            }
+            function cancelNewCurve() {
+                newCurveMode = false;
                 rebuildRows();
             }
             function deleteCurve() {
@@ -674,6 +690,11 @@ Window {
                 rebuildRows();
             }
             function rebuildRows() {
+                if (newCurveMode) {
+                    rows = [newCurveNameRow, newCurveSaveRow, newCurveCancelRow];
+                    rows.forEach(function(item, index) { item.selected = index === focusIndex; });
+                    return;
+                }
                 var next = [curveRow, pointRow, tempRow, pwmRow];
                 if (belowMinPwm()) next.push(fixMinPwmRow);
                 next.push(addPointRow, removePointRow, fanStopRow);
@@ -699,6 +720,18 @@ Window {
                 rebuildRows();
             }
             function handleAction(action) {
+                if (newCurveMode) {
+                    var editorRow = rows[focusIndex];
+                    if (action === "up") focusIndex = Math.max(0, focusIndex - 1);
+                    else if (action === "down") focusIndex = Math.min(rows.length - 1, focusIndex + 1);
+                    else if (action === "accept") {
+                        if (editorRow === newCurveNameRow) newCurveNameField.forceActiveFocus();
+                        else if (editorRow === newCurveSaveRow) saveNewCurve();
+                        else if (editorRow === newCurveCancelRow) cancelNewCurve();
+                    }
+                    rows.forEach(function(item, index) { item.selected = index === focusIndex; });
+                    return;
+                }
                 var row = rows[focusIndex];
                 if (action !== "accept" || row !== deleteCurveRow) deletePending = false;
                 if (action !== "accept" || row !== resetCurveRow) resetPending = false;
@@ -722,6 +755,11 @@ Window {
                     else if (row === revertRow) discardDraft();
                 }
                 rows.forEach(function(item, index) { item.selected = index === focusIndex; });
+            }
+            function handleBack() {
+                if (!newCurveMode) return false;
+                cancelNewCurve();
+                return true;
             }
             onDraftChanged: if (curveGraph) curveGraph.requestPaint()
             onPointIndexChanged: if (curveGraph) curveGraph.requestPaint()
@@ -841,7 +879,23 @@ Window {
                     FocusRow { id: deleteCurveRow; width: parent.width; title: "Delete curve"; value: "A"; theme: fans.theme; focusOwner: fans }
                     FocusRow { id: saveRow; width: parent.width; title: fans.dirty ? "Save changes *" : "Save changes"; value: "A"; theme: fans.theme; focusOwner: fans; onActivated: fans.saveChanges() }
                     FocusRow { id: revertRow; width: parent.width; title: "Revert changes"; value: "A"; theme: fans.theme; focusOwner: fans; onActivated: fans.discardDraft() }
-                    Text { id: fanStatus; color: theme.muted; text: ""; width: parent.width; wrapMode: Text.WordWrap }
+            Text { id: fanStatus; color: theme.muted; text: ""; width: parent.width; wrapMode: Text.WordWrap }
+                }
+            }
+            Rectangle {
+                visible: fans.newCurveMode
+                anchors.fill: parent
+                color: theme.panel
+                z: 10
+                Column {
+                    anchors.fill: parent
+                    spacing: theme.spacing
+                    Text { text: "Create fan curve"; color: theme.text; font.pixelSize: theme.pageTitleSize }
+                    Text { text: "Use letters, numbers, spaces, hyphens, or underscores."; color: theme.muted; font.pixelSize: theme.bodySize; wrapMode: Text.WordWrap; width: parent.width }
+                    FocusRow { id: newCurveNameRow; width: parent.width; title: "Curve name"; value: newCurveNameField.text || "Enter name"; theme: fans.theme; focusOwner: fans; onActivated: newCurveNameField.forceActiveFocus() }
+                    TextField { id: newCurveNameField; width: parent.width; placeholderText: "e.g. Quiet"; onTextChanged: fans.rebuildRows() }
+                    FocusRow { id: newCurveSaveRow; width: parent.width; title: "Create curve"; value: "A"; theme: fans.theme; focusOwner: fans; onActivated: fans.saveNewCurve() }
+                    FocusRow { id: newCurveCancelRow; width: parent.width; title: "Cancel"; value: "B"; theme: fans.theme; focusOwner: fans; onActivated: fans.cancelNewCurve() }
                 }
             }
         }
