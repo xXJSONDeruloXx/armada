@@ -59,6 +59,11 @@ Item {
         var match = games().filter(function(game) { return game.appid === selectedAppid; });
         return match.length ? match[0].name : "Default";
     }
+    function targetDisplay() {
+        if (selectedAppid) return targetName();
+        var running = armada.config.game || {};
+        return running.name ? "Default · " + running.name : "Default";
+    }
     function ownSettings() {
         if (!selectedAppid) return draftTweaks.global || {};
         return (draftTweaks.games || {})[selectedAppid] || {};
@@ -448,7 +453,8 @@ Item {
             spacing: theme.spacing
             Text { text: "Game settings"; color: theme.text; font.pixelSize: theme.pageTitleSize }
             Text { text: "Armada launch, FEX, and performance settings"; color: theme.muted; font.pixelSize: theme.bodySize; wrapMode: Text.WordWrap; width: parent.width }
-            FocusRow { id: targetRow; width: parent.width; title: "Edit target"; value: root.targetName(); theme: root.theme }
+            FocusRow { id: targetRow; width: parent.width; title: "Edit target"; value: root.targetDisplay(); theme: root.theme }
+            Text { text: armada.config.game && armada.config.game.name ? "Running: " + armada.config.game.name : "No tracked game"; color: theme.muted; font.pixelSize: theme.bodySize; width: parent.width; elide: Text.ElideRight }
             FocusRow { id: fexRow; width: parent.width; title: "FEX preset"; value: root.fexLabel(String(root.effective("fexProfile") || "default")); theme: root.theme }
             FocusRow { id: fexTsoRow; width: parent.width; title: "TSO enabled"; value: root.fexValue("TSOEnabled"); theme: root.theme }
             FocusRow { id: fexX87Row; width: parent.width; title: "X87 reduced precision"; value: root.fexValue("X87ReducedPrecision"); theme: root.theme }

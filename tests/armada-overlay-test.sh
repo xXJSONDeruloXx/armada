@@ -28,7 +28,7 @@ assert service.OVERLAY_SOCKET == Path("/run/armada/overlay.sock")
 assert service.handle_overlay({"action": "get_capabilities"}, None)["api"] == 1
 actions = service.overlay_actions()
 required = {
-    "get_capabilities", "get_config", "get_installed_games", "save_power_config",
+    "get_capabilities", "get_config", "get_runtime_game", "get_installed_games", "save_power_config",
     "save_tweaks", "get_fans_state", "save_fan_curves", "get_controller_state",
     "save_calibration", "get_rgb", "set_rgb", "set_controller_type",
     "set_ssh_enabled", "set_mtp_enabled", "set_abl_auto_enabled",
@@ -37,6 +37,7 @@ required = {
 }
 assert required <= actions.keys(), sorted(required - actions.keys())
 assert service.overlay_actions()["get_capabilities"]({})["api"] == 1
+assert service.overlay_actions()["get_runtime_game"]({}) is None
 
 try:
     service.handle_overlay({"action": "root_only_maintenance"})

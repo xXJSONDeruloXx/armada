@@ -666,6 +666,23 @@ def overlay_get_config(request):
         return config.build_config(False)
 
 
+def overlay_get_runtime_game(request):
+    state = armada_perf.read_state()
+    override = state.get("override") if isinstance(state, dict) else None
+    if not isinstance(override, dict):
+        return None
+    appid = str(override.get("appid", ""))
+    pid = override.get("pid")
+    if not appid.isdigit() or not isinstance(pid, int) or not os.path.isdir(f"/proc/{pid}"):
+        return None
+    name = f"App {appid}"
+    for game in __import__("armada_control.steam", fromlist=["installed_games"]).installed_games():
+        if str(game.get("appid", "")) == appid:
+            name = game.get("name") or name
+            break
+    return {"appid": appid, "name": name}
+
+
 def overlay_save_power_config(request):
     with _direct_shared_modules() as (_calibration, _config, _fan_curves, power, _tweaks):
         power.save_power_config(request.get("data"))
@@ -731,6 +748,7 @@ def overlay_actions():
             ],
         },
         "get_config": overlay_get_config,
+        "get_runtime_game": overlay_get_runtime_game,
         "get_installed_games": lambda request: __import__(
             "armada_control.steam", fromlist=["installed_games"]
         ).installed_games(),

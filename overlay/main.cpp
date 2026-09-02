@@ -355,6 +355,9 @@ public:
         const RpcResult games = request(QStringLiteral("get_installed_games"));
         if (games.ok)
             config_.insert(QStringLiteral("installedGames"), games.result.toVariant());
+        const RpcResult runtimeGame = request(QStringLiteral("get_runtime_game"));
+        if (runtimeGame.ok && !runtimeGame.result.isNull())
+            config_.insert(QStringLiteral("game"), runtimeGame.result.toObject().toVariantMap());
         const RpcResult fans = request(QStringLiteral("get_fans_state"));
         if (fans.ok)
             fanState_ = fans.result.toObject().toVariantMap();
