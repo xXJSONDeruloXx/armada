@@ -11,6 +11,7 @@ CDP_URL = "http://127.0.0.1:8080/json/list"
 MAX_TEXT = 16 * 1024
 ALLOWED_RESOLUTIONS = {"Default", "Native", "1280x720", "960x540"}
 GLOBAL_RESOLUTION_KEY = "gamescope_game_resolution_global"
+DEFAULT_LAUNCH_OPTIONS = "/usr/libexec/armada/armada-game-launch %command%"
 
 
 def appid(value):
@@ -132,6 +133,28 @@ def main(request):
         return bool(evaluate(
             f"window.settingsStore?.GetClientSetting?.({js_string(GLOBAL_RESOLUTION_KEY)})?.[1]?.({js_string(resolution)})"
         ))
+    if action == "reset_game":
+        game_id = appid(request.get("appid"))
+        default_tool = js_string(request.get("tool", ""))
+        expression = (
+            "(async () => {"
+            f" const id = {game_id};"
+            f" const defaultTool = {default_tool};"
+            " const details = window.appDetailsStore?.GetAppDetails?.(id) || {};"
+            " const currentTool = String(details.strCompatToolName || '');"
+            " const rawGlobalTools = window.SteamClient.Settings.GetGlobalCompatTools?.() || [];"
+            " const globalTools = Array.isArray(rawGlobalTools) ? rawGlobalTools : [];"
+            " const isWindowsPin = globalTools.some((item) => String(item?.strToolName || '') === currentTool);"
+            " const compat = await Promise.resolve(window.SteamClient.Apps.SpecifyCompatTool(id, isWindowsPin ? defaultTool : ''));"
+            " const appType = window.appStore?.GetAppOverviewByAppID?.(id)?.app_type;"
+            " const launch = appType === 1073741824"
+            "   ? true"
+            f"   : await Promise.resolve(window.SteamClient.Apps.SetAppLaunchOptions(id, {js_string(DEFAULT_LAUNCH_OPTIONS)}));"
+            f" const resolution = await Promise.resolve(window.SteamClient.Apps.SetAppResolutionOverride(id, {js_string('Default')}));"
+            " return Boolean(compat) && Boolean(launch) && Boolean(resolution);"
+            "})()"
+        )
+        return bool(evaluate(expression))
     raise ValueError("unsupported Steam bridge action")
 
 

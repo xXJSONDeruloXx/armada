@@ -57,6 +57,13 @@ assert bridge.main({"action": "get_global_compat_tools"}) == {"tools": [{"id": "
 assert bridge.main({"action": "set_launch_options", "appid": "123", "options": "%command%; $(id)"}) is True
 assert expressions[-1] == 'window.SteamClient.Apps.SetAppLaunchOptions(123, "%command%; $(id)")'
 
+assert bridge.main({"action": "reset_game", "appid": "123", "tool": "proton"}) is True
+reset_expression = expressions[-1]
+assert "SpecifyCompatTool(id, isWindowsPin ? defaultTool : '')" in reset_expression
+assert 'SetAppLaunchOptions(id, "/usr/libexec/armada/armada-game-launch %command%")' in reset_expression
+assert "const appType = window.appStore?.GetAppOverviewByAppID?.(id)?.app_type" in reset_expression
+assert 'SetAppResolutionOverride(id, "Default")' in reset_expression
+
 try:
     bridge.main({"action": "set_resolution", "appid": "123", "value": "1920x1080"})
 except ValueError as error:

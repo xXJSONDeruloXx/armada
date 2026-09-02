@@ -110,10 +110,8 @@ Item {
     }
     function resetGame() {
         if (!/^\d+$/.test(appid)) return;
-        var first = call("set_compat_tool", {appid: appid, tool: ""});
-        var second = call("set_launch_options", {appid: appid, options: ""});
-        var third = call("set_resolution", {appid: appid, value: "Default"});
-        if (first.ok && second.ok && third.ok) { currentTool = ""; launchOptions = ""; gameResolution = "Default"; statusText = "Reset"; }
+        var reply = call("reset_game", {appid: appid, tool: globalTool});
+        if (reply.ok) { statusText = "Reset to Armada defaults"; loadGame(); }
     }
     function resetAllGames() {
         if (!resetAllPending) {
@@ -126,9 +124,7 @@ Item {
         var failed = 0;
         games.forEach(function(game) {
             var id = String(game.appid);
-            if (!call("set_compat_tool", {appid: id, tool: ""}).ok) failed++;
-            if (!call("set_launch_options", {appid: id, options: ""}).ok) failed++;
-            if (!call("set_resolution", {appid: id, value: "Default"}).ok) failed++;
+            if (!call("reset_game", {appid: id, tool: globalTool}).ok) failed++;
         });
         armada.call("save_compat_applied", {appids: []});
         statusText = failed ? "Reset completed with errors" : "Reset " + games.length + " games";
