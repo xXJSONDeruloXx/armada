@@ -14,7 +14,7 @@ Window {
     property int pageIndex: 0
     property var pageTitles: ["Status", "Power", "Fans", "Games", "Settings", "Calibration"]
     property var pageIcons: ["status.svg", "power.svg", "fans.svg", "games.svg", "settings.svg", "calibration.svg"]
-    property var pageComponents: [statusPage, powerPage, fansPage, placeholderPage, placeholderPage, placeholderPage]
+    property var pageComponents: [statusPage, powerPage, fansPage, placeholderPage, settingsPage, calibrationPage]
 
     function showPage(index) {
         pageIndex = index;
@@ -276,6 +276,23 @@ Window {
     }
 
     Component {
+        id: settingsPage
+        SettingsPage {
+            armada: armada
+            theme: root.uiTheme
+            onOpenCalibration: root.showPage(5)
+        }
+    }
+
+    Component {
+        id: calibrationPage
+        CalibrationPage {
+            armada: armada
+            theme: root.uiTheme
+        }
+    }
+
+    Component {
         id: fansPage
         Item {
             id: fans
@@ -399,7 +416,7 @@ Window {
                 deletePending = false;
                 fanStatus.text = "Deleted; save to apply";
             }
-            function save() {
+            function saveChanges() {
                 var result = armada.call("save_fan_curves", {fanCurves: draft.fanCurves, fanSettings: draft.fanSettings});
                 if (!result.ok) fanStatus.text = result.error;
                 else { dirty = false; fanStatus.text = "Saved"; armada.refresh(); }
@@ -438,7 +455,7 @@ Window {
                     else if (row === addPointRow) addPoint();
                     else if (row === removePointRow) removePoint();
                     else if (row === fanStopRow) toggleFanStop();
-                    else if (row === saveRow) save();
+                    else if (row === saveRow) saveChanges();
                     else if (row === revertRow) discardDraft();
                 }
                 rows.forEach(function(item, index) { item.selected = index === focusIndex; });
@@ -471,7 +488,7 @@ Window {
                     FocusRow { id: minPwmRow; width: parent.width; title: "Minimum PWM"; value: fans.draft.fanSettings ? fans.draft.fanSettings.min_pwm : "—"; theme: fans.theme }
                     FocusRow { id: addCurveRow; width: parent.width; title: "Create curve"; value: "A"; theme: fans.theme }
                     FocusRow { id: deleteCurveRow; width: parent.width; title: "Delete curve"; value: "A"; theme: fans.theme }
-                    FocusRow { id: saveRow; width: parent.width; title: dirty ? "Save changes *" : "Save changes"; value: "A"; theme: fans.theme; onActivated: fans.save() }
+                    FocusRow { id: saveRow; width: parent.width; title: fans.dirty ? "Save changes *" : "Save changes"; value: "A"; theme: fans.theme; onActivated: fans.saveChanges() }
                     FocusRow { id: revertRow; width: parent.width; title: "Revert changes"; value: "A"; theme: fans.theme; onActivated: fans.discardDraft() }
                     Text { id: fanStatus; color: theme.muted; text: ""; width: parent.width; wrapMode: Text.WordWrap }
                 }
