@@ -91,6 +91,10 @@ grep -Fq 'GamePage' "$ROOT/overlay/qml/Main.qml"
 grep -Fq 'CompatibilityPage' "$ROOT/overlay/qml/Main.qml"
 grep -Fq 'transparent' "$ROOT/overlay/qml/Main.qml"
 grep -Fq 'property color scrim' "$ROOT/overlay/qml/Theme.qml"
+if rg -n 'color: "#[0-9A-Fa-f]' "$ROOT/overlay/qml" -g '*.qml' -g '!Theme.qml'; then
+    echo "unexpected literal QML color outside Theme.qml" >&2
+    exit 1
+fi
 grep -Fq 'save_power_config' "$ROOT/overlay/qml/Main.qml"
 grep -Fq 'save_calibration' "$ROOT/overlay/qml/CalibrationPage.qml"
 grep -Fq 'set_sleep_mode' "$ROOT/overlay/qml/SettingsPage.qml"
