@@ -92,13 +92,14 @@ Window {
             border.width: theme.borderWidth
             radius: theme.radius
 
-            Row {
+            Item {
                 anchors.fill: parent
                 anchors.margins: theme.spacing
-                spacing: theme.spacing
 
                 ListView {
                     id: navigation
+                    anchors.left: parent.left
+                    anchors.top: parent.top
                     width: theme.navWidth
                     height: parent.height
                     model: root.pageTitles
@@ -120,7 +121,9 @@ Window {
 
                 StackView {
                     id: stack
-                    width: parent.width - navigation.width - parent.spacing
+                    anchors.left: navigation.right
+                    anchors.top: parent.top
+                    width: parent.width - navigation.width - theme.spacing
                     height: parent.height
                     initialItem: statusPage
                     replaceEnter: Transition { PropertyAnimation { property: "opacity"; from: 0; to: 1; duration: theme.replaceEnterMs } }
@@ -398,6 +401,7 @@ Window {
             property int pointIndex: 0
             property bool dirty: false
             property bool deletePending: false
+            property string currentTemp: ""
             property var rows: []
 
             function setFocusedRow(row) {
@@ -423,6 +427,12 @@ Window {
                     .map(function(point) { return Math.round(point.temp) + ":" + Math.round(point.pwm); }).join(",");
             }
             function points() { return parse(currentCurve().curve); }
+            function refreshTemperature() {
+                var result = armada.call("get_current_temp");
+                if (result.ok && result.result !== undefined && result.result !== null)
+                    currentTemp = String(result.result);
+                curveGraph.requestPaint();
+            }
             function curveOptions() {
                 return curveNames().map(function(name) {
                     var curve = (draft.fanCurves || {})[name] || {};
@@ -565,12 +575,19 @@ Window {
                 }
                 rows.forEach(function(item, index) { item.selected = index === focusIndex; });
             }
+            onDraftChanged: if (curveGraph) curveGraph.requestPaint()
+            onPointIndexChanged: if (curveGraph) curveGraph.requestPaint()
+            onCurrentTempChanged: if (curveGraph) curveGraph.requestPaint()
             Connections { target: armada; function onFanStateChanged() { fans.sync(); } }
             Component.onCompleted: {
                 rows = [curveRow, pointRow, tempRow, pwmRow, addPointRow, removePointRow, fanStopRow,
                     rampUpRow, rampDownRow, smoothingRow, minPwmRow, addCurveRow, deleteCurveRow, saveRow, revertRow];
                 sync();
+                refreshTemperature();
+                temperaturePoll.start();
             }
+            Component.onDestruction: temperaturePoll.stop()
+            Timer { id: temperaturePoll; interval: 1000; repeat: true; onTriggered: fans.refreshTemperature() }
 
             ScrollView {
                 anchors.fill: parent
@@ -580,6 +597,77 @@ Window {
                     spacing: theme.spacing
                     Text { text: "Fan curves"; color: theme.text; font.pixelSize: theme.pageTitleSize }
                     Text { text: "Select a row; left/right adjusts it, A activates actions."; color: theme.muted; font.pixelSize: theme.bodySize; wrapMode: Text.WordWrap; width: parent.width }
+                    Canvas {
+                        id: curveGraph
+                        width: parent.width
+                        height: 220
+                        antialiasing: true
+                        onPaint: {
+                            var ctx = getContext("2d");
+                            ctx.clearRect(0, 0, width, height);
+                            var left = 34;
+                            var right = width - 12;
+                            var top = 14;
+                            var bottom = height - 28;
+                            var plotWidth = Math.max(1, right - left);
+                            var plotHeight = Math.max(1, bottom - top);
+                            function xForTemp(value) { return left + Math.max(0, Math.min(120, value)) / 120 * plotWidth; }
+                            function yForPwm(value) { return bottom - Math.max(0, Math.min(255, value)) / 255 * plotHeight; }
+                            ctx.fillStyle = theme.panelRaised;
+                            ctx.fillRect(left, top, plotWidth, plotHeight);
+                            ctx.strokeStyle = theme.muted;
+                            ctx.globalAlpha = 0.22;
+                            ctx.lineWidth = 1;
+                            for (var pwm = 0; pwm <= 255; pwm += 64) {
+                                ctx.beginPath(); ctx.moveTo(left, yForPwm(pwm)); ctx.lineTo(right, yForPwm(pwm)); ctx.stroke();
+                            }
+                            for (var temp = 0; temp <= 120; temp += 20) {
+                                ctx.beginPath(); ctx.moveTo(xForTemp(temp), top); ctx.lineTo(xForTemp(temp), bottom); ctx.stroke();
+                            }
+                            ctx.globalAlpha = 1;
+                            ctx.fillStyle = theme.muted;
+                            ctx.font = "12px sans-serif";
+                            ctx.fillText("255", 4, top + 4);
+                            ctx.fillText("0", 20, bottom + 4);
+                            ctx.fillText("0°C", left - 8, height - 6);
+                            ctx.fillText("120°C", right - 34, height - 6);
+                            var curvePoints = fans.points();
+                            if (!curvePoints.length) {
+                                ctx.fillStyle = theme.muted;
+                                ctx.font = "16px sans-serif";
+                                ctx.fillText("No curve points", left + 12, top + plotHeight / 2);
+                                return;
+                            }
+                            ctx.strokeStyle = theme.accent;
+                            ctx.lineWidth = 3;
+                            ctx.beginPath();
+                            curvePoints.forEach(function(point, index) {
+                                var px = xForTemp(point.temp);
+                                var py = yForPwm(point.pwm);
+                                if (index === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+                            });
+                            ctx.stroke();
+                            curvePoints.forEach(function(point, index) {
+                                var px = xForTemp(point.temp);
+                                var py = yForPwm(point.pwm);
+                                ctx.fillStyle = index === fans.pointIndex ? theme.text : theme.accent;
+                                ctx.beginPath(); ctx.arc(px, py, index === fans.pointIndex ? 7 : 5, 0, Math.PI * 2); ctx.fill();
+                                if (index === fans.pointIndex) {
+                                    ctx.strokeStyle = theme.accent;
+                                    ctx.lineWidth = 2;
+                                    ctx.stroke();
+                                }
+                            });
+                            var liveTemp = Number(fans.currentTemp);
+                            if (Number.isFinite(liveTemp)) {
+                                var liveX = xForTemp(liveTemp);
+                                ctx.strokeStyle = theme.error;
+                                ctx.lineWidth = 2;
+                                ctx.beginPath(); ctx.moveTo(liveX, top); ctx.lineTo(liveX, bottom); ctx.stroke();
+                            }
+                        }
+                    }
+                    Text { text: "Live temperature: " + (fans.currentTemp || "—") + (fans.currentTemp ? " °C" : ""); color: theme.muted; font.pixelSize: theme.bodySize - 2 }
                     SelectRow { id: curveRow; width: parent.width; title: "Curve"; options: fans.curveOptions(); currentValue: ""; theme: fans.theme; focusOwner: fans; onValueEdited: pointIndex = 0 }
                     SelectRow { id: pointRow; width: parent.width; title: "Point"; options: fans.pointOptions(); currentValue: String(fans.pointIndex); theme: fans.theme; focusOwner: fans; onValueEdited: fans.pointIndex = Number(value) }
                     SliderRow { id: tempRow; width: parent.width; title: "Point temperature"; from: 0; to: 120; value: fans.points().length ? fans.points()[fans.pointIndex].temp : 0; valueText: Math.round(value) + " °C"; enabled: fans.points().length > 0; theme: fans.theme; focusOwner: fans; onValueEdited: fans.setPoint("temp", value) }
