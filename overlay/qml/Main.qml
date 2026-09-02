@@ -12,6 +12,7 @@ Window {
     Theme { id: theme }
     property var uiTheme: theme
     property var backend: armada
+    property string errorText: ""
     property int pageIndex: 0
     property bool navigationActive: true
     property var pageTitles: ["Status", "Power", "Fans", "Games", "Compatibility", "Settings", "Calibration"]
@@ -74,6 +75,7 @@ Window {
     Connections {
         target: armada
         function onInputAction(action) { root.handleInput(action); }
+        function onErrorMessage(message) { root.errorText = message; }
     }
 
     Rectangle {
@@ -133,6 +135,29 @@ Window {
                     z: 2
                     visible: root.navigationActive
                     color: "#66000000"
+                }
+            }
+
+            Rectangle {
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.bottom: parent.bottom
+                anchors.margins: theme.spacing
+                height: root.errorText ? theme.rowHeight - 12 : 0
+                visible: root.errorText !== ""
+                color: "#3b2225"
+                border.color: theme.error
+                border.width: theme.borderWidth
+                radius: theme.radius
+                z: 3
+                Text {
+                    anchors.fill: parent
+                    anchors.margins: theme.spacing
+                    text: root.errorText
+                    color: theme.text
+                    font.pixelSize: theme.bodySize - 2
+                    verticalAlignment: Text.AlignVCenter
+                    elide: Text.ElideRight
                 }
             }
         }
