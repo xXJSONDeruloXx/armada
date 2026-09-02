@@ -9,12 +9,18 @@ Item {
     property bool iconOnly: false
     property bool selected: activeFocus
     property bool inactiveSelected: false
+    property var focusOwner
     signal activated
     signal adjusted(int direction)
     width: parent ? parent.width : 0
     height: theme.rowHeight
     focus: true
     activeFocusOnTab: true
+
+    function requestFocus() {
+        if (focusOwner && focusOwner.setFocusedRow) focusOwner.setFocusedRow(root);
+        else root.forceActiveFocus();
+    }
 
     Rectangle {
         anchors.fill: parent
@@ -56,7 +62,7 @@ Item {
     MouseArea {
         anchors.fill: parent
         onClicked: {
-            root.forceActiveFocus();
+            root.requestFocus();
             root.activated();
         }
     }

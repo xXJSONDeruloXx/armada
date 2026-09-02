@@ -346,8 +346,8 @@ Window {
                     SliderRow { id: cpuRow; width: parent.width; title: "CPU maximum"; from: 35; to: 100; value: Math.round(power.numberValue("cpu_max") * 100); valueText: Math.round(value) + "%"; theme: power.theme; focusOwner: power; onValueEdited: power.setProfileField("cpu_max", (value / 100).toFixed(2)) }
                     SliderRow { id: gpuMinRow; width: parent.width; title: "GPU minimum"; from: 0; to: 100; value: Math.round(power.numberValue("gpu_min") * 100); valueText: Math.round(value) + "%"; theme: power.theme; focusOwner: power; onValueEdited: power.setGpuValue("gpu_min", value) }
                     SliderRow { id: gpuMaxRow; width: parent.width; title: "GPU maximum"; from: 35; to: 100; value: Math.round(power.numberValue("gpu_max") * 100); valueText: Math.round(value) + "%"; theme: power.theme; focusOwner: power; onValueEdited: power.setGpuValue("gpu_max", value) }
-                    FocusRow { id: resetRow; width: parent.width; title: "Reset profile"; value: "A"; theme: power.theme }
-                    FocusRow { id: saveRow; width: parent.width; title: "Save profile"; value: "A"; theme: power.theme; onActivated: power.save() }
+                    FocusRow { id: resetRow; width: parent.width; title: "Reset profile"; value: "A"; theme: power.theme; focusOwner: power }
+                    FocusRow { id: saveRow; width: parent.width; title: "Save profile"; value: "A"; theme: power.theme; focusOwner: power; onActivated: power.save() }
                     Text { id: status; color: theme.muted; text: ""; width: parent.width; wrapMode: Text.WordWrap }
                     Text { text: "Temperature: " + (power.currentTemp || "—") + (power.currentTemp ? " °C" : ""); color: theme.muted }
                 }
@@ -584,17 +584,17 @@ Window {
                     SelectRow { id: pointRow; width: parent.width; title: "Point"; options: fans.pointOptions(); currentValue: String(fans.pointIndex); theme: fans.theme; focusOwner: fans; onValueEdited: fans.pointIndex = Number(value) }
                     SliderRow { id: tempRow; width: parent.width; title: "Point temperature"; from: 0; to: 120; value: fans.points().length ? fans.points()[fans.pointIndex].temp : 0; valueText: Math.round(value) + " °C"; enabled: fans.points().length > 0; theme: fans.theme; focusOwner: fans; onValueEdited: fans.setPoint("temp", value) }
                     SliderRow { id: pwmRow; width: parent.width; title: "Point PWM"; from: 0; to: 255; stepSize: 5; value: fans.points().length ? fans.points()[fans.pointIndex].pwm : 0; valueText: Math.round(value); enabled: fans.points().length > 0; theme: fans.theme; focusOwner: fans; onValueEdited: fans.setPoint("pwm", value) }
-                    FocusRow { id: addPointRow; width: parent.width; title: "Add point"; value: "A"; theme: fans.theme }
-                    FocusRow { id: removePointRow; width: parent.width; title: "Remove point"; value: "A"; theme: fans.theme }
+                    FocusRow { id: addPointRow; width: parent.width; title: "Add point"; value: "A"; theme: fans.theme; focusOwner: fans }
+                    FocusRow { id: removePointRow; width: parent.width; title: "Remove point"; value: "A"; theme: fans.theme; focusOwner: fans }
                     ToggleRow { id: fanStopRow; width: parent.width; title: "Fan stop"; checked: fans.points().length > 0 && fans.points()[0].pwm === 0; theme: fans.theme; focusOwner: fans; onToggled: fans.toggleFanStop(checked) }
                     SliderRow { id: rampUpRow; width: parent.width; title: "Ramp up"; from: 1; to: 255; value: Number(fans.draft.fanSettings ? fans.draft.fanSettings.ramp_up : 1); valueText: Math.round(value); theme: fans.theme; focusOwner: fans; onValueEdited: fans.setSetting("ramp_up", Math.round(value)) }
                     SliderRow { id: rampDownRow; width: parent.width; title: "Ramp down"; from: 1; to: 255; value: Number(fans.draft.fanSettings ? fans.draft.fanSettings.ramp_down : 1); valueText: Math.round(value); theme: fans.theme; focusOwner: fans; onValueEdited: fans.setSetting("ramp_down", Math.round(value)) }
                     SliderRow { id: smoothingRow; width: parent.width; title: "Smoothing"; from: 0; to: 99; value: Math.round(Number(fans.draft.fanSettings ? fans.draft.fanSettings.smoothing : 0) * 100); valueText: Math.round(value) + "%"; theme: fans.theme; focusOwner: fans; onValueEdited: fans.setSetting("smoothing", Math.round(value) / 100) }
                     SliderRow { id: minPwmRow; width: parent.width; title: "Minimum PWM"; from: 0; to: 255; stepSize: 5; value: Number(fans.draft.fanSettings ? fans.draft.fanSettings.min_pwm : 0); valueText: Math.round(value); theme: fans.theme; focusOwner: fans; onValueEdited: fans.setSetting("min_pwm", Math.round(value)) }
-                    FocusRow { id: addCurveRow; width: parent.width; title: "Create curve"; value: "A"; theme: fans.theme }
-                    FocusRow { id: deleteCurveRow; width: parent.width; title: "Delete curve"; value: "A"; theme: fans.theme }
-                    FocusRow { id: saveRow; width: parent.width; title: fans.dirty ? "Save changes *" : "Save changes"; value: "A"; theme: fans.theme; onActivated: fans.saveChanges() }
-                    FocusRow { id: revertRow; width: parent.width; title: "Revert changes"; value: "A"; theme: fans.theme; onActivated: fans.discardDraft() }
+                    FocusRow { id: addCurveRow; width: parent.width; title: "Create curve"; value: "A"; theme: fans.theme; focusOwner: fans }
+                    FocusRow { id: deleteCurveRow; width: parent.width; title: "Delete curve"; value: "A"; theme: fans.theme; focusOwner: fans }
+                    FocusRow { id: saveRow; width: parent.width; title: fans.dirty ? "Save changes *" : "Save changes"; value: "A"; theme: fans.theme; focusOwner: fans; onActivated: fans.saveChanges() }
+                    FocusRow { id: revertRow; width: parent.width; title: "Revert changes"; value: "A"; theme: fans.theme; focusOwner: fans; onActivated: fans.discardDraft() }
                     Text { id: fanStatus; color: theme.muted; text: ""; width: parent.width; wrapMode: Text.WordWrap }
                 }
             }

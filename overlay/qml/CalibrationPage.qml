@@ -263,9 +263,10 @@ Item {
                 title: recording ? "Save calibration" : "Start calibration"
                 value: recording ? "A" : "A"
                 theme: root.theme
+                focusOwner: root
                 onActivated: recording ? root.saveCapture() : root.startCapture()
             }
-            FocusRow { id: resetRow; width: parent.width; title: "Reset to defaults"; value: "A"; theme: root.theme; onActivated: root.resetDefaults() }
+            FocusRow { id: resetRow; width: parent.width; title: "Reset to defaults"; value: "A"; theme: root.theme; focusOwner: root; onActivated: root.resetDefaults() }
             Text { text: root.statusText; color: theme.muted; font.pixelSize: theme.bodySize; wrapMode: Text.WordWrap; width: parent.width }
         }
     }

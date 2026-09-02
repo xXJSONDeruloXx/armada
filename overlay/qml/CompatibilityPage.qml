@@ -177,7 +177,7 @@ Item {
             spacing: root.theme.spacing
             Text { text: "Steam compatibility"; color: root.theme.text; font.pixelSize: root.theme.pageTitleSize }
             Text { text: "Private Steam settings are isolated behind a fixed-action bridge."; color: root.theme.muted; font.pixelSize: root.theme.bodySize; wrapMode: Text.WordWrap; width: parent.width }
-            FocusRow { id: targetRow; width: parent.width; title: "Game AppID"; value: root.appid || "Default"; theme: root.theme }
+            FocusRow { id: targetRow; width: parent.width; title: "Game AppID"; value: root.appid || "Default"; theme: root.theme; focusOwner: root }
             TextField { id: appidField; width: parent.width; text: root.appid; placeholderText: "Running or installed AppID"; onEditingFinished: { root.appid = text.trim(); root.loadGame(); } }
             SelectRow { id: globalToolRow; width: parent.width; title: "Default Proton"; options: root.tools; currentValue: root.globalTool; theme: root.theme; focusOwner: root; onValueEdited: root.saveGlobalTool(value) }
             ToggleRow { id: autoApplyRow; width: parent.width; title: "Apply to new games"; checked: Boolean((((root.armada.config || {}).tweaks || {}).global || {}).autoApplyCompat); theme: root.theme; focusOwner: root; onToggled: root.saveAutoApply(checked) }
@@ -194,11 +194,11 @@ Item {
                 onValueEdited: root.saveAppTool(value)
             }
             SelectRow { id: gameResolutionRow; visible: /^\d+$/.test(root.appid); width: parent.width; title: "Game resolution"; options: ["Default", "Native", "1280x720", "960x540"]; currentValue: root.gameResolution; theme: root.theme; focusOwner: root; onValueEdited: root.saveGameResolution(value) }
-            FocusRow { id: launchRow; visible: /^\d+$/.test(root.appid); width: parent.width; title: "Launch options"; value: root.launchOptions || "Empty"; theme: root.theme; onActivated: launchField.forceActiveFocus() }
+            FocusRow { id: launchRow; visible: /^\d+$/.test(root.appid); width: parent.width; title: "Launch options"; value: root.launchOptions || "Empty"; theme: root.theme; focusOwner: root; onActivated: launchField.forceActiveFocus() }
             TextField { id: launchField; visible: /^\d+$/.test(root.appid); width: parent.width; text: root.launchOptions; placeholderText: "Steam launch options" }
-            FocusRow { id: saveLaunchRow; visible: /^\d+$/.test(root.appid); width: parent.width; title: "Save launch options"; value: "A"; theme: root.theme; onActivated: root.saveLaunch() }
-            FocusRow { id: resetRow; visible: /^\d+$/.test(root.appid); width: parent.width; title: "Reset game compatibility"; value: "A"; theme: root.theme; onActivated: root.resetGame() }
-            FocusRow { id: resetAllRow; width: parent.width; title: "Reset all game compatibility"; value: "A"; theme: root.theme; onActivated: root.resetAllGames() }
+            FocusRow { id: saveLaunchRow; visible: /^\d+$/.test(root.appid); width: parent.width; title: "Save launch options"; value: "A"; theme: root.theme; focusOwner: root; onActivated: root.saveLaunch() }
+            FocusRow { id: resetRow; visible: /^\d+$/.test(root.appid); width: parent.width; title: "Reset game compatibility"; value: "A"; theme: root.theme; focusOwner: root; onActivated: root.resetGame() }
+            FocusRow { id: resetAllRow; width: parent.width; title: "Reset all game compatibility"; value: "A"; theme: root.theme; focusOwner: root; onActivated: root.resetAllGames() }
             Text { text: root.statusText; color: root.theme.muted; font.pixelSize: root.theme.bodySize; wrapMode: Text.WordWrap; width: parent.width }
         }
     }

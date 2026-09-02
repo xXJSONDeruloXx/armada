@@ -135,10 +135,10 @@ Item {
                 focusOwner: root
                 onValueEdited: root.setChoice("controllerType", "set_controller_type", value)
             }
-            FocusRow { id: calibrationRow; width: parent.width; title: "Launch calibration"; value: "A"; theme: root.theme; onActivated: root.openCalibration() }
+            FocusRow { id: calibrationRow; width: parent.width; title: "Launch calibration"; value: "A"; theme: root.theme; focusOwner: root; onActivated: root.openCalibration() }
             ToggleRow { id: sshRow; width: parent.width; title: "Enable SSH"; checked: Boolean(armada.config.sshEnabled); theme: root.theme; focusOwner: root; onToggled: root.setToggle("set_ssh_enabled", checked) }
-            FocusRow { id: osRow; width: parent.width; title: "OS version"; value: armada.config.osVersion || "unknown"; theme: root.theme }
-            FocusRow { id: ablVersionRow; width: parent.width; title: "ABL version"; value: armada.config.ablVersion || "unknown"; theme: root.theme }
+            FocusRow { id: osRow; width: parent.width; title: "OS version"; value: armada.config.osVersion || "unknown"; theme: root.theme; focusOwner: root }
+            FocusRow { id: ablVersionRow; width: parent.width; title: "ABL version"; value: armada.config.ablVersion || "unknown"; theme: root.theme; focusOwner: root }
             SelectRow {
                 id: sleepRow
                 visible: root.options("sleepModes").length > 1
