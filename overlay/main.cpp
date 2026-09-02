@@ -11,6 +11,7 @@
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QQuickWindow>
+#include <QProcess>
 #include <QRegularExpression>
 #include <QScreen>
 #include <QTimer>
@@ -342,6 +343,28 @@ public:
             {QStringLiteral("result"), result.result.toVariant()},
             {QStringLiteral("error"), result.error},
         };
+    }
+
+    Q_INVOKABLE QVariantMap steamCall(const QString &action, const QVariantMap &fields = {})
+    {
+        QProcess process;
+        process.setProgram(qEnvironmentVariable("ARMADA_STEAM_BRIDGE", "/usr/libexec/armada/steam-bridge"));
+        process.start();
+        if (!process.waitForStarted(500))
+            return {{QStringLiteral("ok"), false}, {QStringLiteral("error"), QStringLiteral("Steam bridge is unavailable")}};
+        QJsonObject payload = QJsonObject::fromVariantMap(fields);
+        payload.insert(QStringLiteral("action"), action);
+        process.write(QJsonDocument(payload).toJson(QJsonDocument::Compact) + '\n');
+        process.closeWriteChannel();
+        if (!process.waitForFinished(6000)) {
+            process.kill();
+            process.waitForFinished(500);
+            return {{QStringLiteral("ok"), false}, {QStringLiteral("error"), QStringLiteral("Steam bridge timed out")}};
+        }
+        const QJsonDocument response = QJsonDocument::fromJson(process.readAllStandardOutput());
+        if (!response.isObject())
+            return {{QStringLiteral("ok"), false}, {QStringLiteral("error"), QStringLiteral("Invalid Steam bridge response")}};
+        return response.object().toVariantMap();
     }
 
     Q_INVOKABLE void refresh()
