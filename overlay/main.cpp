@@ -386,6 +386,10 @@ public:
             fanState_ = fans.result.toObject().toVariantMap();
         emit configChanged();
         emit fanStateChanged();
+        if (!compatibilityTimer_.isActive()) {
+            QTimer::singleShot(3000, this, &QmlOverlayController::compatibilitySweep);
+            compatibilityTimer_.start();
+        }
     }
 
     Q_INVOKABLE bool showOverlay()
@@ -448,6 +452,24 @@ signals:
     void errorMessage(const QString &message);
 
 private slots:
+    void compatibilitySweep()
+    {
+        const QVariantMap tweaks = config_.value(QStringLiteral("tweaks")).toMap();
+        const QVariantMap global = tweaks.value(QStringLiteral("global")).toMap();
+        const RpcResult latestGames = request(QStringLiteral("get_installed_games"));
+        if (latestGames.ok)
+            config_.insert(QStringLiteral("installedGames"), latestGames.result.toVariant());
+        const QVariantList games = config_.value(QStringLiteral("installedGames")).toList();
+        if (games.isEmpty())
+            return;
+        const QVariantMap fields = {
+            {QStringLiteral("games"), games},
+            {QStringLiteral("tool"), global.value(QStringLiteral("windowsCompatTool")).toString()},
+            {QStringLiteral("auto_apply"), global.value(QStringLiteral("autoApplyCompat"), true).toBool()},
+        };
+        steamCall(QStringLiteral("sweep_compat"), fields);
+    }
+
     void onInputEvent(const QString &event, double value)
     {
         if (value <= 0.5)
@@ -508,6 +530,7 @@ private:
     QLocalServer *server_ = nullptr;
     QVariantMap config_;
     QVariantMap fanState_;
+    QTimer compatibilityTimer_;
     QString calibrationSessionToken_;
     bool calibrationSessionActive_ = false;
 };

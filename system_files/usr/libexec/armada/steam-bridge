@@ -11,7 +11,9 @@ CDP_URL = "http://127.0.0.1:8080/json/list"
 MAX_TEXT = 16 * 1024
 ALLOWED_RESOLUTIONS = {"Default", "Native", "1280x720", "960x540"}
 GLOBAL_RESOLUTION_KEY = "gamescope_game_resolution_global"
+LAUNCH_WRAPPER = "/usr/libexec/armada/armada-game-launch"
 DEFAULT_LAUNCH_OPTIONS = "/usr/libexec/armada/armada-game-launch %command%"
+DEFAULT_WINDOWS_COMPAT_TOOL = "proton-cachyos-11.0-arm64"
 
 
 def appid(value):
@@ -65,6 +67,18 @@ def js_string(value):
     if len(text) > MAX_TEXT or "\x00" in text:
         raise ValueError("text value is too long")
     return json.dumps(text)
+
+
+def appids(raw):
+    if not isinstance(raw, list) or len(raw) > 512:
+        raise ValueError("invalid games")
+    result = []
+    for item in raw:
+        value = item.get("appid") if isinstance(item, dict) else item
+        game_id = appid(value)
+        if game_id not in result:
+            result.append(game_id)
+    return result
 
 
 def tools(raw):
@@ -152,6 +166,48 @@ def main(request):
             f"   : await Promise.resolve(window.SteamClient.Apps.SetAppLaunchOptions(id, {js_string(DEFAULT_LAUNCH_OPTIONS)}));"
             f" const resolution = await Promise.resolve(window.SteamClient.Apps.SetAppResolutionOverride(id, {js_string('Default')}));"
             " return Boolean(compat) && Boolean(launch) && Boolean(resolution);"
+            "})()"
+        )
+        return bool(evaluate(expression))
+    if action == "sweep_compat":
+        game_ids = appids(request.get("games"))
+        default_tool = js_string(request.get("tool", ""))
+        auto_apply = "true" if request.get("auto_apply", True) else "false"
+        expression = (
+            "(async () => {"
+            f" const ids = {json.dumps(game_ids, separators=(',', ':'))};"
+            f" const requestedTool = {default_tool};"
+            f" const autoApply = {auto_apply};"
+            f" const wrapper = {js_string(LAUNCH_WRAPPER)};"
+            f" const defaultLaunch = {js_string(DEFAULT_LAUNCH_OPTIONS)};"
+            f" const fallbackTool = {js_string(DEFAULT_WINDOWS_COMPAT_TOOL)};"
+            " const rawGlobalTools = window.SteamClient.Settings.GetGlobalCompatTools?.() || [];"
+            " const globalTools = Array.isArray(rawGlobalTools) ? rawGlobalTools : [];"
+            " const availableTool = globalTools.some((item) => String(item?.strToolName || '') === requestedTool)"
+            "   ? requestedTool"
+            "   : (globalTools.some((item) => String(item?.strToolName || '') === fallbackTool) ? fallbackTool : '');"
+            " const results = [];"
+            " for (const id of ids) {"
+            "   const type = window.appStore?.GetAppOverviewByAppID?.(id)?.app_type;"
+            "   if (type !== undefined && type !== 1 && type !== 1073741824) { results.push(true); continue; }"
+            "   const details = window.appDetailsStore?.GetAppDetails?.(id) || {};"
+            "   const existing = String(details.strLaunchOptions || '');"
+            "   let launch = true;"
+            "   if (!existing.includes(wrapper)) {"
+            "     const next = existing.includes('%command%')"
+            "       ? existing.replace('%command%', defaultLaunch)"
+            "       : (existing.trim() ? defaultLaunch + ' ' + existing.trim() : defaultLaunch);"
+            "     launch = await Promise.resolve(window.SteamClient.Apps.SetAppLaunchOptions(id, next));"
+            "   }"
+            "   let compat = true;"
+            "   const priority = Number(details.nCompatToolPriority || 0);"
+            "   const currentTool = String(details.strCompatToolName || '');"
+            "   const isWindowsPin = globalTools.some((item) => String(item?.strToolName || '') === currentTool);"
+            "   if (type !== 1073741824 && autoApply && priority < 250 && isWindowsPin && availableTool)"
+            "     compat = await Promise.resolve(window.SteamClient.Apps.SpecifyCompatTool(id, availableTool));"
+            "   results.push(Boolean(launch) && Boolean(compat));"
+            " }"
+            " return results.every(Boolean);"
             "})()"
         )
         return bool(evaluate(expression))
