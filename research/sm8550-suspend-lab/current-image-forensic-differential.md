@@ -809,3 +809,45 @@ already source-checked counter definitions cover branch 4 better than another
 blind stock repeat. The merged Qualcomm RSC v3 series is the preferred
 reviewed starting point for the decoding helpers, but its timeout-only hook is
 not sufficient by itself. Do not build or deploy this diagnostic patch yet.
+
+## Post-instrumentation correction: UFS is not the in-suspend blocker
+
+The observation-only RSC package was subsequently built and deployed through
+the device-local OCI layer described in the deployment preparation receipt.
+Corrected deep run
+`/Users/kurt/Developer/sm8550-suspend-lab-runs/20260902T001240Z-f80f54f6b742`
+captured 35 RSC snapshots: 17 before suspend and 18 from the post-resume
+notifier. Sleep TCS 3 and wake TCS 5 retained the six decoded BCM resources
+and their programmed words, with `cmd_enable=0x3f`, `tcs_status=1`,
+`tcs_in_use=0`, `irq_status=0`, `cmd_status=0`, and zero response data. The
+post-resume active TCS activity was ordinary concurrent RPMh traffic; it is
+not evidence of sleep-set rejection.
+
+The first UFS trace receipt
+`20260902T002021Z-a66419f43ef9` remains preserved but is invalid for its stated
+IRQ question: its hard-coded filter selected `mmc0` IRQ 169 while the live UFS
+IRQ was 170. The harness was corrected to resolve `ufshcd` dynamically before
+configuring the trace.
+
+The corrected run
+`/Users/kurt/Developer/sm8550-suspend-lab-runs/20260902T002708Z-4e8666167435`
+resolved `ufshcd` IRQ 170 and captured 501 matching IRQ entries/exits, 1,122
+UFS command events, 126 UIC events, and 7 hibern8 events. The IRQ delta was
+11,814 and `mmc0` increased by only 47; dividing those raw deltas by the
+43.368549 seconds of boottime-minus-monotonic separation would yield
+272.4/s and 1.08/s respectively, but those quotients are not in-suspend rates.
+The trace places the UFS events around suspend preparation and after
+timekeeping resumes. No UFS event was recorded during the actual 43.368-second
+deep-sleep interval, and the kernel completed UFS suspend/noirq and resume
+callbacks without an error. The historical microSD/SDHCI interrupt storm is
+therefore not reproduced on this Nova, and no UFS or SDHCI functional change is
+justified by this evidence.
+
+The branch assessment is now: the Linux sleep set is demonstrably programmed
+and structurally decoded; no persistent Linux-visible UFS or SDHCI blocker is
+shown; and the remaining uncertainty is between firmware policy/acceptance and
+platform-specific meaning of the named Qualcomm residency files. The next
+single experiment should be one read-only RPMh/AOP or equivalent firmware-state
+observation matched to this exact build, not a guessed device patch. Until that
+exists, retain the current diagnostic layer and do not force votes or write
+qcom_aoss/QMP controls.

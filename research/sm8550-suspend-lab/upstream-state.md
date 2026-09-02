@@ -93,3 +93,15 @@ still contains no RSC/AOP diagnostic patch, and the external `qcom-aop-debug`
 material is not installed or invoked. The ten-cycle stock target is exceeded
 by 11 clean current-image cycles; blind repeats remain deferred while the safe
 observation-only instrumentation boundary is reviewed.
+
+The package branch later advanced to `f595f0f` with the observation-only
+successful-path RSC snapshot notifier. It was built as
+`armada-kernel-7.2.0.tar.zst` (SHA-256
+`6ad795b7a50318d1af7e75ccc7e9576edefea6700b4cea6a38e14374935c56c3`) and
+booted as a uniquely tagged local OCI layer. The corrected RSC run showed the
+sleep/wake TCS contents persisted with no Linux-visible status error. A live
+UFS trace then resolved IRQ 170 and showed all UFS interrupt/command activity
+around the transition, not inside the deep-sleep interval; the earlier IRQ-169
+receipt is retained as a filter-correction failure. This rules out the
+historical SDHCI storm as the next fix target but does not distinguish AOP
+policy/acceptance from residency-counter semantics.

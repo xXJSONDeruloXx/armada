@@ -1392,3 +1392,107 @@ update gate. After boot verification, run exactly one `rsc-success` deep cycle
 with RTC wake, parse the successful-path snapshots, and classify the four
 outstanding branches before selecting any functional fix. Remaining blind
 repetitions stay deferred, not cancelled.
+
+## 2026-09-02 00:12 UTC — corrected diagnostic boot and RSC observation
+
+- Root preflight receipt
+  `/Users/kurt/Developer/sm8550-suspend-lab-runs/preflight-20260902T001225Z-bfa21e4b672a.json`
+  was rerun after the diagnostic image correction. The target was the current
+  Nova image, kernel `7.2.0`, package commit `f595f0f`, and the image contained
+  `CONFIG_QCOM_COMMAND_DB=y`, `CONFIG_QCOM_RPMH_SUCCESS_DEBUG=y`, and
+  `CONFIG_DEBUG_INFO_BTF=y`. The root-readable available-event inventory was
+  captured in full. The four qcom_aoss debugfs controls still rejected reads
+  with `EINVAL`; no write was attempted.
+- The full-image Docker build failure and each device-local image attempt remain
+  preserved. The full build failed in standard Proton extraction with Docker
+  VM/ext4 storage I/O (`metadata_v2.db: input/output error` and failed
+  unwritten extents), not with a source/compiler error. The first three local
+  layer attempts (`pmcb`, `pmcb2`, `pmcb3`) rolled back for inherited metadata,
+  missing/incorrect initramfs, or an overlong BLS command line. The successful
+  `pmcb4` layer used the exact Armada initramfs modules and booted as
+  `localhost/armada-rsc:20260901-pmcb4`; its image digest is
+  `sha256:c31703b2c4d6f8273a10f017cd3951580458fc946afa6ca98a131c747bf77d76`
+  and its version is `20260901.rsc-f595f0f-pmcb`. No loose kernel or boot-file
+  replacement was used.
+- Run `20260902T001240Z-f80f54f6b742`, label
+  `sm8550-rsc-success-corrected-deep`, exercised Armada's
+  `/usr/libexec/armada/suspend-dispatch` through the autonomous root-owned
+  agent with an independently armed RTC wake. It resumed cleanly with boot ID
+  unchanged, `PM: suspend entry (deep)`/exit markers, suspend-stat success
+  increment, and no new error-like log lines. The clock deltas were boottime
+  `45.864759 s`, monotonic `2.629642 s`, separation `43.235117 s`, status
+  `observed`.
+- Its raw successful-path RSC archive
+  `device/derived/rpmh-rsc-snapshots.json` contains 35 events: 17 pre-suspend
+  and 18 post-resume, with 14 sleep and 14 wake records. Sleep TCS 3 contains
+  `MC0=0x600003b8`, `SH0=0x600003b8`, `SN0=0x40000000`,
+  `CN0=0x40000000`, `QUP1=0`, and `QUP0=0x40000000`; wake TCS 5 contains
+  `MC0=0x60000823`, `SH0=0x600011db`, `SN0=0x60004001`,
+  `CN0=0x60004001`, `QUP1=0x20004001`, and `QUP0=0x60004001`.
+  All six addresses reverse-mapped to BCM resources (`MC0`, `SH0`, `SN0`,
+  `CN0`, `QUP1`, `QUP0`). The involved TCSes reported `cmd_enable=0x3f`,
+  `tcs_status=1`, `tcs_in_use=0`, `irq_status=0`, `cmd_status=0`, and zero
+  response data. Post-resume active TCS activity was normal concurrent RPMh
+  traffic, not evidence of sleep-set rejection.
+- The current run's raw qcom_stats preserved complete pre/post files. AOSD,
+  CXSD, and scalar DDR remained zero, while the independent `ddr_stats`
+  `0xd0` duration changed from `1,956,015,136` to `2,939,234,367` ticks. This
+  confirms that the qcom_stats interface is not globally frozen, but it does
+  not by itself establish the platform meaning of the zero scalar records.
+
+## 2026-09-02 00:20 UTC — UFS trace filter correction receipt
+
+- Run `20260902T002021Z-a66419f43ef9`, label `sm8550-ufs-irq-deep`, completed
+  cleanly as a deep RTC cycle: boottime delta `46.018452 s`, monotonic delta
+  `2.186243 s`, separation `43.832210 s`, and unchanged boot ID. It is retained
+  as a partial/invalid experiment because the then-current harness hard-coded
+  IRQ 169. On this boot IRQ 169 is `mmc0`; the live UFS `ufshcd` IRQ is 170.
+  Its UFS command trace is still useful transition evidence, but its IRQ filter
+  cannot answer the UFS IRQ question and is not reclassified as valid.
+- The harness was corrected to resolve the `ufshcd` row in `/proc/interrupts`
+  before configuring the trace, to record the resolved IRQ in `meta/trace.json`,
+  and to refuse the run if no live UFS IRQ exists. Host compile and self-test
+  passed. The failed receipt and all raw files were preserved.
+
+## 2026-09-02 00:27 UTC — corrected live-UFS deep differential
+
+- Run `20260902T002708Z-4e8666167435`, label
+  `sm8550-ufs-irq-deep-corrected`, used the corrected dynamic resolver and
+  recorded `trace_irq_number=170`. It completed cleanly through
+  `suspend-dispatch`: boottime delta `45.731723 s`, monotonic delta
+  `2.363174 s`, separation `43.368549 s`, status `observed`, unchanged boot ID,
+  RTC wake, successful suspend stats, and no failed systemd units.
+- The raw trace contains 501 matching IRQ-170 entry/exit pairs, 1,122
+  `ufshcd_command` events, 126 UIC events, and 7 hibern8 profile events. The
+  full `/proc/interrupts` delta has UFS IRQ 170 `+11,814` and `mmc0` IRQ 169
+  `+47`; the naive ratios over the 43.368549 separated seconds are 272.4/s
+  and 1.08/s, respectively, but these are not in-suspend rates. The ftrace
+  events are clustered around the Linux suspend/resume transition: 464 IRQ
+  entries and 1,084 commands precede timekeeping resume, while 37 IRQ entries
+  and 38 commands follow it. There is no UFS activity during the actual
+  43.368-second deep-sleep interval. Kernel UFS suspend/noirq and resume
+  callbacks completed without error.
+- This rejects the historical microSD/SDHCI IRQ-storm hypothesis on this Nova
+  and provides no evidence for a UFS or SDHCI functional patch. The remaining
+  high-value boundary is a read-only observation of the RPMh/AOP decision or a
+  precise validation of the platform-specific qcom_stats semantics. No vote,
+  qcom_aoss/QMP control, or firmware interface was written.
+
+## Iteration rule
+
+The quickest safe kernel loop is now documented in
+`diagnostic-kernel-build-and-deployment-prep.md` and implemented by
+`device-kernel-layer.Containerfile`: build the verified package artifact,
+transfer it with its checksum, build a uniquely tagged OCI layer on the device,
+regenerate the Armada initramfs, then use bootc's downloaded-image apply flow.
+Every layer has a distinct tag and a preserved rollback receipt. This rule is
+also stored in the persistent Codex memory note for future sessions.
+
+## Next controlled step
+
+Do not resume blind repeats or select a functional device patch yet. The one
+next experiment is a read-only RPMh/AOP firmware-state observation, matched to
+the current image and exact AOP build, capable of distinguishing a valid quiet
+Linux handoff from firmware policy/acceptance and from misunderstood residency
+counter names. Keep the current diagnostic layer deployed and preserve all
+existing run IDs.

@@ -210,5 +210,15 @@ The test matrix and functional kernel A/B work belong to later phases. The
 observation-only RSC/TCS package is maintained separately in the Armada
 packages checkout and must reach the Nova through a supported signed Armada
 image/update path; this harness never installs a raw kernel tarball or writes a
-boot file. The lab tool itself remains limited to inspection, capture, and
-reproducible execution.
+boot file. For explicitly authorized kernel-only lab iteration, the checked-in
+`device-kernel-layer.Containerfile` wraps a checksum-verified Armada kernel
+tarball into a uniquely tagged on-device OCI layer, regenerates the initramfs,
+and applies it with bootc's containers-storage/downloaded-image flow. This
+keeps each iteration quick while preserving image provenance and rollback; it
+does not weaken the production signed update boundary.
+
+The `ufs-irq` trace profile resolves the live `ufshcd` IRQ from
+`/proc/interrupts` at run time. It never assumes a board IRQ number, which is
+important because the Nova's current mapping uses UFS IRQ 170 and `mmc0` IRQ
+169. The resolved number and the exact trace controls are retained in each
+run's `meta/trace.json` and `raw/trace/` archive.

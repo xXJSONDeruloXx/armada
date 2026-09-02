@@ -102,7 +102,6 @@ TRACEFS_DIRS = (
     "/sys/kernel/debug/tracing",
 )
 TRACE_PROFILE_CHOICES = ("none", "ufs-irq", "rpmh-aoss", "rsc-success")
-TRACE_IRQ_NUMBER = 169
 TRACE_REQUIRED_EVENTS = (
     "irq:irq_handler_entry",
     "irq:irq_handler_exit",
@@ -879,6 +878,18 @@ def trace_configure_event(
     return event_info
 
 
+def trace_irq_number_for_ufs() -> Optional[int]:
+    """Resolve the live UFS host IRQ instead of assuming a board IRQ number."""
+    interrupts = read_text(Path("/proc/interrupts"))
+    if interrupts is None:
+        return None
+    for line in interrupts.splitlines():
+        match = re.match(r"^\s*(\d+):\s+.*\bufshcd\b", line, re.IGNORECASE)
+        if match:
+            return int(match.group(1))
+    return None
+
+
 def trace_prepare(run: DeviceRun, profile: str) -> Dict[str, Any]:
     if profile not in TRACE_PROFILE_CHOICES:
         raise LabError("unsupported trace profile: %s" % profile)
@@ -926,6 +937,14 @@ def trace_prepare(run: DeviceRun, profile: str) -> Dict[str, Any]:
         "optional_event_errors": [],
         "raw_available_events": trace_capture_file(run, "available_events.txt", available_source),
     }
+    trace_irq_number = None
+    if profile == "ufs-irq":
+        trace_irq_number = trace_irq_number_for_ufs()
+        info["trace_irq_number"] = trace_irq_number
+        if trace_irq_number is None:
+            info["state"] = "missing-ufs-irq"
+            write_json(run.run_dir / "meta" / "trace.json", info)
+            raise LabError("/proc/interrupts has no ufshcd IRQ row")
     write_json(run.run_dir / "meta" / "trace.json", info)
     if instance.exists():
         info["state"] = "refused-existing-instance"
@@ -949,13 +968,13 @@ def trace_prepare(run: DeviceRun, profile: str) -> Dict[str, Any]:
                 run,
                 info,
                 "irq:irq_handler_entry",
-                event_filter="irq == %d" % TRACE_IRQ_NUMBER,
+                event_filter="irq == %d" % trace_irq_number,
             )
             irq_exit = trace_configure_event(
                 run,
                 info,
                 "irq:irq_handler_exit",
-                event_filter="irq == %d" % TRACE_IRQ_NUMBER,
+                event_filter="irq == %d" % trace_irq_number,
             )
             info["selected_events"].extend([irq_entry, irq_exit])
 
