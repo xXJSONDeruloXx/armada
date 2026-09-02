@@ -141,9 +141,6 @@ def main(request):
             f"String(window.settingsStore?.GetClientSetting?.({js_string(GLOBAL_RESOLUTION_KEY)})?.[0] || 'Default')"
         )
         return {"value": str(result or "Default")}
-    if action == "set_global_compat_tool":
-        tool = js_string(request.get("tool", ""))
-        return evaluation_succeeded(evaluate(f"window.SteamClient.Settings.SpecifyGlobalCompatTool({tool})"))
     if action == "set_compat_tool":
         tool = js_string(request.get("tool", ""))
         return evaluation_succeeded(evaluate(

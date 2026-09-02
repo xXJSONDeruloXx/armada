@@ -82,12 +82,10 @@ Item {
     function saveGlobalTool(label) {
         var id = String(label || "");
         var oldTool = globalTool;
-        var reply = call("set_global_compat_tool", {tool: id});
-        if (!reply.ok) return;
         globalTool = id;
         var next = JSON.parse(JSON.stringify(armada.config || {}));
         next.tweaks.global.windowsCompatTool = id;
-        reply = armada.call("save_tweaks", {data: next.tweaks});
+        var reply = armada.call("save_tweaks", {data: next.tweaks});
         if (!reply.ok) { statusText = reply.error || "Save failed"; return; }
         var games = (armada.config.installedGames || []).filter(function(game) {
             return game && !game.nonSteam && /^\d+$/.test(String(game.appid || ""));
