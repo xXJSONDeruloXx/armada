@@ -93,6 +93,8 @@ test -x "$ROOT/docs/ogui-spike-v046/build-plugin.sh"
 test -x "$ROOT/docs/ogui-spike-v046/build-ogui.sh"
 grep -Fq 'b149644f46b71e175a2ad223e84c18361596691e' "$ROOT/docs/ogui-spike-v046/build-ogui.sh"
 grep -Fq 'make -B' "$ROOT/docs/ogui-spike-v046/build-ogui.sh"
+grep -Fq 'ARMADA_OGUI_PCK_ONLY' "$ROOT/docs/ogui-spike-v046/build-ogui.sh"
+grep -Fq -- '--export-pack' "$ROOT/docs/ogui-spike-v046/build-ogui.sh"
 grep -Fq 'overlay.gd' "$ROOT/docs/ogui-spike-v046/build-plugin.sh"
 grep -Fq 'source checkout contains an embedded Armada plugin' "$ROOT/docs/ogui-spike-v046/build-ogui.sh"
 if grep -Fq 'cp "$root"/{backend.gd' "$ROOT/docs/ogui-spike-v046/build-ogui.sh"; then

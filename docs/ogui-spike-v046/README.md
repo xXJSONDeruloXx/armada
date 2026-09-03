@@ -29,4 +29,6 @@ When rebuilding the pinned OGUI source after changing scenes or core components,
 
 For a complete reproducible runtime bundle, run `./build-ogui.sh /path/to/OpenGamepadUI /path/to/output`. It checks the pinned source commit, applies the hardware, lifecycle, existing-Steam, UI, and TextInput patches idempotently, forces the ARM64 export, builds the external plugin archive, and prints hashes for the four staging artifacts.
 
+For local frontend iteration when the ARM64 builder is unavailable, run `ARMADA_OGUI_PCK_ONLY=1 GODOT=/path/to/godot ./build-ogui.sh /path/to/OpenGamepadUI /path/to/output`. This exports only the clean resource pack and external plugin archive; the executable and native core library must come from a compatible OGUI ARM64 build.
+
 The Armada `Containerfile` also exposes an explicit `armada-ogui` image target. It bundles the same runtime under `/usr/share/armada/ogui`, provides `/usr/bin/armada-opengamepadui`, disables the Qt overlay service in that opt-in variant, and enables the OGUI user service plus shared gesture service. The launcher seeds the Armada archive into OGUI's user plugin directory before starting; the default `armada` target remains unchanged and does not start OGUI.

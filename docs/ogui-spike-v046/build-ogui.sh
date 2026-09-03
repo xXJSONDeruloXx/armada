@@ -47,6 +47,21 @@ apply_once "$root/text-input-default.patch"
 
 mkdir -p "$output_dir"
 
+if [[ "${ARMADA_OGUI_PCK_ONLY:-0}" == 1 ]]; then
+    godot="${GODOT:-godot}"
+    "$godot" --path "$source_dir" --headless --editor --quit-after 2
+    "$godot" --path "$source_dir" --headless \
+        --export-pack "Linux/X11 (Update Pack)" "$output_dir/opengamepad-ui.pck"
+    if grep -aFq 'armada-control' "$output_dir/opengamepad-ui.pck"; then
+        printf 'exported PCK contains an embedded Armada plugin\n' >&2
+        exit 1
+    fi
+    "$root/build-plugin.sh" "$output_dir/armada-control.zip"
+    unzip -t "$output_dir/armada-control.zip" >/dev/null
+    sha256sum "$output_dir"/{opengamepad-ui.pck,armada-control.zip}
+    exit 0
+fi
+
 if [[ "${ARMADA_OGUI_IN_BUILDER:-0}" == 1 ]]; then
     env HOME=/home/build TARGET_ARCH=aarch64 PKG_CONFIG_SYSROOT_DIR=/usr/aarch64-linux-gnu \
         make -C "$source_dir" -B GODOT=/usr/bin/godot build
