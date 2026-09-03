@@ -7,6 +7,7 @@ var quick_bar_item: Control
 var mounted_status: Label
 var mounted_cards: Array[Control] = []
 var overlay_item: OverlayProvider
+var overlay_container: OverlayContainer
 
 
 func _ready() -> void:
@@ -42,9 +43,21 @@ func _register_overlay() -> void:
     overlay_item.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     overlay_item.size_flags_vertical = Control.SIZE_EXPAND_FILL
     overlay_item.custom_minimum_size = container.size
+    overlay_container = container
     container.add_overlay(overlay_item)
     logger.info("Mounted Armada overlay provider")
+    get_viewport().size_changed.connect(_update_overlay_geometry)
+    _update_overlay_geometry()
     _claim_overlay_window()
+
+
+func _update_overlay_geometry() -> void:
+    if not is_instance_valid(overlay_container):
+        return
+    var size := get_viewport().get_visible_rect().size
+    overlay_container.size = size
+    if is_instance_valid(overlay_item):
+        overlay_item.custom_minimum_size = size
 
 
 func _claim_overlay_window() -> void:
