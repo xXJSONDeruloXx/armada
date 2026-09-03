@@ -6,75 +6,18 @@ var quick_bar_item: Control
 var mounted_status: Label
 var mounted_cards: Array[Control] = []
 var overlay_window_id := 0
-var activation_input_plumber
 
 
 func _ready() -> void:
+    # Overlay summoning (Guide+B) is owned entirely by OGUI core and
+    # InputPlumber's stock intercept triggers. This plugin never programs
+    # activation chords: the intercept slot is single-writer and overriding
+    # it breaks the native summon. See overlay-summon.md.
     if "--overlay-mode" in OS.get_cmdline_args():
-        call_deferred("_configure_overlay_activation")
         call_deferred("_register_quick_bar")
         call_deferred("_claim_overlay_window")
         return
     call_deferred("_register_quick_bar")
-
-
-func _configure_overlay_activation() -> void:
-    logger = Log.get_logger("ArmadaControl", Log.LEVEL.DEBUG)
-    activation_input_plumber = load("res://core/systems/input/input_plumber.tres")
-    if not activation_input_plumber:
-        return
-    if not activation_input_plumber.composite_device_added.is_connected(_apply_activation_to_device):
-        activation_input_plumber.composite_device_added.connect(_apply_activation_to_device)
-    if not activation_input_plumber.started.is_connected(_apply_overlay_activation):
-        activation_input_plumber.started.connect(_apply_overlay_activation)
-    _apply_overlay_activation()
-    get_tree().create_timer(2.0).timeout.connect(_apply_overlay_activation, CONNECT_ONE_SHOT)
-
-
-func _apply_overlay_activation() -> void:
-    var triggers := _overlay_activation_events()
-    if triggers.is_empty() or not activation_input_plumber:
-        return
-    activation_input_plumber.set_intercept_activation(triggers, "Gamepad:Button:QuickAccess2")
-    logger.info("Configured OGUI activation triggers: " + str(triggers))
-    for device in activation_input_plumber.get_composite_devices():
-        _apply_activation_to_device(device)
-
-
-func _apply_activation_to_device(device) -> void:
-    var triggers := _overlay_activation_events()
-    if not triggers.is_empty() and device:
-        device.set_intercept_activation(triggers, "Gamepad:Button:QuickAccess2")
-
-
-func _overlay_activation_events() -> PackedStringArray:
-    var config_home := OS.get_environment("XDG_CONFIG_HOME")
-    if config_home.is_empty():
-        config_home = OS.get_environment("HOME").path_join(".config")
-    var file := FileAccess.open(config_home.path_join("armada/overlay.json"), FileAccess.READ)
-    var config: Dictionary = {}
-    if file:
-        var parsed = JSON.parse_string(file.get_as_text())
-        if parsed is Dictionary:
-            config = parsed
-    var layout := "centered"
-    if OS.get_environment("ARMADA_OGUI_LAYOUT") == "side":
-        layout = "side"
-    elif config.get("layout", "centered") == "side":
-        layout = "side"
-    var chord_key := "sideChord" if layout == "side" else "centeredChord"
-    var chord: String = config.get(chord_key, "start_select")
-    match chord:
-        "guide":
-            return PackedStringArray(["Gamepad:Button:Guide"])
-        "quick_access":
-            return PackedStringArray(["Gamepad:Button:QuickAccess"])
-        "select_l1":
-            return PackedStringArray(["Gamepad:Button:Select", "Gamepad:Button:LeftTop"])
-        "select_r1":
-            return PackedStringArray(["Gamepad:Button:Select", "Gamepad:Button:RightTop"])
-        _:
-            return PackedStringArray(["Gamepad:Button:Start", "Gamepad:Button:Select"])
 
 
 func _claim_overlay_window() -> void:

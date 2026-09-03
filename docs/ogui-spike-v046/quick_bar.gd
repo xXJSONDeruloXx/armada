@@ -86,8 +86,6 @@ var compat_reset_pending := false
 var compat_reset_all_pending := false
 var overlay_config: Dictionary = {}
 var overlay_layout_dropdown: Dropdown
-var centered_chord_dropdown: Dropdown
-var side_chord_dropdown: Dropdown
 var swipe_enabled_toggle: Toggle
 var swipe_edge_dropdown: Dropdown
 
@@ -226,17 +224,6 @@ func _build_system(parent: Container) -> void:
         {"data": "centered", "label": "Centered panel"},
         {"data": "side", "label": "Right slide-out"},
     ], String(overlay_config.get("layout", "centered")), func(value): _save_overlay_config({"layout": value}))
-    var chord_options := [
-        {"data": "start_select", "label": "Start + Select"},
-        {"data": "guide", "label": "Guide"},
-        {"data": "quick_access", "label": "Quick Access"},
-        {"data": "select_l1", "label": "Select + L1"},
-        {"data": "select_r1", "label": "Select + R1"},
-    ]
-    centered_chord_dropdown = _dropdown(parent, "Centered activation", chord_options,
-        String(overlay_config.get("centeredChord", "start_select")), func(value): _save_overlay_config({"centeredChord": value}))
-    side_chord_dropdown = _dropdown(parent, "Slide-out activation", chord_options,
-        String(overlay_config.get("sideChord", "start_select")), func(value): _save_overlay_config({"sideChord": value}))
     swipe_enabled_toggle = _toggle(parent, "Edge swipe to open", bool(overlay_config.get("swipeEnabled", true)), _save_overlay_swipe_enabled)
     swipe_edge_dropdown = _dropdown(parent, "Swipe edge", [
         {"data": "left", "label": "Left edge"},

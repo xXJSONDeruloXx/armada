@@ -99,17 +99,19 @@ grep -Fq 'func _rebuild_sections()' "$ROOT/docs/ogui-spike-v046/quick_bar.gd"
 grep -Fq '"auto_apply": _global_tweak("autoApplyCompat")' "$ROOT/docs/ogui-spike-v046/quick_bar.gd"
 test ! -e "$ROOT/docs/ogui-spike-v046/overlay.gd"
 test ! -e "$ROOT/docs/ogui-spike-v046/overlay.tscn"
-grep -Fq 'ARMADA_OGUI_LAYOUT' "$ROOT/docs/ogui-spike-v046/plugin.gd"
 grep -Fq 'touch -t 198001010000' "$ROOT/docs/ogui-spike-v046/build-plugin.sh"
 grep -Fq 'zip -X' "$ROOT/docs/ogui-spike-v046/build-plugin.sh"
-grep -Fq '_configure_overlay_activation' "$ROOT/docs/ogui-spike-v046/plugin.gd"
-grep -Fq 'centeredChord' "$ROOT/docs/ogui-spike-v046/plugin.gd"
-grep -Fq 'sideChord' "$ROOT/docs/ogui-spike-v046/plugin.gd"
-grep -Fq 'Gamepad:Button:Start' "$ROOT/docs/ogui-spike-v046/plugin.gd"
-grep -Fq 'Gamepad:Button:QuickAccess' "$ROOT/docs/ogui-spike-v046/plugin.gd"
+# Summon chords are owned by OGUI core + stock InputPlumber triggers.
+# The plugin must never program intercept activation (single-writer slot).
+if grep -Fq 'set_intercept_activation' "$ROOT/docs/ogui-spike-v046/plugin.gd"; then
+    echo "plugin must not override the overlay summon chord; see overlay-summon.md" >&2
+    exit 1
+fi
+if grep -Fq 'Centered activation\|Slide-out activation' "$ROOT/docs/ogui-spike-v046/quick_bar.gd"; then
+    echo "chord dropdowns must stay out while OGUI owns summoning" >&2
+    exit 1
+fi
 grep -Fq 'Overlay layout' "$ROOT/docs/ogui-spike-v046/quick_bar.gd"
-grep -Fq 'Centered activation' "$ROOT/docs/ogui-spike-v046/quick_bar.gd"
-grep -Fq 'Slide-out activation' "$ROOT/docs/ogui-spike-v046/quick_bar.gd"
 grep -Fq 'Edge swipe to open' "$ROOT/docs/ogui-spike-v046/quick_bar.gd"
 grep -Fq 'DirAccess.rename_absolute' "$ROOT/docs/ogui-spike-v046/quick_bar.gd"
 grep -Fq 'config = response["result"]' "$ROOT/docs/ogui-spike-v046/quick_bar.gd"
