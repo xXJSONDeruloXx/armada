@@ -1674,7 +1674,11 @@ func _save_profile_value(key: String, value: String) -> void:
 func _save_power(power: Dictionary) -> void:
     var response = backend.call_action("save_power_config", {"data": power})
     if response.get("ok", false):
-        config["power"] = power
+        if response.get("result") is Dictionary:
+            config = response["result"]
+        else:
+            config["power"] = power
+        _sync_profile_controls(config.get("power", {}).get("profiles", {}).get(selected_profile, {}))
         _update_status("Power saved")
     else:
         _update_status(backend.last_error)
@@ -1811,7 +1815,10 @@ func _set_selected_tweaks(tweaks: Dictionary, target: Dictionary) -> void:
 func _save_tweaks(tweaks: Dictionary) -> void:
     var response = backend.call_action("save_tweaks", {"data": tweaks})
     if response.get("ok", false):
-        config["tweaks"] = tweaks
+        if response.get("result") is Dictionary:
+            config = response["result"]
+        else:
+            config["tweaks"] = tweaks
         _update_status("Saved")
     else:
         _update_status(backend.last_error)
