@@ -14,7 +14,6 @@
 #include <QQuickWindow>
 #include <QProcess>
 #include <QRegularExpression>
-#include <QRegion>
 #include <QScreen>
 #include <QSaveFile>
 #include <QTimer>
@@ -495,7 +494,6 @@ public:
         overlayConfig_ = next;
         emit overlayConfigChanged();
         activationReady_ = applyOverlayActivation();
-        configureEdgeSensor();
         return true;
     }
 
@@ -510,7 +508,6 @@ public:
         }
         overlayVisible_ = true;
         emit overlayVisibleChanged();
-        window_->setMask(QRegion());
         window_->show();
         window_->raise();
         window_->requestActivate();
@@ -532,7 +529,6 @@ public:
         emit overlayVisibleChanged();
         if (window_) {
             restoreGamescopeOverlay(window_->winId());
-            configureEdgeSensor();
         } else {
             cleanupGamescopeState();
         }
@@ -555,12 +551,6 @@ public:
             if (screen)
                 window_->setGeometry(screen->availableGeometry());
         }
-    }
-
-    void prepareEdgeSensor()
-    {
-        edgeSensorReady_ = true;
-        configureEdgeSensor();
     }
 
 signals:
@@ -699,44 +689,12 @@ private:
             QStringLiteral("inputplumber_intercept"), {{QStringLiteral("mode"), QStringLiteral("pass")} }).ok;
     }
 
-    void configureEdgeSensor()
-    {
-        if (!window_)
-            return;
-        if (!edgeSensorReady_) {
-            if (!overlayVisible_)
-                window_->hide();
-            return;
-        }
-        if (overlayVisible_ || !overlayConfig_.value(QStringLiteral("swipeEnabled")).toBool()) {
-            window_->setMask(QRegion());
-            if (!overlayVisible_ && !overlayConfig_.value(QStringLiteral("swipeEnabled")).toBool())
-                window_->hide();
-            else
-                window_->show();
-            return;
-        }
-        const QRect bounds = window_->rect();
-        const int width = qBound(16, bounds.width() / 40, 48);
-        const QString edge = overlayConfig_.value(QStringLiteral("swipeEdge")).toString();
-        QRegion mask;
-        if (edge == QStringLiteral("left"))
-            mask = QRegion(0, 0, width, bounds.height());
-        else if (edge == QStringLiteral("right"))
-            mask = QRegion(bounds.width() - width, 0, width, bounds.height());
-        else
-            mask = QRegion(0, bounds.height() - width, bounds.width(), width);
-        window_->setMask(mask);
-        window_->show();
-    }
-
     QQuickWindow *window_ = nullptr;
     QLocalServer *server_ = nullptr;
     QVariantMap config_;
     QVariantMap fanState_;
     QVariantMap overlayConfig_;
     bool overlayVisible_ = false;
-    bool edgeSensorReady_ = false;
     bool activationReady_ = false;
     QTimer compatibilityTimer_;
     QTimer inputDiscoveryTimer_;
@@ -779,8 +737,6 @@ int main(int argc, char **argv)
         return 1;
     controller.setWindow(window);
     controller.refresh();
-    if (persistent)
-        controller.prepareEdgeSensor();
     if (!persistent && command == QStringLiteral("--standalone"))
         controller.showOverlay();
     return app.exec();

@@ -19,9 +19,6 @@ Window {
     property var pageIcons: ["status.svg", "power.svg", "fans.svg", "games.svg", "compatibility.svg", "settings.svg", "calibration.svg"]
     property var pageComponents: [statusPage, powerPage, fansPage, gamePage, compatibilityPage, settingsPage, calibrationPage]
     property bool sidePanel: String((armada.overlayConfig || {}).layout || "centered") === "side"
-    property bool swipeEnabled: Boolean((armada.overlayConfig || {}).swipeEnabled)
-    property string swipeEdge: String((armada.overlayConfig || {}).swipeEdge || "left")
-    property int swipeDistance: Number((armada.overlayConfig || {}).swipeDistance || 120)
 
     function showPage(index) {
         pageIndex = index;
@@ -96,48 +93,6 @@ Window {
     Rectangle {
         anchors.fill: parent
         color: theme.transparent
-
-        MouseArea {
-            id: edgeSwipe
-            anchors.fill: parent
-            enabled: !armada.overlayVisible && root.swipeEnabled
-            z: 0
-            property real startX: 0
-            property real startY: 0
-            property real startTime: 0
-            property bool tracking: false
-            property int maxDurationMs: 700
-            function edgeWidth() { return Math.max(16, Math.min(48, width / 40)); }
-            function startsAtEdge(x, y) {
-                var edge = edgeWidth();
-                if (root.swipeEdge === "left") return x <= edge;
-                if (root.swipeEdge === "right") return x >= width - edge;
-                return y >= height - edge;
-            }
-            onPressed: function(mouse) {
-                tracking = startsAtEdge(mouse.x, mouse.y);
-                if (tracking) {
-                    startX = mouse.x;
-                    startY = mouse.y;
-                    startTime = Date.now();
-                }
-                mouse.accepted = tracking;
-            }
-            onReleased: function(mouse) {
-                if (!tracking) return;
-                var dx = mouse.x - startX;
-                var dy = mouse.y - startY;
-                var duration = Date.now() - startTime;
-                var horizontal = Math.abs(dx) > Math.abs(dy);
-                var inward = root.swipeEdge === "left" ? dx >= root.swipeDistance
-                    : root.swipeEdge === "right" ? dx <= -root.swipeDistance
-                    : dy <= -root.swipeDistance;
-                tracking = false;
-                if (duration <= maxDurationMs && (root.swipeEdge === "bottom" || horizontal) && inward)
-                    armada.showOverlay();
-            }
-            onCanceled: tracking = false;
-        }
 
         Rectangle {
             id: panel

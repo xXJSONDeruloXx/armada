@@ -93,6 +93,7 @@ systemctl enable armada-control.service
 systemctl enable armada-steamos-manager.service
 systemctl --global enable armada-steamos-manager.service
 systemctl --global enable armada-control-overlay.service
+systemctl --global enable armada-overlay-gestures.service
 systemctl enable armada-bootimg-sync.service
 systemctl enable armada-esp-rename.service
 systemctl enable armada-flatpak-setup.service

@@ -74,6 +74,9 @@ if grep -Fq 'Environment=DISPLAY=:0' \
 fi
 grep -Fq 'ExecStopPost=-/usr/libexec/armada/inputplumber-intercept reset' \
     "$ROOT/system_files/usr/lib/systemd/user/armada-control-overlay.service"
+grep -Fq 'armada-overlay-gestures.service' "$ROOT/build_files/40-vendor-system-files.sh"
+test -x "$ROOT/system_files/usr/libexec/armada/overlay-gestures"
+grep -Fq 'PartOf=armada-control-overlay.service' "$ROOT/system_files/usr/lib/systemd/user/armada-overlay-gestures.service"
 grep -Fq -- '--cleanup' "$ROOT/system_files/usr/lib/systemd/user/armada-control-overlay.service"
 grep -Fq 'ExecStartPre=-/usr/bin/armada-control-overlay --cleanup' \
     "$ROOT/system_files/usr/lib/systemd/user/armada-control-overlay.service"
@@ -162,15 +165,11 @@ if grep -Fq 'devices/target/dbus0' "$ROOT/overlay/main.cpp"; then
 fi
 grep -Fq 'navigationActive' "$ROOT/overlay/qml/Main.qml"
 grep -Fq 'sidePanel' "$ROOT/overlay/qml/Main.qml"
-grep -Fq 'MouseArea' "$ROOT/overlay/qml/Main.qml"
-grep -Fq 'swipeDistance' "$ROOT/overlay/qml/Main.qml"
-grep -Fq 'maxDurationMs' "$ROOT/overlay/qml/Main.qml"
+grep -Fq 'overlay-gestures' "$ROOT/tests/armada-overlay-gestures-test.sh"
 grep -Fq 'panelAnimationMs' "$ROOT/overlay/qml/Theme.qml"
 grep -Fq 'saveOverlayConfig' "$ROOT/overlay/main.cpp"
-grep -Fq 'prepareEdgeSensor' "$ROOT/overlay/main.cpp"
 grep -Fq 'QStringLiteral("pass")' "$ROOT/overlay/main.cpp"
 grep -Fq 'activationReady_' "$ROOT/overlay/main.cpp"
-grep -Fq 'setMask' "$ROOT/overlay/main.cpp"
 grep -Fq 'overlayVisible' "$ROOT/overlay/main.cpp"
 grep -Fq 'centeredChord' "$ROOT/overlay/qml/SettingsPage.qml"
 grep -Fq 'sideChord' "$ROOT/overlay/qml/SettingsPage.qml"
