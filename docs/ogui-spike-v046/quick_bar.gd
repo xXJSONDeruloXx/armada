@@ -4,6 +4,7 @@ const CARD_BUTTON_SETTING := preload("res://core/ui/components/card_button_setti
 const DROPDOWN := preload("res://core/ui/components/dropdown.tscn")
 const QUICK_BAR_CARD := preload("res://core/ui/card_ui/quick_bar/qb_card.tscn")
 const SLIDER := preload("res://core/ui/components/slider.tscn")
+const TEXT_INPUT := preload("res://core/ui/components/text_input.tscn")
 const TOGGLE := preload("res://core/ui/components/toggle.tscn")
 const BODY_LABELS := preload("res://plugins/armada-control/ogui-body-label.tres")
 const BACKEND_SCRIPT := preload("res://plugins/armada-control/backend.gd")
@@ -17,6 +18,19 @@ var gpu_slider: ValueSlider
 var fan_curve_dropdown: Dropdown
 var governor_dropdown: Dropdown
 var underclock_dropdown: Dropdown
+var curve_editor_dropdown: Dropdown
+var curve_point_dropdown: Dropdown
+var curve_temp_slider: ValueSlider
+var curve_pwm_slider: ValueSlider
+var fan_stop_toggle: Toggle
+var fan_stop_temp_slider: ValueSlider
+var curve_name_input: ComponentTextInput
+var curve_delete_dropdown: Dropdown
+var selected_curve := ""
+var selected_curve_point := 0
+var selected_delete_curve := ""
+var delete_curve_pending := false
+var _syncing_curve_controls := false
 var status_label: Label
 var fan_state: Dictionary = {}
 var current_appid := ""
@@ -27,6 +41,11 @@ var calibration_button: CardButtonSetting
 var calibration_timer: Timer
 var calibration_capture: Dictionary = {}
 var calibration_recording := false
+var selected_game_appid := ""
+var game_target_dropdown: Dropdown
+var games_controls: VBoxContainer
+var custom_cores_text := ""
+var custom_gamescope_cores_text := ""
 
 
 func _init() -> void:
@@ -61,6 +80,10 @@ func _load_config() -> void:
         compat_tools = tools.get("result", {}).get("tools", [])
     compat_tool = String(config.get("tweaks", {}).get("global", {}).get("windowsCompatTool", ""))
     selected_profile = String(config.get("power", {}).get("general", {}).get("default_profile", "balanced"))
+    for game in installed_games:
+        if game is Dictionary and String(game.get("appid", "")) == current_appid:
+            selected_game_appid = current_appid
+            break
 
 
 func _build() -> void:
@@ -176,6 +199,27 @@ func _build_fans(parent: Container) -> void:
     if settings.is_empty():
         _action(parent, "Refresh fan state", _refresh_fans)
         return
+
+    var curves: Dictionary = fan_state.get("fanCurves", {})
+    var curve_options: Array = []
+    for name in curves:
+        var curve: Dictionary = curves[name]
+        curve_options.append({"data": name, "label": String(curve.get("label", name))})
+    curve_options.sort_custom(func(a, b): return String(a["label"]) < String(b["label"]))
+    selected_curve = _active_curve(curves)
+    curve_editor_dropdown = _dropdown(parent, "Curve", curve_options, selected_curve, _select_curve)
+    curve_point_dropdown = _dropdown(parent, "Point", [], "", _select_curve_point)
+    curve_point_dropdown.ready.connect(_populate_curve_points)
+    curve_temp_slider = _slider(parent, "Point temperature", 60, 0, 120, _stage_curve_temperature)
+    curve_pwm_slider = _slider(parent, "Point PWM (%)", 50, 0, 100, _stage_curve_pwm)
+    _action(parent, "Add point", _add_curve_point)
+    _action(parent, "Remove point", _remove_curve_point)
+    var fan_stop_enabled := _curve_has_fan_stop()
+    fan_stop_toggle = _toggle(parent, "Fan stop", fan_stop_enabled, _toggle_fan_stop)
+    fan_stop_temp_slider = _slider(parent, "Fan stop temperature", _fan_stop_temperature(), 0, 120, _stage_fan_stop_temperature)
+    fan_stop_temp_slider.visible = fan_stop_enabled
+    _build_curve_management(parent)
+
     var current_temp = fan_state.get("currentTemp")
     if current_temp != null:
         var temperature := Label.new()
@@ -187,6 +231,332 @@ func _build_fans(parent: Container) -> void:
     _slider(parent, "Smoothing (%)", roundi(float(settings.get("smoothing", 0.0)) * 100.0), 0, 99, func(value): _stage_fan_setting("smoothing", value / 100.0))
     _slider(parent, "Min fan speed (%)", roundi(float(settings.get("min_pwm", 0)) / 255.0 * 100.0), 0, 100, func(value): _stage_fan_setting("min_pwm", roundi(value / 100.0 * 255.0)))
     _action(parent, "Save fan settings", _save_fans)
+
+
+func _build_curve_management(parent: Container) -> void:
+    curve_name_input = TEXT_INPUT.instantiate() as ComponentTextInput
+    curve_name_input.title = "New curve"
+    curve_name_input.placeholder_text = "Name"
+    parent.add_child(curve_name_input)
+    _action(parent, "Create curve", _create_curve)
+
+    var curves: Dictionary = fan_state.get("fanCurves", {})
+    var protected: Dictionary = fan_state.get("factoryFanCurves", {})
+    var profiles: Dictionary = fan_state.get("profiles", {})
+    var used: Dictionary = {}
+    for profile in profiles.values():
+        if profile is Dictionary:
+            used[String(profile.get("fan_curve", ""))] = true
+    var deletable: Array = []
+    for name in curves:
+        if not protected.has(name) and not used.has(name):
+            deletable.append({"data": name, "label": String(curves[name].get("label", name))})
+    deletable.sort_custom(func(a, b): return String(a["label"]) < String(b["label"]))
+    selected_delete_curve = String(deletable[0]["data"]) if not deletable.is_empty() else ""
+    curve_delete_dropdown = _dropdown(parent, "Delete curve", deletable, selected_delete_curve, _select_delete_curve)
+    _action(parent, "Delete curve", _delete_curve)
+
+
+func _select_delete_curve(name: String) -> void:
+    selected_delete_curve = name
+    delete_curve_pending = false
+
+
+func _create_curve() -> void:
+    var name := _curve_slug(curve_name_input.text)
+    if name.is_empty():
+        _update_status("Enter a curve name")
+        return
+    var curves: Dictionary = fan_state.get("fanCurves", {})
+    if curves.has(name):
+        _update_status("Curve already exists")
+        return
+    curves[name] = {"label": curve_name_input.text.strip_edges(), "curve": "40:0,60:128,80:255"}
+    fan_state["fanCurves"] = curves
+    selected_curve = name
+    selected_curve_point = 0
+    curve_name_input.text = ""
+    _refresh_curve_dropdowns()
+    _update_status("Curve staged")
+
+
+func _delete_curve() -> void:
+    if selected_delete_curve.is_empty():
+        return
+    if not delete_curve_pending:
+        delete_curve_pending = true
+        _update_status("Press A again to delete curve")
+        return
+    var curves: Dictionary = fan_state.get("fanCurves", {})
+    var protected: Dictionary = fan_state.get("factoryFanCurves", {})
+    var profiles: Dictionary = fan_state.get("profiles", {})
+    for profile in profiles.values():
+        if profile is Dictionary and String(profile.get("fan_curve", "")) == selected_delete_curve:
+            _update_status("Curve is in use")
+            delete_curve_pending = false
+            return
+    if protected.has(selected_delete_curve):
+        _update_status("Factory curve")
+        delete_curve_pending = false
+        return
+    curves.erase(selected_delete_curve)
+    fan_state["fanCurves"] = curves
+    selected_delete_curve = ""
+    delete_curve_pending = false
+    selected_curve = _active_curve(curves)
+    selected_curve_point = 0
+    _refresh_curve_dropdowns()
+    _update_status("Curve staged")
+
+
+func _refresh_curve_dropdowns() -> void:
+    var curves: Dictionary = fan_state.get("fanCurves", {})
+    var options: Array = []
+    for name in curves:
+        options.append({"data": name, "label": String(curves[name].get("label", name))})
+    options.sort_custom(func(a, b): return String(a["label"]) < String(b["label"]))
+    if curve_editor_dropdown:
+        curve_editor_dropdown.clear()
+        var values: Array = []
+        for option in options:
+            curve_editor_dropdown.add_item(String(option["label"]))
+            values.append(String(option["data"]))
+        curve_editor_dropdown.set_meta("armada_values", values)
+        curve_editor_dropdown.select(_dropdown_index(curve_editor_dropdown, selected_curve))
+    if curve_delete_dropdown:
+        var protected: Dictionary = fan_state.get("factoryFanCurves", {})
+        var profiles: Dictionary = fan_state.get("profiles", {})
+        var used: Dictionary = {}
+        for profile in profiles.values():
+            if profile is Dictionary:
+                used[String(profile.get("fan_curve", ""))] = true
+        var deletable: Array = []
+        for name in curves:
+            if not protected.has(name) and not used.has(name):
+                deletable.append({"data": name, "label": String(curves[name].get("label", name))})
+        deletable.sort_custom(func(a, b): return String(a["label"]) < String(b["label"]))
+        var delete_values: Array = []
+        curve_delete_dropdown.clear()
+        for option in deletable:
+            curve_delete_dropdown.add_item(String(option["label"]))
+            delete_values.append(String(option["data"]))
+        curve_delete_dropdown.set_meta("armada_values", delete_values)
+        if selected_delete_curve.is_empty() or not delete_values.has(selected_delete_curve):
+            selected_delete_curve = String(delete_values[0]) if not delete_values.is_empty() else ""
+        curve_delete_dropdown.select(_dropdown_index(curve_delete_dropdown, selected_delete_curve))
+    _populate_curve_points()
+
+
+func _curve_slug(value: String) -> String:
+    var regex := RegEx.new()
+    regex.compile("[^a-zA-Z0-9_]+")
+    var result := regex.sub(value.strip_edges().to_lower(), "_", true)
+    while result.begins_with("_"):
+        result = result.trim_prefix("_")
+    while result.ends_with("_"):
+        result = result.trim_suffix("_")
+    return result.left(32)
+
+
+func _active_curve(curves: Dictionary) -> String:
+    var active_profile := String(fan_state.get("activeProfile", ""))
+    var profiles: Dictionary = fan_state.get("profiles", {})
+    var active: Dictionary = profiles.get(active_profile, {})
+    var name := String(active.get("fan_curve", ""))
+    if curves.has(name):
+        return name
+    var names: Array = curves.keys()
+    names.sort()
+    return String(names[0]) if not names.is_empty() else ""
+
+
+func _curve_points() -> Array:
+    var curves: Dictionary = fan_state.get("fanCurves", {})
+    var curve: Dictionary = curves.get(selected_curve, {})
+    var points: Array = []
+    for item in String(curve.get("curve", "")).split(","):
+        var parts := item.strip_edges().split(":")
+        if parts.size() != 2 or not parts[0].is_valid_int() or not parts[1].is_valid_int():
+            continue
+        points.append({"temp": clampi(int(parts[0]), 0, 120), "pwm": clampi(int(parts[1]), 0, 255)})
+    points.sort_custom(func(a, b): return int(a["temp"]) < int(b["temp"]))
+    return points
+
+
+func _write_curve_points(points: Array) -> void:
+    var curves: Dictionary = fan_state.get("fanCurves", {})
+    var curve: Dictionary = curves.get(selected_curve, {})
+    points.sort_custom(func(a, b): return int(a["temp"]) < int(b["temp"]))
+    var values: Array = []
+    for point in points:
+        values.append("%d:%d" % [int(point["temp"]), int(point["pwm"])])
+    curve["curve"] = ",".join(values)
+    curves[selected_curve] = curve
+    fan_state["fanCurves"] = curves
+
+
+func _populate_curve_points() -> void:
+    if not curve_point_dropdown:
+        return
+    var points := _curve_points()
+    curve_point_dropdown.clear()
+    var indexes: Array = []
+    for index in points.size():
+        var point: Dictionary = points[index]
+        curve_point_dropdown.add_item("%d °C / %d%%" % [int(point["temp"]), roundi(float(point["pwm"]) / 255.0 * 100.0)])
+        indexes.append(index)
+    curve_point_dropdown.set_meta("armada_values", indexes)
+    if points.is_empty():
+        selected_curve_point = 0
+        return
+    selected_curve_point = clampi(selected_curve_point, 0, points.size() - 1)
+    curve_point_dropdown.select(selected_curve_point)
+    _sync_curve_point(points[selected_curve_point])
+
+
+func _sync_curve_point(point: Dictionary) -> void:
+    if not curve_temp_slider or not curve_pwm_slider:
+        return
+    _syncing_curve_controls = true
+    curve_temp_slider.value = int(point.get("temp", 60))
+    curve_pwm_slider.value = roundi(float(point.get("pwm", 128)) / 255.0 * 100.0)
+    _syncing_curve_controls = false
+
+
+func _select_curve(name: String) -> void:
+    selected_curve = name
+    selected_curve_point = 0
+    _populate_curve_points()
+
+
+func _select_curve_point(value: String) -> void:
+    if not value.is_valid_int():
+        return
+    selected_curve_point = int(value)
+    var points := _curve_points()
+    if selected_curve_point >= 0 and selected_curve_point < points.size():
+        _sync_curve_point(points[selected_curve_point])
+
+
+func _stage_curve_temperature(value: float) -> void:
+    if _syncing_curve_controls:
+        return
+    var points := _curve_points()
+    if selected_curve_point < 0 or selected_curve_point >= points.size():
+        return
+    points[selected_curve_point]["temp"] = clampi(roundi(value), 0, 120)
+    _write_curve_points(points)
+    _populate_curve_points()
+    _update_status("Fan point staged")
+
+
+func _stage_curve_pwm(value: float) -> void:
+    if _syncing_curve_controls:
+        return
+    var points := _curve_points()
+    if selected_curve_point < 0 or selected_curve_point >= points.size():
+        return
+    points[selected_curve_point]["pwm"] = clampi(roundi(value / 100.0 * 255.0), 0, 255)
+    _write_curve_points(points)
+    _populate_curve_points()
+    _update_status("Fan point staged")
+
+
+func _add_curve_point() -> void:
+    var points := _curve_points()
+    var added := {"temp": 60, "pwm": 128}
+    points.append(added)
+    points.sort_custom(func(a, b): return int(a["temp"]) < int(b["temp"]))
+    selected_curve_point = points.find(added)
+    _write_curve_points(points)
+    _populate_curve_points()
+    _update_status("Fan point added")
+
+
+func _remove_curve_point() -> void:
+    var points := _curve_points()
+    if points.size() <= 1:
+        _update_status("Keep one fan point")
+        return
+    points.remove_at(clampi(selected_curve_point, 0, points.size() - 1))
+    selected_curve_point = clampi(selected_curve_point - 1, 0, points.size() - 1)
+    _write_curve_points(points)
+    _populate_curve_points()
+    _update_status("Fan point removed")
+
+
+func _curve_has_fan_stop() -> bool:
+    var points := _curve_points()
+    return not points.is_empty() and int(points[0]["pwm"]) == 0
+
+
+func _fan_stop_temperature() -> float:
+    var points := _curve_points()
+    var temperature := 60
+    for point in points:
+        if int(point["pwm"]) != 0:
+            break
+        temperature = int(point["temp"])
+    return temperature
+
+
+func _toggle_fan_stop(enabled: bool) -> void:
+    if enabled:
+        _set_fan_stop_points(60)
+    else:
+        _restore_fan_points()
+    if fan_stop_temp_slider:
+        fan_stop_temp_slider.visible = enabled
+    if enabled:
+        _stage_fan_setting("min_pwm", 0)
+    _populate_curve_points()
+    _update_status("Fan stop staged")
+
+
+func _stage_fan_stop_temperature(value: float) -> void:
+    if not fan_stop_toggle or not fan_stop_toggle.button_pressed or _syncing_curve_controls:
+        return
+    _set_fan_stop_points(clampi(roundi(value), 0, 120))
+    _populate_curve_points()
+    _update_status("Fan stop staged")
+
+
+func _set_fan_stop_points(temperature: int) -> void:
+    var points := _restore_fan_points_array(_curve_points())
+    var zeroed: Array = []
+    var above: Array = []
+    for point in points:
+        if int(point["temp"]) <= temperature:
+            zeroed.append({"temp": int(point["temp"]), "pwm": 0})
+        else:
+            above.append(point)
+    if zeroed.is_empty() or int(zeroed[zeroed.size() - 1]["temp"]) != temperature:
+        zeroed.append({"temp": temperature, "pwm": 0})
+    if above.is_empty() and temperature < 120:
+        zeroed.append({"temp": mini(temperature + 20, 120), "pwm": 128})
+    elif not above.is_empty():
+        zeroed.append_array(above)
+    _write_curve_points(zeroed)
+
+
+func _restore_fan_points() -> void:
+    _write_curve_points(_restore_fan_points_array(_curve_points()))
+
+
+func _restore_fan_points_array(points: Array) -> Array:
+    var zero_count := 0
+    while zero_count < points.size() and int(points[zero_count]["pwm"]) == 0:
+        zero_count += 1
+    if zero_count == 0:
+        return points
+    var restore_pwm := 128
+    if zero_count < points.size():
+        restore_pwm = int(points[zero_count]["pwm"])
+    for index in zero_count:
+        points[index]["pwm"] = restore_pwm
+    if zero_count == points.size() and int(points[zero_count - 1]["temp"]) < 120:
+        points.append({"temp": mini(int(points[zero_count - 1]["temp"]) + 20, 120), "pwm": restore_pwm})
+    return points
 
 
 func _build_actions(parent: Container) -> void:
@@ -243,14 +613,34 @@ func _capture_calibration_sample() -> void:
 
 
 func _build_games(parent: Container) -> void:
+    var target_options: Array = [{"data": "", "label": "Default"}]
+    for game in installed_games:
+        if game is Dictionary and not String(game.get("appid", "")).is_empty():
+            target_options.append({"data": String(game["appid"]), "label": String(game.get("name", "App " + String(game["appid"])))})
+    target_options.sort_custom(func(a, b):
+        if String(a["data"]).is_empty():
+            return true
+        if String(b["data"]).is_empty():
+            return false
+        return String(a["label"]).to_lower() < String(b["label"]).to_lower()
+    )
+    game_target_dropdown = _dropdown(parent, "Target", target_options, selected_game_appid, _select_game_target)
+    games_controls = VBoxContainer.new()
+    games_controls.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    parent.add_child(games_controls)
+    _build_games_controls(games_controls)
+
+
+func _build_games_controls(parent: Container) -> void:
     var tweaks: Dictionary = config.get("tweaks", {})
-    var global: Dictionary = tweaks.get("global", {})
+    var target: Dictionary = _effective_tweaks(tweaks)
     var fex_options: Array = []
     for name in config.get("fexProfiles", {}):
         fex_options.append({"data": name, "label": String(config["fexProfiles"][name].get("label", name))})
+    fex_options.append({"data": "custom", "label": "Custom"})
     if not fex_options.is_empty():
-        _dropdown(parent, "FEX preset", fex_options, String(global.get("fexProfile", "default")), _save_fex_profile)
-    var fex_config: Dictionary = global.get("fexConfig", {})
+        _dropdown(parent, "FEX preset", fex_options, String(target.get("fexProfile", "default")), _save_fex_profile)
+    var fex_config: Dictionary = target.get("fexConfig", {})
     var fex_knobs := {
         "TSOEnabled": "FEX TSO enabled",
         "X87ReducedPrecision": "FEX X87 reduced precision",
@@ -261,11 +651,159 @@ func _build_games(parent: Container) -> void:
     }
     for key in fex_knobs:
         _toggle(parent, fex_knobs[key], String(fex_config.get(key, "1")) == "1", _fex_callback(key))
-    var thunks: Dictionary = global.get("thunks", {})
+    var thunks: Dictionary = target.get("thunks", {})
     for key in ["Vulkan", "GL", "asound", "drm", "WaylandClient"]:
         _toggle(parent, "Host " + key, thunks.get(key, true) != false, _thunk_callback(key))
-    _toggle(parent, "Gamescope realtime", bool(global.get("gamescopeRr", false)), func(value): _save_tweak("gamescopeRr", value))
-    _toggle(parent, "Vulkan realtime queue", bool(global.get("gamescopeVulkanRealtime", false)), func(value): _save_tweak("gamescopeVulkanRealtime", value))
+    var perf: Dictionary = config.get("perf", {})
+    var core_options := _core_options(perf.get("corePresets", []))
+    var core_value := String(target.get("cores", "default"))
+    var core_is_custom := core_value != "default" and not _option_has_data(core_options, core_value)
+    if core_is_custom:
+        custom_cores_text = core_value
+    _dropdown(parent, "Game CPU cores", core_options, "custom" if core_is_custom else core_value, _select_core_setting.bind("cores"))
+    if core_is_custom:
+        _text_input(parent, "Custom CPU cores", custom_cores_text, "e.g. 7,3-6", _save_custom_cores.bind("cores"))
+    _toggle(parent, "Wine CPU topology", target.get("wineTopology", true) != false, func(value): _save_selected_value("wineTopology", null if value else false))
+    _slider(parent, "Game priority", float(target.get("nice", 0)), -20, 19, func(value): _save_selected_value("nice", roundi(value)))
+    var gamescope_core_value := String(target.get("gamescopeCores", "default"))
+    var gamescope_custom := gamescope_core_value != "default" and not _option_has_data(core_options, gamescope_core_value)
+    if gamescope_custom:
+        custom_gamescope_cores_text = gamescope_core_value
+    _dropdown(parent, "Gamescope CPU cores", core_options, "custom" if gamescope_custom else gamescope_core_value, _select_core_setting.bind("gamescopeCores"))
+    if gamescope_custom:
+        _text_input(parent, "Custom Gamescope cores", custom_gamescope_cores_text, "e.g. 7,3-6", _save_custom_cores.bind("gamescopeCores"))
+    _slider(parent, "Gamescope priority", float(target.get("gamescopeNice", 0)), -20, 19, func(value): _save_selected_value("gamescopeNice", roundi(value)))
+    _toggle(parent, "Gamescope realtime", bool(target.get("gamescopeRr", false)), func(value): _save_selected_tweak("gamescopeRr", value))
+    if selected_game_appid.is_empty():
+        _toggle(parent, "Vulkan realtime queue", bool(target.get("gamescopeVulkanRealtime", false)), func(value): _save_tweak("gamescopeVulkanRealtime", value))
+    var scheduler_options: Array = [{"data": "default", "label": "Default"}]
+    for scheduler in perf.get("schedulers", []):
+        scheduler_options.append({"data": scheduler, "label": String(scheduler).to_upper()})
+    _dropdown(parent, "CPU scheduler", scheduler_options, String(target.get("scheduler", "default")), _select_scheduler)
+
+
+func _select_game_target(appid: String) -> void:
+    selected_game_appid = appid
+    _rebuild_games_controls()
+
+
+func _rebuild_games_controls() -> void:
+    if not games_controls:
+        return
+    for child in games_controls.get_children():
+        child.free()
+    _build_games_controls(games_controls)
+    if game_target_dropdown:
+        var focus_parent := games_controls.get_parent()
+        for child in focus_parent.get_children():
+            if child is FocusGroup:
+                child.current_focus = game_target_dropdown
+                break
+        game_target_dropdown.grab_focus()
+
+
+func _effective_tweaks(tweaks: Dictionary) -> Dictionary:
+    var merged: Dictionary = tweaks.get("global", {}).duplicate(true)
+    if selected_game_appid.is_empty():
+        return merged
+    var games: Dictionary = tweaks.get("games", {})
+    var own: Dictionary = games.get(selected_game_appid, {})
+    for key in own:
+        merged[key] = own[key]
+    return merged
+
+
+func _selected_tweak_map(tweaks: Dictionary) -> Dictionary:
+    if selected_game_appid.is_empty():
+        return tweaks.get("global", {})
+    var games: Dictionary = tweaks.get("games", {})
+    return games.get(selected_game_appid, {"name": _selected_game_name()})
+
+
+func _selected_game_name() -> String:
+    for game in installed_games:
+        if game is Dictionary and String(game.get("appid", "")) == selected_game_appid:
+            return String(game.get("name", "App " + selected_game_appid))
+    return "App " + selected_game_appid
+
+
+func _core_options(presets: Array) -> Array:
+    var options: Array = [{"data": "default", "label": "Default"}]
+    for preset in presets:
+        if preset is Dictionary:
+            options.append({"data": String(preset.get("data", "")), "label": String(preset.get("label", preset.get("data", "")))})
+    options.append({"data": "custom", "label": "Custom"})
+    return options
+
+
+func _option_has_data(options: Array, value: String) -> bool:
+    for option in options:
+        if option is Dictionary and String(option.get("data", "")) == value:
+            return true
+    return false
+
+
+func _text_input(parent: Container, title: String, value: String, placeholder: String, callback: Callable) -> ComponentTextInput:
+    var input := TEXT_INPUT.instantiate() as ComponentTextInput
+    input.title = title
+    input.text = value
+    input.placeholder_text = placeholder
+    parent.add_child(input)
+    input.text_submitted.connect(callback)
+    return input
+
+
+func _select_core_setting(value: String, key: String) -> void:
+    if value == "custom":
+        var current := String(_effective_tweaks(config.get("tweaks", {})).get(key, ""))
+        if key == "cores":
+            custom_cores_text = current if current != "default" else ""
+        else:
+            custom_gamescope_cores_text = current if current != "default" else ""
+        _rebuild_games_controls()
+        return
+    _save_selected_value(key, null if value == "default" else value)
+
+
+func _save_custom_cores(value: String, key: String) -> void:
+    var text := value.strip_edges()
+    if not _valid_cpulist(text):
+        _update_status("Invalid CPU list")
+        return
+    if key == "cores":
+        custom_cores_text = text
+    else:
+        custom_gamescope_cores_text = text
+    _save_selected_value(key, text)
+
+
+func _valid_cpulist(text: String) -> bool:
+    if text.is_empty():
+        return false
+    var seen: Dictionary = {}
+    var cpu_count := int(config.get("perf", {}).get("cpuCount", 0))
+    for part in text.split(","):
+        var value := part.strip_edges()
+        var range_parts := value.split("-")
+        if range_parts.size() > 2 or value.is_empty():
+            return false
+        if not range_parts[0].is_valid_int() or (range_parts.size() == 2 and not range_parts[1].is_valid_int()):
+            return false
+        var low := int(range_parts[0])
+        var high := low if range_parts.size() == 1 else int(range_parts[1])
+        if high < low:
+            return false
+        for cpu in range(low, high + 1):
+            if cpu_count > 0 and cpu >= cpu_count:
+                return false
+            if seen.has(cpu):
+                return false
+            seen[cpu] = true
+    return not seen.is_empty()
+
+
+func _select_scheduler(value: String) -> void:
+    _save_selected_value("scheduler", null if value == "default" else value)
 
 
 func _fex_callback(key: String) -> Callable:
@@ -351,10 +889,9 @@ func _dropdown(parent: Container, title: String, options: Array, selected_value:
         dropdown.set_meta("armada_values", values)
         dropdown.select(selected_index)
         dropdown.item_selected.connect(func(index: int):
-            if index >= 0 and index < options.size():
-                var option = options[index]
-                var value := String(option.get("data", option)) if option is Dictionary else String(option)
-                callback.call(value)
+            var current_values: Array = dropdown.get_meta("armada_values", [])
+            if index >= 0 and index < current_values.size():
+                callback.call(String(current_values[index]))
         )
     )
     return dropdown
@@ -370,12 +907,13 @@ func _dropdown_index(dropdown: Dropdown, value: String) -> int:
     return 0
 
 
-func _toggle(parent: Container, title: String, value: bool, callback: Callable) -> void:
+func _toggle(parent: Container, title: String, value: bool, callback: Callable) -> Toggle:
     var toggle := TOGGLE.instantiate() as Toggle
     toggle.text = title
     toggle.button_pressed = value
     parent.add_child(toggle)
     toggle.toggled.connect(callback)
+    return toggle
 
 
 func _slider(parent: Container, title: String, value: float, minimum: float, maximum: float, callback: Callable) -> ValueSlider:
@@ -490,34 +1028,65 @@ func _save_tweak(key: String, value: bool) -> void:
 
 func _save_fex_profile(name: String) -> void:
     var tweaks: Dictionary = config.get("tweaks", {}).duplicate(true)
-    var global: Dictionary = tweaks.get("global", {})
-    global["fexProfile"] = name
+    var target: Dictionary = _selected_tweak_map(tweaks).duplicate(true)
+    target["fexProfile"] = name
     if name != "custom":
         var profile: Dictionary = config.get("fexProfiles", {}).get(name, {})
-        global["fexConfig"] = profile.get("config", {})
-    tweaks["global"] = global
+        target["fexConfig"] = profile.get("config", {})
+    _set_selected_tweaks(tweaks, target)
     _save_tweaks(tweaks)
 
 
 func _save_fex_knob(key: String, value: bool) -> void:
     var tweaks: Dictionary = config.get("tweaks", {}).duplicate(true)
-    var global: Dictionary = tweaks.get("global", {})
-    var fex_config: Dictionary = global.get("fexConfig", {}).duplicate(true)
+    var target: Dictionary = _selected_tweak_map(tweaks).duplicate(true)
+    var fex_config: Dictionary = _effective_tweaks(tweaks).get("fexConfig", {}).duplicate(true)
     fex_config[key] = "1" if value else "0"
-    global["fexProfile"] = "custom"
-    global["fexConfig"] = fex_config
-    tweaks["global"] = global
+    target["fexProfile"] = "custom"
+    target["fexConfig"] = fex_config
+    _set_selected_tweaks(tweaks, target)
     _save_tweaks(tweaks)
 
 
 func _save_thunk(key: String, value: bool) -> void:
     var tweaks: Dictionary = config.get("tweaks", {}).duplicate(true)
-    var global: Dictionary = tweaks.get("global", {})
-    var thunks: Dictionary = global.get("thunks", {}).duplicate(true)
+    var target: Dictionary = _selected_tweak_map(tweaks).duplicate(true)
+    var thunks: Dictionary = _effective_tweaks(tweaks).get("thunks", {}).duplicate(true)
     thunks[key] = value
-    global["thunks"] = thunks
-    tweaks["global"] = global
+    target["thunks"] = thunks
+    _set_selected_tweaks(tweaks, target)
     _save_tweaks(tweaks)
+
+
+func _save_selected_tweak(key: String, value: bool) -> void:
+    var tweaks: Dictionary = config.get("tweaks", {}).duplicate(true)
+    var target: Dictionary = _selected_tweak_map(tweaks).duplicate(true)
+    if value:
+        target[key] = true
+    else:
+        target.erase(key)
+    _set_selected_tweaks(tweaks, target)
+    _save_tweaks(tweaks)
+
+
+func _save_selected_value(key: String, value: Variant) -> void:
+    var tweaks: Dictionary = config.get("tweaks", {}).duplicate(true)
+    var target: Dictionary = _selected_tweak_map(tweaks).duplicate(true)
+    if value == null:
+        target.erase(key)
+    else:
+        target[key] = value
+    _set_selected_tweaks(tweaks, target)
+    _save_tweaks(tweaks)
+
+
+func _set_selected_tweaks(tweaks: Dictionary, target: Dictionary) -> void:
+    if selected_game_appid.is_empty():
+        tweaks["global"] = target
+        return
+    var games: Dictionary = tweaks.get("games", {})
+    games[selected_game_appid] = target
+    tweaks["games"] = games
 
 
 func _save_tweaks(tweaks: Dictionary) -> void:

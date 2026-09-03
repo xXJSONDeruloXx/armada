@@ -82,6 +82,10 @@ grep -Fq 'armada-steam-call' "$ROOT/docs/ogui-spike-v046/backend.gd"
 grep -Fq 'armada-overlay-call' "$ROOT/system_files/usr/libexec/armada/armada-overlay-call"
 test -f "$ROOT/docs/ogui-spike-v046/quick_bar.gd"
 grep -Fq 'qb_card.tscn' "$ROOT/docs/ogui-spike-v046/quick_bar.gd"
+grep -Fq 'text_input.tscn' "$ROOT/docs/ogui-spike-v046/quick_bar.gd"
+grep -Fq 'save_fan_curves' "$ROOT/docs/ogui-spike-v046/quick_bar.gd"
+grep -Fq 'selected_game_appid' "$ROOT/docs/ogui-spike-v046/quick_bar.gd"
+grep -Fq 'factoryFanCurves' "$ROOT/docs/ogui-spike-v046/quick_bar.gd"
 for section in Power Fans Games Compatibility System Actions; do
     grep -Fq "_section(content, \"$section\"" "$ROOT/docs/ogui-spike-v046/quick_bar.gd"
 done
