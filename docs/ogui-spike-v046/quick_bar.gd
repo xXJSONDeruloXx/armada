@@ -37,6 +37,7 @@ var fan_state: Dictionary = {}
 var current_appid := ""
 var compat_tools: Array = []
 var compat_tool := ""
+var global_resolution := "Default"
 var installed_games: Array = []
 var calibration_button: CardButtonSetting
 var calibration_timer: Timer
@@ -52,6 +53,16 @@ var environment_name_input: ComponentTextInput
 var environment_value_input: ComponentTextInput
 var selected_environment_key := ""
 var reset_game_pending := false
+var compat_appid := ""
+var compat_target_dropdown: Dropdown
+var compat_controls: VBoxContainer
+var compat_appid_input: ComponentTextInput
+var compat_launch_input: ComponentTextInput
+var compat_launch_options := ""
+var compat_game_tool := ""
+var compat_game_resolution := "Default"
+var compat_reset_pending := false
+var compat_reset_all_pending := false
 
 
 func _init() -> void:
@@ -84,8 +95,12 @@ func _load_config() -> void:
     var tools = backend.call_steam("get_global_compat_tools")
     if tools.get("ok", false):
         compat_tools = tools.get("result", {}).get("tools", [])
+    var resolution = backend.call_steam("get_global_resolution")
+    if resolution.get("ok", false):
+        global_resolution = String(resolution.get("result", {}).get("value", "Default"))
     compat_tool = String(config.get("tweaks", {}).get("global", {}).get("windowsCompatTool", ""))
     selected_profile = String(config.get("power", {}).get("general", {}).get("default_profile", "balanced"))
+    compat_appid = current_appid
     for game in installed_games:
         if game is Dictionary and String(game.get("appid", "")) == current_appid:
             selected_game_appid = current_appid
@@ -983,14 +998,177 @@ func _thunk_callback(key: String) -> Callable:
 
 
 func _build_compatibility(parent: Container) -> void:
+    var target_options: Array = [{"data": "", "label": "Default"}]
+    var seen: Dictionary = {}
+    for game in installed_games:
+        if not game is Dictionary:
+            continue
+        var appid := String(game.get("appid", ""))
+        if not appid.is_valid_int() or seen.has(appid):
+            continue
+        seen[appid] = true
+        target_options.append({"data": appid, "label": String(game.get("name", "App " + appid))})
+    if current_appid.is_valid_int() and not seen.has(current_appid):
+        target_options.append({"data": current_appid, "label": "App " + current_appid})
+    target_options.append({"data": "__manual", "label": "Enter AppID manually"})
+    target_options.sort_custom(func(a, b):
+        if String(a["data"]).is_empty():
+            return true
+        if String(b["data"]).is_empty():
+            return false
+        if String(a["data"]) == "__manual":
+            return false
+        if String(b["data"]) == "__manual":
+            return true
+        return String(a["label"]).to_lower() < String(b["label"]).to_lower()
+    )
+    compat_target_dropdown = _dropdown(parent, "Game", target_options, compat_appid, _select_compat_target)
+    compat_appid_input = _text_input(parent, "AppID", compat_appid, "Running or installed AppID", _compat_input_submitted)
+    _action(parent, "Load AppID", _load_compat_appid)
+    compat_controls = VBoxContainer.new()
+    compat_controls.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    parent.add_child(compat_controls)
+    _build_compatibility_controls(compat_controls)
+
+
+func _build_compatibility_controls(parent: Container) -> void:
+    _load_compat_game_state()
     if compat_tools.is_empty():
-        _action(parent, "Refresh Steam compatibility", func(): _refresh_compatibility())
-        return
-    _dropdown(parent, "Default Proton", compat_tools, compat_tool, _save_global_tool)
-    _dropdown(parent, "Default resolution", ["Default", "Native", "1280x720", "960x540"], "Default", func(value): _call_steam("set_global_resolution", {"value": value}))
-    if current_appid.is_valid_int() and not current_appid.is_empty():
-        _action(parent, "Reset running game compatibility", func(): _reset_running_game())
+        _action(parent, "Refresh Steam compatibility", _refresh_compatibility)
+    else:
+        _dropdown(parent, "Default Proton", compat_tools, compat_tool, _save_global_tool)
+    _dropdown(parent, "Default resolution", ["Default", "Native", "1280x720", "960x540"], global_resolution, _save_global_resolution)
+    if compat_appid.is_valid_int() and not compat_appid.is_empty():
+        var tools_response := _call_steam("get_app_compat_tools", {"appid": compat_appid})
+        var app_tools: Array = tools_response.get("result", {}).get("tools", []) if tools_response.get("ok", false) else []
+        var app_options: Array = [
+            {"data": "__default", "label": "Use Default"},
+            {"data": "", "label": "Follow Steam"},
+        ]
+        app_options.append_array(app_tools)
+        _dropdown(parent, "Compatibility tool", app_options, compat_game_tool, _save_compat_game_tool)
+        _dropdown(parent, "Game resolution", ["Default", "Native", "1280x720", "960x540"], compat_game_resolution, _save_compat_game_resolution)
+        compat_launch_input = _text_input(parent, "Launch options", compat_launch_options, "Steam launch options", _compat_input_submitted)
+        _action(parent, "Save launch options", _save_compat_launch_options)
+        _action(parent, "Reset game compatibility", _reset_compat_game)
     _action(parent, "Sweep Steam compatibility", func(): _sweep_compatibility())
+    _action(parent, "Reset all game compatibility", _reset_all_compatibility)
+
+
+func _select_compat_target(value: String) -> void:
+    if value == "__manual":
+        if compat_appid_input:
+            compat_appid_input.grab_focus()
+        return
+    compat_appid = value
+    _rebuild_compatibility_controls()
+
+
+func _rebuild_compatibility_controls() -> void:
+    if compat_appid_input:
+        compat_appid_input.text = compat_appid
+    if not compat_controls:
+        return
+    for child in compat_controls.get_children():
+        child.free()
+    compat_game_tool = ""
+    compat_game_resolution = "Default"
+    compat_launch_options = ""
+    _build_compatibility_controls(compat_controls)
+    if compat_target_dropdown:
+        compat_target_dropdown.grab_focus()
+
+
+func _compat_input_submitted(_value: String) -> void:
+    _update_status("Press the matching save action")
+
+
+func _load_compat_appid() -> void:
+    var value := compat_appid_input.text.strip_edges()
+    if not value.is_valid_int() or value.is_empty():
+        _update_status("Invalid AppID")
+        return
+    compat_appid = value
+    _rebuild_compatibility_controls()
+
+
+func _load_compat_game_state() -> void:
+    if not compat_appid.is_valid_int() or compat_appid.is_empty():
+        return
+    var state := _call_steam("get_compat_state", {"appid": compat_appid})
+    if state.get("ok", false):
+        compat_game_tool = String(state.get("result", {}).get("tool", ""))
+    var launch := _call_steam("get_launch_options", {"appid": compat_appid})
+    if launch.get("ok", false):
+        compat_launch_options = String(launch.get("result", {}).get("options", ""))
+    var resolution := _call_steam("get_resolution", {"appid": compat_appid})
+    if resolution.get("ok", false):
+        compat_game_resolution = String(resolution.get("result", {}).get("value", "Default"))
+
+
+func _save_global_resolution(value: String) -> void:
+    var response := _call_steam("set_global_resolution", {"value": value})
+    if response.get("ok", false):
+        global_resolution = value
+        _update_status("Saved")
+    else:
+        _update_status(backend.last_error)
+
+
+func _save_compat_game_tool(value: String) -> void:
+    var tool := compat_tool if value == "__default" else value
+    var response := _call_steam("set_compat_tool", {"appid": compat_appid, "tool": tool})
+    if response.get("ok", false):
+        compat_game_tool = value
+        _update_status("Saved")
+    else:
+        _update_status(backend.last_error)
+
+
+func _save_compat_game_resolution(value: String) -> void:
+    var response := _call_steam("set_resolution", {"appid": compat_appid, "value": value})
+    if response.get("ok", false):
+        compat_game_resolution = value
+        _update_status("Saved")
+    else:
+        _update_status(backend.last_error)
+
+
+func _save_compat_launch_options() -> void:
+    var response := _call_steam("set_launch_options", {"appid": compat_appid, "options": compat_launch_input.text})
+    if response.get("ok", false):
+        compat_launch_options = compat_launch_input.text
+    _update_status("Saved" if response.get("ok", false) else backend.last_error)
+
+
+func _reset_compat_game() -> void:
+    if not compat_reset_pending:
+        compat_reset_pending = true
+        _update_status("Press A again to reset game compatibility")
+        return
+    compat_reset_pending = false
+    var response := _call_steam("reset_game", {"appid": compat_appid, "tool": compat_tool})
+    _update_status("Reset" if response.get("ok", false) else backend.last_error)
+    if response.get("ok", false):
+        _rebuild_compatibility_controls()
+
+
+func _reset_all_compatibility() -> void:
+    if not compat_reset_all_pending:
+        compat_reset_all_pending = true
+        _update_status("Press A again to reset all game compatibility")
+        return
+    compat_reset_all_pending = false
+    var failed := 0
+    var count := 0
+    for game in installed_games:
+        if game is Dictionary and not bool(game.get("nonSteam", false)) and String(game.get("appid", "")).is_valid_int():
+            count += 1
+            var response := _call_steam("reset_game", {"appid": String(game["appid"]), "tool": compat_tool})
+            if not response.get("ok", false):
+                failed += 1
+    _call("save_compat_applied", {"appids": []})
+    _update_status("Reset %d games" % count if failed == 0 else "Reset completed with errors")
 
 
 func _refresh_compatibility() -> void:

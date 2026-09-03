@@ -91,6 +91,9 @@ grep -Fq 'Variable staged' "$ROOT/docs/ogui-spike-v046/quick_bar.gd"
 grep -Fq 'Invalid CPU list' "$ROOT/docs/ogui-spike-v046/quick_bar.gd"
 grep -Fq 'Environment variable' "$ROOT/docs/ogui-spike-v046/quick_bar.gd"
 grep -Fq 'Reset profile' "$ROOT/docs/ogui-spike-v046/quick_bar.gd"
+grep -Fq 'get_app_compat_tools' "$ROOT/docs/ogui-spike-v046/quick_bar.gd"
+grep -Fq 'set_launch_options' "$ROOT/docs/ogui-spike-v046/quick_bar.gd"
+grep -Fq 'Enter AppID manually' "$ROOT/docs/ogui-spike-v046/quick_bar.gd"
 for section in Power Fans Games Compatibility System Actions; do
     grep -Fq "_section(content, \"$section\"" "$ROOT/docs/ogui-spike-v046/quick_bar.gd"
 done
