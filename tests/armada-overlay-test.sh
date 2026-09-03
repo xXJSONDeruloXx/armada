@@ -95,6 +95,10 @@ grep -Fq 'Refresh device state' "$ROOT/docs/ogui-spike-v046/quick_bar.gd"
 grep -Fq 'func _rebuild_sections()' "$ROOT/docs/ogui-spike-v046/quick_bar.gd"
 grep -Fq '"auto_apply": _global_tweak("autoApplyCompat")' "$ROOT/docs/ogui-spike-v046/quick_bar.gd"
 grep -Fq 'HBoxContainer' "$ROOT/docs/ogui-spike-v046/overlay.gd"
+if grep -Fq '.quit()' "$ROOT/docs/ogui-spike-v046/overlay.gd"; then
+    echo "overlay provider must stay resident for re-summon; dismiss hides, never quits" >&2
+    exit 1
+fi
 grep -Fq 'armada/overlay.json' "$ROOT/docs/ogui-spike-v046/overlay.gd"
 grep -Fq 'ARMADA_OGUI_LAYOUT' "$ROOT/docs/ogui-spike-v046/overlay.gd"
 grep -Fq 'touch -t 198001010000' "$ROOT/docs/ogui-spike-v046/build-plugin.sh"
