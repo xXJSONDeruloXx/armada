@@ -38,6 +38,13 @@ required = {
 assert required <= actions.keys(), sorted(required - actions.keys())
 assert service.overlay_actions()["get_capabilities"]({})["api"] == 1
 assert service.overlay_actions()["get_runtime_game"]({}) is None
+assert service.OVERLAY_CHORDS == {"start_select", "guide", "quick_access", "select_l1", "select_r1"}
+try:
+    service.handle_overlay({"action": "set_overlay_activation", "chord": "arbitrary"})
+except ValueError as exc:
+    assert str(exc) == "invalid overlay activation chord"
+else:
+    raise AssertionError("overlay API accepted an arbitrary activation chord")
 
 try:
     service.handle_overlay({"action": "root_only_maintenance"})
@@ -79,6 +86,15 @@ grep -Fq 'xcb-util-cursor' "$ROOT/build_files/10-base-packages.sh"
 grep -Fq 'armada-control-overlay' "$ROOT/build_files/40-vendor-system-files.sh"
 grep -Fq '/usr/share/armada/overlay' "$ROOT/build_files/40-vendor-system-files.sh"
 grep -Fq 'SetInterceptActivation' "$ROOT/system_files/usr/libexec/armada/inputplumber-intercept"
+grep -Fq 'GamepadOrder' "$ROOT/system_files/usr/libexec/armada/inputplumber-intercept"
+grep -Fq 'DbusDevices' "$ROOT/system_files/usr/libexec/armada/inputplumber-intercept"
+if grep -Fq "path='/org/shadowblip/InputPlumber/CompositeDevice0'" "$ROOT/system_files/usr/libexec/armada/inputplumber-intercept"; then
+    echo "inputplumber helper still hard-codes CompositeDevice0" >&2
+    exit 1
+fi
+grep -Fq 'start_select' "$ROOT/system_files/usr/libexec/armada/inputplumber-intercept"
+grep -Fq 'select_l1' "$ROOT/system_files/usr/libexec/armada/inputplumber-intercept"
+grep -Fq 'OVERLAY_CHORDS' "$ROOT/system_files/usr/libexec/armada/armada-control"
 grep -Fq -- '--standalone' "$ROOT/system_files/usr/share/applications/armada-control-overlay.desktop"
 grep -Fq 'STEAM_OVERLAY' "$ROOT/overlay/main.cpp"
 grep -Fq 'STEAM_INPUT_FOCUS' "$ROOT/overlay/main.cpp"
@@ -136,7 +152,24 @@ grep -Fq 'ui_up' "$ROOT/overlay/main.cpp"
 grep -Fq 'ui_accept' "$ROOT/overlay/main.cpp"
 grep -Fq 'ui_guide' "$ROOT/overlay/main.cpp"
 grep -Fq 'Gamepad:Button:QuickAccess' "$ROOT/overlay/main.cpp"
+grep -Fq 'GamepadOrder' "$ROOT/overlay/main.cpp"
+grep -Fq 'DbusDevices' "$ROOT/overlay/main.cpp"
+if grep -Fq 'devices/target/dbus0' "$ROOT/overlay/main.cpp"; then
+    echo "overlay still hard-codes the InputPlumber DBus target" >&2
+    exit 1
+fi
 grep -Fq 'navigationActive' "$ROOT/overlay/qml/Main.qml"
+grep -Fq 'sidePanel' "$ROOT/overlay/qml/Main.qml"
+grep -Fq 'MouseArea' "$ROOT/overlay/qml/Main.qml"
+grep -Fq 'swipeDistance' "$ROOT/overlay/qml/Main.qml"
+grep -Fq 'panelAnimationMs' "$ROOT/overlay/qml/Theme.qml"
+grep -Fq 'saveOverlayConfig' "$ROOT/overlay/main.cpp"
+grep -Fq 'prepareEdgeSensor' "$ROOT/overlay/main.cpp"
+grep -Fq 'setMask' "$ROOT/overlay/main.cpp"
+grep -Fq 'overlayVisible' "$ROOT/overlay/main.cpp"
+grep -Fq 'centeredChord' "$ROOT/overlay/qml/SettingsPage.qml"
+grep -Fq 'sideChord' "$ROOT/overlay/qml/SettingsPage.qml"
+grep -Fq 'Edge swipe to open' "$ROOT/overlay/qml/SettingsPage.qml"
 grep -Fq 'onErrorMessage' "$ROOT/overlay/qml/Main.qml"
 grep -Fq 'property color error' "$ROOT/overlay/qml/Theme.qml"
 grep -Fq 'QDir::AllEntries' "$ROOT/overlay/main.cpp"

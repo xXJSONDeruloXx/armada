@@ -1,4 +1,5 @@
 #include <QDBusConnection>
+#include <QDBusInterface>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -13,7 +14,9 @@
 #include <QQuickWindow>
 #include <QProcess>
 #include <QRegularExpression>
+#include <QRegion>
 #include <QScreen>
+#include <QSaveFile>
 #include <QTimer>
 #include <QUrl>
 #include <QVariantMap>
@@ -40,6 +43,80 @@ struct GamescopeFocusState {
 };
 
 GamescopeFocusState gamescopeFocusState;
+
+QString discoverInputEventPath()
+{
+    const QString service = QStringLiteral("org.shadowblip.InputPlumber");
+    const QString managerPath = QStringLiteral("/org/shadowblip/InputPlumber/Manager");
+    const QString compositeInterface = QStringLiteral("org.shadowblip.Input.CompositeDevice");
+    QDBusInterface manager(service, managerPath, QStringLiteral("org.shadowblip.InputManager"),
+        QDBusConnection::systemBus());
+    const QStringList composites = manager.property(QStringLiteral("GamepadOrder")).toStringList();
+    for (const QString &composite : composites) {
+        QDBusInterface device(service, composite, compositeInterface, QDBusConnection::systemBus());
+        const QStringList targets = device.property(QStringLiteral("DbusDevices")).toStringList();
+        for (const QString &target : targets)
+            if (target.startsWith(QStringLiteral("/org/shadowblip/InputPlumber/devices/target/dbus")))
+                return target;
+    }
+    return {};
+}
+
+QString overlayPreferencesFile()
+{
+    QString config = qEnvironmentVariable("XDG_CONFIG_HOME");
+    if (config.isEmpty())
+        config = QDir::homePath() + QStringLiteral("/.config");
+    return QDir(config).filePath(QStringLiteral("armada/overlay.json"));
+}
+
+QVariantMap defaultOverlayPreferences()
+{
+    return {
+        {QStringLiteral("layout"), QStringLiteral("centered")},
+        {QStringLiteral("centeredChord"), QStringLiteral("start_select")},
+        {QStringLiteral("sideChord"), QStringLiteral("start_select")},
+        {QStringLiteral("swipeEnabled"), true},
+        {QStringLiteral("swipeEdge"), QStringLiteral("left")},
+        {QStringLiteral("swipeDistance"), 120},
+    };
+}
+
+bool validOverlayPreferences(const QVariantMap &preferences);
+
+QVariantMap loadOverlayPreferences()
+{
+    QVariantMap result = defaultOverlayPreferences();
+    QFile file(overlayPreferencesFile());
+    if (!file.open(QIODevice::ReadOnly))
+        return result;
+    const QJsonDocument document = QJsonDocument::fromJson(file.readAll());
+    if (!document.isObject())
+        return result;
+    const QVariantMap stored = document.object().toVariantMap();
+    for (auto it = stored.cbegin(); it != stored.cend(); ++it)
+        if (result.contains(it.key()))
+            result.insert(it.key(), it.value());
+    return validOverlayPreferences(result) ? result : defaultOverlayPreferences();
+}
+
+bool validOverlayPreferences(const QVariantMap &preferences)
+{
+    const QString layout = preferences.value(QStringLiteral("layout")).toString();
+    const QString centeredChord = preferences.value(QStringLiteral("centeredChord")).toString();
+    const QString sideChord = preferences.value(QStringLiteral("sideChord")).toString();
+    const QString edge = preferences.value(QStringLiteral("swipeEdge")).toString();
+    const QStringList layouts = {QStringLiteral("centered"), QStringLiteral("side")};
+    const QStringList chords = {
+        QStringLiteral("start_select"), QStringLiteral("guide"), QStringLiteral("quick_access"),
+        QStringLiteral("select_l1"), QStringLiteral("select_r1"),
+    };
+    const QStringList edges = {QStringLiteral("left"), QStringLiteral("right"), QStringLiteral("bottom")};
+    const int distance = preferences.value(QStringLiteral("swipeDistance")).toInt();
+    return layouts.contains(layout) && chords.contains(centeredChord) && chords.contains(sideChord)
+        && edges.contains(edge) && preferences.value(QStringLiteral("swipeEnabled")).typeId() == QMetaType::Bool
+        && distance >= 48 && distance <= 320;
+}
 
 QString controlSocket()
 {
@@ -309,21 +386,23 @@ class QmlOverlayController final : public QObject {
     Q_OBJECT
     Q_PROPERTY(QVariantMap config READ config NOTIFY configChanged)
     Q_PROPERTY(QVariantMap fanState READ fanState NOTIFY fanStateChanged)
+    Q_PROPERTY(QVariantMap overlayConfig READ overlayConfig NOTIFY overlayConfigChanged)
+    Q_PROPERTY(bool overlayVisible READ overlayVisible NOTIFY overlayVisibleChanged)
 public:
     explicit QmlOverlayController(QObject *parent = nullptr)
         : QObject(parent)
     {
+        overlayConfig_ = loadOverlayPreferences();
         QDir().mkpath(QFileInfo(controlSocket()).absolutePath());
         QLocalServer::removeServer(controlSocket());
         server_ = new QLocalServer(this);
         if (server_->listen(controlSocket()))
             connect(server_, &QLocalServer::newConnection, this, &QmlOverlayController::commands);
-        QDBusConnection::systemBus().connect(
-            QStringLiteral("org.shadowblip.InputPlumber"),
-            QStringLiteral("/org/shadowblip/InputPlumber/devices/target/dbus0"),
-            QStringLiteral("org.shadowblip.Input.DBusDevice"),
-            QStringLiteral("InputEvent"), this, SLOT(onInputEvent(QString,double)));
-        request(QStringLiteral("set_overlay_activation"));
+        connectInputEvents();
+        inputDiscoveryTimer_.setInterval(5000);
+        connect(&inputDiscoveryTimer_, &QTimer::timeout, this, &QmlOverlayController::connectInputEvents);
+        inputDiscoveryTimer_.start();
+        request(QStringLiteral("set_overlay_activation"), {{QStringLiteral("chord"), activeChord()}});
     }
 
     ~QmlOverlayController() override
@@ -334,6 +413,8 @@ public:
 
     QVariantMap config() const { return config_; }
     QVariantMap fanState() const { return fanState_; }
+    QVariantMap overlayConfig() const { return overlayConfig_; }
+    bool overlayVisible() const { return overlayVisible_; }
 
     Q_INVOKABLE QVariantMap call(const QString &action, const QVariantMap &fields = {})
     {
@@ -392,6 +473,28 @@ public:
         }
     }
 
+    Q_INVOKABLE bool saveOverlayConfig(const QVariantMap &patch)
+    {
+        QVariantMap next = overlayConfig_;
+        for (auto it = patch.cbegin(); it != patch.cend(); ++it) {
+            if (next.contains(it.key()))
+                next.insert(it.key(), it.value());
+        }
+        if (!validOverlayPreferences(next))
+            return false;
+        QSaveFile file(overlayPreferencesFile());
+        if (!file.open(QIODevice::WriteOnly))
+            return false;
+        const QByteArray data = QJsonDocument::fromVariant(next).toJson(QJsonDocument::Indented);
+        if (file.write(data) != data.size() || !file.commit())
+            return false;
+        overlayConfig_ = next;
+        emit overlayConfigChanged();
+        applyOverlayActivation();
+        configureEdgeSensor();
+        return true;
+    }
+
     Q_INVOKABLE bool showOverlay()
     {
         if (!window_)
@@ -401,6 +504,9 @@ public:
             emit errorMessage(intercept.error);
             return false;
         }
+        overlayVisible_ = true;
+        emit overlayVisibleChanged();
+        window_->setMask(QRegion());
         window_->show();
         window_->raise();
         window_->requestActivate();
@@ -419,9 +525,11 @@ public:
             calibrationSessionActive_ = false;
         }
         request(QStringLiteral("inputplumber_intercept"), {{QStringLiteral("mode"), QStringLiteral("reset")} });
+        overlayVisible_ = false;
+        emit overlayVisibleChanged();
         if (window_) {
             restoreGamescopeOverlay(window_->winId());
-            window_->hide();
+            configureEdgeSensor();
         } else {
             cleanupGamescopeState();
         }
@@ -429,7 +537,7 @@ public:
 
     Q_INVOKABLE void toggleOverlay()
     {
-        if (window_ && window_->isVisible())
+        if (overlayVisible_)
             hideOverlay();
         else
             showOverlay();
@@ -445,9 +553,17 @@ public:
         }
     }
 
+    void prepareEdgeSensor()
+    {
+        edgeSensorReady_ = true;
+        configureEdgeSensor();
+    }
+
 signals:
     void configChanged();
     void fanStateChanged();
+    void overlayConfigChanged();
+    void overlayVisibleChanged();
     void inputAction(const QString &action);
     void errorMessage(const QString &message);
 
@@ -544,12 +660,78 @@ private slots:
     }
 
 private:
+    void connectInputEvents()
+    {
+        const QString nextPath = discoverInputEventPath();
+        if (nextPath == inputEventPath_)
+            return;
+        if (!inputEventPath_.isEmpty())
+            QDBusConnection::systemBus().disconnect(
+                QStringLiteral("org.shadowblip.InputPlumber"), inputEventPath_,
+                QStringLiteral("org.shadowblip.Input.DBusDevice"), QStringLiteral("InputEvent"),
+                this, SLOT(onInputEvent(QString,double)));
+        inputEventPath_ = nextPath;
+        if (!inputEventPath_.isEmpty())
+            QDBusConnection::systemBus().connect(
+                QStringLiteral("org.shadowblip.InputPlumber"), inputEventPath_,
+                QStringLiteral("org.shadowblip.Input.DBusDevice"), QStringLiteral("InputEvent"),
+                this, SLOT(onInputEvent(QString,double)));
+    }
+
+    QString activeChord() const
+    {
+        const QString key = overlayConfig_.value(QStringLiteral("layout")).toString() == QStringLiteral("side")
+            ? QStringLiteral("sideChord") : QStringLiteral("centeredChord");
+        return overlayConfig_.value(key).toString();
+    }
+
+    void applyOverlayActivation()
+    {
+        request(QStringLiteral("set_overlay_activation"), {{QStringLiteral("chord"), activeChord()}});
+    }
+
+    void configureEdgeSensor()
+    {
+        if (!window_)
+            return;
+        if (!edgeSensorReady_) {
+            if (!overlayVisible_)
+                window_->hide();
+            return;
+        }
+        if (overlayVisible_ || !overlayConfig_.value(QStringLiteral("swipeEnabled")).toBool()) {
+            window_->setMask(QRegion());
+            if (!overlayVisible_ && !overlayConfig_.value(QStringLiteral("swipeEnabled")).toBool())
+                window_->hide();
+            else
+                window_->show();
+            return;
+        }
+        const QRect bounds = window_->rect();
+        const int width = qBound(16, bounds.width() / 40, 48);
+        const QString edge = overlayConfig_.value(QStringLiteral("swipeEdge")).toString();
+        QRegion mask;
+        if (edge == QStringLiteral("left"))
+            mask = QRegion(0, 0, width, bounds.height());
+        else if (edge == QStringLiteral("right"))
+            mask = QRegion(bounds.width() - width, 0, width, bounds.height());
+        else
+            mask = QRegion(0, bounds.height() - width, bounds.width(), width);
+        window_->setMask(mask);
+        window_->show();
+    }
+
     QQuickWindow *window_ = nullptr;
     QLocalServer *server_ = nullptr;
     QVariantMap config_;
     QVariantMap fanState_;
+    QVariantMap overlayConfig_;
+    bool overlayVisible_ = false;
+    bool edgeSensorReady_ = false;
     QTimer compatibilityTimer_;
+    QTimer inputDiscoveryTimer_;
     QProcess compatibilityProcess_;
+    QString inputEventPath_;
     QString calibrationSessionToken_;
     bool calibrationSessionActive_ = false;
 };
@@ -587,6 +769,8 @@ int main(int argc, char **argv)
         return 1;
     controller.setWindow(window);
     controller.refresh();
+    if (persistent)
+        controller.prepareEdgeSensor();
     if (!persistent && command == QStringLiteral("--standalone"))
         controller.showOverlay();
     return app.exec();

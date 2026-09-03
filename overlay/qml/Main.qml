@@ -18,6 +18,10 @@ Window {
     property var pageTitles: ["Status", "Power", "Fans", "Games", "Compatibility", "Settings", "Calibration"]
     property var pageIcons: ["status.svg", "power.svg", "fans.svg", "games.svg", "compatibility.svg", "settings.svg", "calibration.svg"]
     property var pageComponents: [statusPage, powerPage, fansPage, gamePage, compatibilityPage, settingsPage, calibrationPage]
+    property bool sidePanel: String((armada.overlayConfig || {}).layout || "centered") === "side"
+    property bool swipeEnabled: Boolean((armada.overlayConfig || {}).swipeEnabled)
+    property string swipeEdge: String((armada.overlayConfig || {}).swipeEdge || "left")
+    property int swipeDistance: Number((armada.overlayConfig || {}).swipeDistance || 120)
 
     function showPage(index) {
         pageIndex = index;
@@ -93,15 +97,63 @@ Window {
         anchors.fill: parent
         color: theme.transparent
 
+        MouseArea {
+            id: edgeSwipe
+            anchors.fill: parent
+            enabled: !armada.overlayVisible && root.swipeEnabled
+            z: 0
+            property real startX: 0
+            property real startY: 0
+            property bool tracking: false
+            function edgeWidth() { return Math.max(16, Math.min(48, width / 40)); }
+            function startsAtEdge(x, y) {
+                var edge = edgeWidth();
+                if (root.swipeEdge === "left") return x <= edge;
+                if (root.swipeEdge === "right") return x >= width - edge;
+                return y >= height - edge;
+            }
+            onPressed: function(mouse) {
+                tracking = startsAtEdge(mouse.x, mouse.y);
+                if (tracking) {
+                    startX = mouse.x;
+                    startY = mouse.y;
+                }
+                mouse.accepted = tracking;
+            }
+            onReleased: function(mouse) {
+                if (!tracking) return;
+                var dx = mouse.x - startX;
+                var dy = mouse.y - startY;
+                var horizontal = Math.abs(dx) > Math.abs(dy);
+                var inward = root.swipeEdge === "left" ? dx >= root.swipeDistance
+                    : root.swipeEdge === "right" ? dx <= -root.swipeDistance
+                    : dy <= -root.swipeDistance;
+                tracking = false;
+                if ((root.swipeEdge === "bottom" || horizontal) && inward)
+                    armada.showOverlay();
+            }
+            onCanceled: tracking = false;
+        }
+
         Rectangle {
             id: panel
-            anchors.centerIn: parent
-            width: Math.min(880, parent.width - 40)
-            height: Math.min(760, parent.height - 32)
+            property real slideOffset: root.sidePanel && armada.overlayVisible ? 0 : width
+            anchors.verticalCenter: root.sidePanel ? undefined : parent.verticalCenter
+            anchors.horizontalCenter: root.sidePanel ? undefined : parent.horizontalCenter
+            anchors.right: root.sidePanel ? parent.right : undefined
+            anchors.top: root.sidePanel ? parent.top : undefined
+            anchors.bottom: root.sidePanel ? parent.bottom : undefined
+            width: root.sidePanel ? Math.min(parent.width, Math.max(360, Math.round(parent.width * 0.42))) : Math.min(880, parent.width - 40)
+            height: root.sidePanel ? parent.height : Math.min(760, parent.height - 32)
             color: theme.panel
             border.color: theme.panelRaised
             border.width: theme.borderWidth
             radius: theme.radius
+            visible: armada.overlayVisible || opacity > 0.01
+            opacity: armada.overlayVisible ? 1 : 0
+            transform: Translate { x: root.sidePanel ? panel.slideOffset : 0 }
+            Behavior on opacity { NumberAnimation { duration: theme.panelAnimationMs } }
+            Behavior on slideOffset { NumberAnimation { duration: theme.panelAnimationMs } }
 
             Item {
                 anchors.fill: parent

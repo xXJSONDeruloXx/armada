@@ -2,8 +2,61 @@
 set -eu
 
 service='org.shadowblip.InputPlumber'
-path='/org/shadowblip/InputPlumber/CompositeDevice0'
 iface='org.shadowblip.Input.CompositeDevice'
+
+composite_path() {
+  ordered=$(busctl --system get-property "$service" \
+    /org/shadowblip/InputPlumber/Manager org.shadowblip.InputManager GamepadOrder 2>/dev/null \
+    | sed 's/"/\n/g' | sed -n '/^\/org\/shadowblip\/InputPlumber\/CompositeDevice[0-9][0-9]*$/p' || true)
+  candidates="$ordered"
+  if [ -z "$candidates" ]; then
+    candidates=$(busctl --system tree "$service" 2>/dev/null \
+      | sed -n 's#.*\(/org/shadowblip/InputPlumber/CompositeDevice[0-9][0-9]*\).*#\1#p' \
+      | sort -u || true)
+  fi
+  for candidate in $candidates; do
+    if busctl --system get-property "$service" "$candidate" "$iface" DbusDevices 2>/dev/null \
+      | grep -q '/org/shadowblip/InputPlumber/devices/target/dbus'; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
+  return 1
+}
+
+if ! path=$(composite_path); then
+  echo "no InputPlumber composite DBus target" >&2
+  exit 1
+fi
+
+activation() {
+  case "${1:-start_select}" in
+    start_select)
+      busctl --system call "$service" "$path" "$iface" SetInterceptActivation \
+        ass 2 Gamepad:Button:Start Gamepad:Button:Select Gamepad:Button:Guide
+      ;;
+    guide)
+      busctl --system call "$service" "$path" "$iface" SetInterceptActivation \
+        ass 1 Gamepad:Button:Guide Gamepad:Button:Guide
+      ;;
+    quick_access)
+      busctl --system call "$service" "$path" "$iface" SetInterceptActivation \
+        ass 1 Gamepad:Button:QuickAccess Gamepad:Button:Guide
+      ;;
+    select_l1)
+      busctl --system call "$service" "$path" "$iface" SetInterceptActivation \
+        ass 2 Gamepad:Button:Select Gamepad:Button:LeftBumper Gamepad:Button:Guide
+      ;;
+    select_r1)
+      busctl --system call "$service" "$path" "$iface" SetInterceptActivation \
+        ass 2 Gamepad:Button:Select Gamepad:Button:RightBumper Gamepad:Button:Guide
+      ;;
+    *)
+      echo "invalid activation chord" >&2
+      return 2
+      ;;
+  esac
+}
 
 case "${1:-}" in
   status)
@@ -18,12 +71,9 @@ case "${1:-}" in
   reset)
     busctl --system set-property "$service" "$path" "$iface" InterceptMode u 0
     ;;
-  activation)
-    busctl --system call "$service" "$path" "$iface" SetInterceptActivation \
-      ass 2 Gamepad:Button:Start Gamepad:Button:Select Gamepad:Button:Guide
-    ;;
+  activation) activation "${2:-start_select}" ;;
   *)
-    echo "usage: inputplumber-intercept status|overlay|gamepad|reset|activation" >&2
+    echo "usage: inputplumber-intercept status|overlay|gamepad|reset|activation [chord]" >&2
     exit 2
     ;;
 esac

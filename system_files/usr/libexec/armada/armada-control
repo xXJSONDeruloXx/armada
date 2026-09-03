@@ -34,6 +34,7 @@ MAX_REQUEST = 1024 * 1024
 CLIENT_TIMEOUT = 5
 CONTROLLER_TYPES = {"deck-uhid", "xb360", "ds5"}
 INTERCEPT_MODES = {"overlay", "reset"}
+OVERLAY_CHORDS = {"start_select", "guide", "quick_access", "select_l1", "select_r1"}
 SLEEP_CONFIG = Path("/etc/armada/sleep.conf")
 SUSPEND_MODE_KEY = "suspend_mode"
 NM_IGNORE_SLEEP = Path("/etc/NetworkManager/ignore-sleep")
@@ -367,7 +368,10 @@ def action_inputplumber_intercept(request):
 
 
 def action_set_overlay_activation(request):
-    run([INPUTPLUMBER_HELPER, "activation"], timeout=5)
+    chord = str(request.get("chord", "start_select"))
+    if chord not in OVERLAY_CHORDS:
+        raise ValueError("invalid overlay activation chord")
+    run([INPUTPLUMBER_HELPER, "activation", chord], timeout=5)
     return {"ok": True}
 
 

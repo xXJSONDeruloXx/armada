@@ -19,6 +19,26 @@ Item {
     }
 
     function options(key) { return armada.config[key] || []; }
+    function overlayOptions(key) {
+        return key === "layout"
+            ? [{data: "centered", label: "Centered panel"}, {data: "side", label: "Right slide-out"}]
+            : key === "chord"
+                ? [{data: "start_select", label: "Start + Select"},
+                   {data: "guide", label: "Guide"},
+                   {data: "quick_access", label: "Quick Access"},
+                   {data: "select_l1", label: "Select + L1"},
+                   {data: "select_r1", label: "Select + R1"}]
+                : [{data: "left", label: "Left edge"}, {data: "right", label: "Right edge"}, {data: "bottom", label: "Bottom edge"}];
+    }
+    function overlayValue(key, fallback) { return (armada.overlayConfig || {})[key] || fallback; }
+    function saveOverlay(patch) {
+        if (armada.saveOverlayConfig(patch)) {
+            statusText = "Saved";
+            rebuildRows();
+        } else {
+            statusText = "Overlay setting unavailable";
+        }
+    }
     function optionValue(item) { return item && item.data !== undefined ? item.data : String(item); }
     function optionLabel(item) { return item && item.label !== undefined ? item.label : optionValue(item); }
     function currentOption(key, fallback) { return armada.config[key] || fallback; }
@@ -101,7 +121,9 @@ Item {
         rows.forEach(function(item, index) { item.selected = index === focusIndex; });
     }
     function rebuildRows() {
-        rows = [controllerRow, calibrationRow, sshRow, osRow, ablVersionRow];
+        rows = [overlayLayoutRow, centeredChordRow, sideChordRow, swipeEnabledRow];
+        if (overlayValue("swipeEnabled", true)) rows.push(swipeEdgeRow);
+        rows = rows.concat([controllerRow, calibrationRow, sshRow, osRow, ablVersionRow]);
         if (options("sleepModes").length > 1) rows.push(sleepRow);
         if (options("desktopModes").length > 1) rows.push(desktopRow);
         rows.push(mtpRow, ablRow);
@@ -114,7 +136,11 @@ Item {
         if (reply.ok && reply.result) rgb = reply.result;
         rebuildRows();
     }
-    Connections { target: armada; function onConfigChanged() { root.rebuildRows(); root.loadRgb(); } }
+    Connections {
+        target: armada
+        function onConfigChanged() { root.rebuildRows(); root.loadRgb(); }
+        function onOverlayConfigChanged() { root.rebuildRows(); }
+    }
     Component.onCompleted: { rebuildRows(); loadRgb(); }
 
     ScrollView {
@@ -125,6 +151,56 @@ Item {
             spacing: theme.spacing
             Text { text: "Settings"; color: theme.text; font.pixelSize: theme.pageTitleSize }
             Text { text: "Controller, system, and experimental controls"; color: theme.muted; font.pixelSize: theme.bodySize; wrapMode: Text.WordWrap; width: parent.width }
+            SelectRow {
+                id: overlayLayoutRow
+                width: parent.width
+                title: "Overlay layout"
+                options: root.overlayOptions("layout")
+                currentValue: root.overlayValue("layout", "centered")
+                theme: root.theme
+                focusOwner: root
+                onValueEdited: root.saveOverlay({layout: value})
+            }
+            SelectRow {
+                id: centeredChordRow
+                width: parent.width
+                title: "Centered activation"
+                options: root.overlayOptions("chord")
+                currentValue: root.overlayValue("centeredChord", "start_select")
+                theme: root.theme
+                focusOwner: root
+                onValueEdited: root.saveOverlay({centeredChord: value})
+            }
+            SelectRow {
+                id: sideChordRow
+                width: parent.width
+                title: "Slide-out activation"
+                options: root.overlayOptions("chord")
+                currentValue: root.overlayValue("sideChord", "start_select")
+                theme: root.theme
+                focusOwner: root
+                onValueEdited: root.saveOverlay({sideChord: value})
+            }
+            ToggleRow {
+                id: swipeEnabledRow
+                width: parent.width
+                title: "Edge swipe to open"
+                checked: Boolean(root.overlayValue("swipeEnabled", true))
+                theme: root.theme
+                focusOwner: root
+                onToggled: root.saveOverlay({swipeEnabled: checked})
+            }
+            SelectRow {
+                id: swipeEdgeRow
+                visible: Boolean(root.overlayValue("swipeEnabled", true))
+                width: parent.width
+                title: "Swipe edge"
+                options: root.overlayOptions("edge")
+                currentValue: root.overlayValue("swipeEdge", "left")
+                theme: root.theme
+                focusOwner: root
+                onValueEdited: root.saveOverlay({swipeEdge: value})
+            }
             SelectRow {
                 id: controllerRow
                 width: parent.width

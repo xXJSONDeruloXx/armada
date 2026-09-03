@@ -22,4 +22,5 @@ QtObject {
     readonly property int bodySize: 20
     readonly property int replaceEnterMs: 100
     readonly property int replaceExitMs: 60
+    readonly property int panelAnimationMs: 160
 }
