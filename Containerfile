@@ -52,12 +52,6 @@ RUN npm ci
 COPY decky/armada-store/ ./
 RUN npm run build
 
-FROM ${BASE_IMAGE} AS overlay-build
-RUN dnf5 -y install --setopt=install_weak_deps=False cmake gcc-c++ make qt6-qtbase-devel qt6-qtdeclarative-devel
-WORKDIR /build/overlay
-COPY overlay/ ./
-RUN cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build --parallel && cmake --install build --prefix /build/overlay/install
-
 # Optional OGUI image variant. The default Armada image does not build or start
 # OGUI until the alternate-session path has passed physical acceptance.
 FROM --platform=${OGUI_BUILDER_PLATFORM} ghcr.io/shadowblip/opengamepadui-builder:latest AS ogui-build
@@ -102,7 +96,6 @@ RUN --mount=type=bind,from=ctx,source=/,target=/ctx \
     --mount=type=bind,from=umtp-responder,source=/rpms,target=/packages/umtp-responder \
     --mount=type=bind,from=decky-build,source=/build/armada-control/dist,target=/packages/decky-dist \
     --mount=type=bind,from=decky-build,source=/build/armada-store/dist,target=/packages/decky-store-dist \
-    --mount=type=bind,from=overlay-build,source=/build/overlay/install,target=/packages/overlay-build \
     --mount=type=cache,dst=/var/cache \
     --mount=type=cache,dst=/var/log \
     --mount=type=tmpfs,dst=/tmp \
@@ -134,5 +127,4 @@ FROM armada AS armada-ogui
 COPY --from=ogui-build /build/ogui-out/ /usr/share/armada/ogui/
 COPY docs/ogui-spike-v046/armada-opengamepadui /usr/bin/armada-opengamepadui
 RUN chmod 0755 /usr/bin/armada-opengamepadui
-RUN systemctl --global disable armada-control-overlay.service || true; \
-    systemctl --global enable armada-opengamepadui.service armada-overlay-gestures.service
+RUN systemctl --global enable armada-opengamepadui.service

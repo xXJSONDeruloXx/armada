@@ -33,18 +33,10 @@ required = {
     "save_calibration", "get_rgb", "set_rgb", "set_controller_type",
     "set_ssh_enabled", "set_mtp_enabled", "set_abl_auto_enabled",
     "inputplumber_intercept", "reapply_perf", "restart_game_mode",
-    "set_overlay_activation",
 }
 assert required <= actions.keys(), sorted(required - actions.keys())
 assert service.overlay_actions()["get_capabilities"]({})["api"] == 1
 assert service.overlay_actions()["get_runtime_game"]({}) is None
-assert service.OVERLAY_CHORDS == {"start_select", "guide", "quick_access", "select_l1", "select_r1"}
-try:
-    service.handle_overlay({"action": "set_overlay_activation", "chord": "arbitrary"})
-except ValueError as exc:
-    assert str(exc) == "invalid overlay activation chord"
-else:
-    raise AssertionError("overlay API accepted an arbitrary activation chord")
 
 try:
     service.handle_overlay({"action": "root_only_maintenance"})
@@ -65,17 +57,6 @@ with tempfile.TemporaryDirectory() as directory:
         path.unlink()
 PYEOF
 
-grep -Fq 'ExecStart=/usr/bin/armada-control-overlay --persistent' \
-    "$ROOT/system_files/usr/lib/systemd/user/armada-control-overlay.service"
-if grep -Fq 'Environment=DISPLAY=:0' \
-    "$ROOT/system_files/usr/lib/systemd/user/armada-control-overlay.service"; then
-    echo "unexpected hard-coded Gamescope display" >&2
-    exit 1
-fi
-grep -Fq 'ExecStopPost=-/usr/libexec/armada/inputplumber-intercept reset' \
-    "$ROOT/system_files/usr/lib/systemd/user/armada-control-overlay.service"
-grep -Fq 'armada-overlay-gestures.service' "$ROOT/build_files/40-vendor-system-files.sh"
-test -x "$ROOT/system_files/usr/libexec/armada/overlay-gestures"
 test -x "$ROOT/system_files/usr/libexec/armada/armada-overlay-call"
 test -x "$ROOT/system_files/usr/libexec/armada/armada-steam-call"
 grep -Fq 'armada-steam-call' "$ROOT/docs/ogui-spike-v046/backend.gd"
@@ -83,7 +64,6 @@ grep -Fq 'armada-overlay-call' "$ROOT/system_files/usr/libexec/armada/armada-ove
 grep -Fq 'inputplumber-intercept reset' "$ROOT/docs/ogui-spike-v046/armada-opengamepadui"
 grep -Fq 'opengamepadui.pid' "$ROOT/docs/ogui-spike-v046/armada-opengamepadui"
 grep -Fq 'SendButtonChord' "$ROOT/system_files/usr/libexec/armada/inputplumber-intercept"
-grep -Fq 'ogui_runtime_active' "$ROOT/system_files/usr/libexec/armada/overlay-gestures"
 if grep -Fq 'exec /usr/share/armada/ogui/opengamepad-ui.aarch64' "$ROOT/docs/ogui-spike-v046/armada-opengamepadui"; then
     echo "OGUI launcher bypasses cleanup trap" >&2
     exit 1
@@ -179,25 +159,14 @@ grep -Fq 'if not values.is_empty():' "$ROOT/docs/ogui-spike-v046/quick_bar.gd"
 grep -Fq '_hide_component_description' "$ROOT/docs/ogui-spike-v046/quick_bar.gd"
 grep -Fq 'func _exit_tree' "$ROOT/docs/ogui-spike-v046/plugin.gd"
 grep -Fq 'Guide+B' "$ROOT/docs/ogui-spike-v046/README.md"
-grep -Fq 'PartOf=armada-control-overlay.service' "$ROOT/system_files/usr/lib/systemd/user/armada-overlay-gestures.service"
-grep -Fq 'PartOf=armada-control-overlay.service armada-opengamepadui.service' \
-    "$ROOT/system_files/usr/lib/systemd/user/armada-overlay-gestures.service"
 test -f "$ROOT/system_files/usr/lib/systemd/user/armada-opengamepadui.service"
 grep -Fq 'ExecStart=/usr/bin/armada-opengamepadui --overlay-mode' \
     "$ROOT/system_files/usr/lib/systemd/user/armada-opengamepadui.service"
-grep -Fq 'disable armada-control-overlay.service' "$ROOT/Containerfile"
 grep -Fq 'enable armada-opengamepadui.service' "$ROOT/Containerfile"
-grep -Fq -- '--cleanup' "$ROOT/system_files/usr/lib/systemd/user/armada-control-overlay.service"
-grep -Fq 'ExecStartPre=-/usr/bin/armada-control-overlay --cleanup' \
-    "$ROOT/system_files/usr/lib/systemd/user/armada-control-overlay.service"
-grep -Fq 'After=gamescope-session-plus@steam.service' \
-    "$ROOT/system_files/usr/lib/systemd/user/armada-control-overlay.service"
 grep -Fq 'qt6-qtbase-gui' "$ROOT/build_files/10-base-packages.sh"
 grep -Fq 'qt6-qtdeclarative' "$ROOT/build_files/10-base-packages.sh"
 grep -Fq 'qt6-qtsvg' "$ROOT/build_files/10-base-packages.sh"
 grep -Fq 'xcb-util-cursor' "$ROOT/build_files/10-base-packages.sh"
-grep -Fq 'armada-control-overlay' "$ROOT/build_files/40-vendor-system-files.sh"
-grep -Fq '/usr/share/armada/overlay' "$ROOT/build_files/40-vendor-system-files.sh"
 grep -Fq 'AS ogui-build' "$ROOT/Containerfile"
 grep -Fq 'AS armada-ogui' "$ROOT/Containerfile"
 grep -Fq 'ARMADA_OGUI_IN_BUILDER=1' "$ROOT/Containerfile"
@@ -218,120 +187,9 @@ if grep -Fq "path='/org/shadowblip/InputPlumber/CompositeDevice0'" "$ROOT/system
 fi
 grep -Fq 'start_select' "$ROOT/system_files/usr/libexec/armada/inputplumber-intercept"
 grep -Fq 'select_l1' "$ROOT/system_files/usr/libexec/armada/inputplumber-intercept"
-grep -Fq 'OVERLAY_CHORDS' "$ROOT/system_files/usr/libexec/armada/armada-control"
 grep -Fq 'INTERCEPT_MODES = {"pass", "overlay", "reset"}' "$ROOT/system_files/usr/libexec/armada/armada-control"
-grep -Fq -- '--standalone' "$ROOT/system_files/usr/share/applications/armada-control-overlay.desktop"
-grep -Fq 'STEAM_OVERLAY' "$ROOT/overlay/main.cpp"
-grep -Fq 'STEAM_INPUT_FOCUS' "$ROOT/overlay/main.cpp"
-grep -Fq 'StackView' "$ROOT/overlay/qml/Main.qml"
-grep -Fq 'anchors.left: navigation.right' "$ROOT/overlay/qml/Main.qml"
-grep -Fq 'root.navigationActive = false' "$ROOT/overlay/qml/Main.qml"
-grep -Fq 'SettingsPage' "$ROOT/overlay/qml/Main.qml"
-grep -Fq 'CalibrationPage' "$ROOT/overlay/qml/Main.qml"
-grep -Fq 'GamePage' "$ROOT/overlay/qml/Main.qml"
-grep -Fq 'CompatibilityPage' "$ROOT/overlay/qml/Main.qml"
-grep -Fq 'transparent' "$ROOT/overlay/qml/Main.qml"
-grep -Fq 'property color scrim' "$ROOT/overlay/qml/Theme.qml"
-if rg -n 'color: "#[0-9A-Fa-f]' "$ROOT/overlay/qml" -g '*.qml' -g '!Theme.qml'; then
-    echo "unexpected literal QML color outside Theme.qml" >&2
-    exit 1
-fi
-grep -Fq 'save_power_config' "$ROOT/overlay/qml/Main.qml"
-grep -Fq 'save_calibration' "$ROOT/overlay/qml/CalibrationPage.qml"
-grep -Fq 'set_sleep_mode' "$ROOT/overlay/qml/SettingsPage.qml"
-grep -Fq 'save_tweaks' "$ROOT/overlay/qml/GamePage.qml"
-grep -Fq 'FEX preset' "$ROOT/overlay/qml/GamePage.qml"
-grep -Fq 'reapply_perf' "$ROOT/overlay/qml/GamePage.qml"
-grep -Fq 'environmentMode' "$ROOT/overlay/qml/GamePage.qml"
-grep -Fq 'get_global_compat_tools' "$ROOT/overlay/qml/CompatibilityPage.qml"
-grep -Fq 'set_launch_options' "$ROOT/overlay/qml/CompatibilityPage.qml"
-grep -Fq 'reset_game' "$ROOT/overlay/qml/CompatibilityPage.qml"
-grep -Fq 'get_current_temp' "$ROOT/overlay/qml/Main.qml"
-grep -Fq 'Canvas' "$ROOT/overlay/qml/Main.qml"
-grep -Fq 'Reset curve to factory' "$ROOT/overlay/qml/Main.qml"
-grep -Fq 'Fix minimum PWM' "$ROOT/overlay/qml/Main.qml"
-grep -Fq 'Fan stop temperature' "$ROOT/overlay/qml/Main.qml"
-grep -Fq 'setGraphPoint' "$ROOT/overlay/qml/Main.qml"
-grep -Fq 'preventStealing' "$ROOT/overlay/qml/Main.qml"
-grep -Fq 'Create fan curve' "$ROOT/overlay/qml/Main.qml"
-grep -Fq 'curveSlug' "$ROOT/overlay/qml/Main.qml"
-grep -Fq 'steamCall' "$ROOT/overlay/qml/CompatibilityPage.qml"
 grep -Fq 'SetAppLaunchOptions' "$ROOT/system_files/usr/libexec/armada/steam-bridge"
 grep -Fq 'sweep_compat' "$ROOT/system_files/usr/libexec/armada/steam-bridge"
 grep -Fq 'migrate_compat' "$ROOT/system_files/usr/libexec/armada/steam-bridge"
-grep -Fq 'get_compat_mapped_appids' "$ROOT/overlay/qml/CompatibilityPage.qml"
-grep -Fq 'Enter AppID manually' "$ROOT/overlay/qml/CompatibilityPage.qml"
-grep -Fq 'targetOptions' "$ROOT/overlay/qml/CompatibilityPage.qml"
-grep -Fq 'compatibilitySweep' "$ROOT/overlay/main.cpp"
-grep -Fq 'compatibilityProcess_' "$ROOT/overlay/main.cpp"
-grep -Fq 'python3-websocket-client' "$ROOT/build_files/10-base-packages.sh"
-grep -Fq 'FROM ${BASE_IMAGE} AS overlay-build' "$ROOT/Containerfile"
-grep -Fq 'COPY overlay/ ./' "$ROOT/Containerfile"
-grep -Fq 'cmake --install build --prefix /build/overlay/install' "$ROOT/Containerfile"
-grep -Fq 'source=/build/overlay/install,target=/packages/overlay-build' "$ROOT/Containerfile"
-test "$(grep -n 'WORKDIR /build/armada-store' "$ROOT/Containerfile" | cut -d: -f1)" -lt \
-    "$(grep -n 'FROM ${BASE_IMAGE} AS overlay-build' "$ROOT/Containerfile" | cut -d: -f1)"
-grep -Fq 'QQmlApplicationEngine' "$ROOT/overlay/main.cpp"
-grep -Fq 'inputAction' "$ROOT/overlay/main.cpp"
-grep -Fq 'ui_up' "$ROOT/overlay/main.cpp"
-grep -Fq 'ui_accept' "$ROOT/overlay/main.cpp"
-grep -Fq 'ui_guide' "$ROOT/overlay/main.cpp"
-grep -Fq 'Gamepad:Button:QuickAccess' "$ROOT/overlay/main.cpp"
-grep -Fq 'GamepadOrder' "$ROOT/overlay/main.cpp"
-grep -Fq 'DbusDevices' "$ROOT/overlay/main.cpp"
-grep -Fq 'org.freedesktop.DBus.Properties' "$ROOT/overlay/main.cpp"
-grep -Fq 'qvariant_cast<QDBusVariant>' "$ROOT/overlay/main.cpp"
-if grep -Fq 'devices/target/dbus0' "$ROOT/overlay/main.cpp"; then
-    echo "overlay still hard-codes the InputPlumber DBus target" >&2
-    exit 1
-fi
-grep -Fq 'navigationActive' "$ROOT/overlay/qml/Main.qml"
-grep -Fq 'Qt.callLater(function() { navigation.forceActiveFocus(); })' "$ROOT/overlay/qml/Main.qml"
-grep -Fq 'focus: false' "$ROOT/overlay/qml/FocusRow.qml"
-grep -Fq 'sidePanel' "$ROOT/overlay/qml/Main.qml"
-grep -Fq 'overlay-gestures' "$ROOT/tests/armada-overlay-gestures-test.sh"
-grep -Fq 'panelAnimationMs' "$ROOT/overlay/qml/Theme.qml"
-grep -Fq 'saveOverlayConfig' "$ROOT/overlay/main.cpp"
-grep -Fq 'QStringLiteral("pass")' "$ROOT/overlay/main.cpp"
-grep -Fq 'activationReady_' "$ROOT/overlay/main.cpp"
-grep -Fq 'overlayVisible' "$ROOT/overlay/main.cpp"
-grep -Fq 'centeredChord' "$ROOT/overlay/qml/SettingsPage.qml"
-grep -Fq 'sideChord' "$ROOT/overlay/qml/SettingsPage.qml"
-grep -Fq 'Edge swipe to open' "$ROOT/overlay/qml/SettingsPage.qml"
-grep -Fq 'config[key] !== undefined' "$ROOT/overlay/qml/SettingsPage.qml"
-grep -Fq 'onErrorMessage' "$ROOT/overlay/qml/Main.qml"
-grep -Fq 'property color error' "$ROOT/overlay/qml/Theme.qml"
-grep -Fq 'property int bodySize: 23' "$ROOT/overlay/qml/Theme.qml"
-grep -Fq 'property color rowFocused: "#1A9FFF"' "$ROOT/overlay/qml/Theme.qml"
-grep -Fq 'focusRecoveryTimer_' "$ROOT/overlay/main.cpp"
-grep -Fq 'acceptedButtons: Qt.AllButtons' "$ROOT/overlay/qml/Main.qml"
-grep -Fq 'QDir::AllEntries' "$ROOT/overlay/main.cpp"
-grep -Fq 'pageIcons' "$ROOT/overlay/qml/Main.qml"
-grep -Fq 'property var backend: armada' "$ROOT/overlay/qml/Main.qml"
-grep -Fq 'armada: root.backend' "$ROOT/overlay/qml/Main.qml"
-grep -Fq 'font.pixelSize: root.theme.bodySize' "$ROOT/overlay/qml/FocusRow.qml"
-for control in SelectRow SliderRow ToggleRow; do
-    test -f "$ROOT/overlay/qml/$control.qml"
-    grep -Fq "import QtQuick.Controls" "$ROOT/overlay/qml/$control.qml"
-done
-grep -Fq 'navigationActive' "$ROOT/overlay/qml/Main.qml"
-grep -Fq 'SliderRow' "$ROOT/overlay/qml/Main.qml"
-grep -Fq 'ToggleRow' "$ROOT/overlay/qml/SettingsPage.qml"
-grep -Fq 'SelectRow' "$ROOT/overlay/qml/CompatibilityPage.qml"
-grep -Fq 'SelectRow' "$ROOT/overlay/qml/GamePage.qml"
-grep -Fq 'SliderRow' "$ROOT/overlay/qml/GamePage.qml"
-grep -Fq 'ToggleRow' "$ROOT/overlay/qml/GamePage.qml"
-grep -Fq 'onPressedChanged' "$ROOT/overlay/qml/SelectRow.qml"
-grep -Fq 'property bool popupOpen' "$ROOT/overlay/qml/SelectRow.qml"
-grep -Fq 'function handleAction(action)' "$ROOT/overlay/qml/SelectRow.qml"
-grep -Fq 'target: selector.popup' "$ROOT/overlay/qml/SelectRow.qml"
-grep -Fq 'handlePopupAction(action)' "$ROOT/overlay/qml/Main.qml"
-grep -Fq 'onPressedChanged' "$ROOT/overlay/qml/SliderRow.qml"
-grep -Fq 'onPressedChanged' "$ROOT/overlay/qml/ToggleRow.qml"
-grep -Fq 'Vulkan realtime queue' "$ROOT/overlay/qml/GamePage.qml"
-grep -Fq 'Reset all game compatibility' "$ROOT/overlay/qml/CompatibilityPage.qml"
-for icon in status power fans games settings calibration; do
-    test -f "$ROOT/overlay/qml/icons/$icon.svg"
-done
 
 printf 'Armada overlay API tests passed\n'

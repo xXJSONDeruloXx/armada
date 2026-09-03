@@ -1,7 +1,0 @@
-[Desktop Entry]
-Type=Application
-Name=Armada Control
-Comment=Open Armada Control
-Exec=/usr/bin/armada-control-overlay --standalone
-Terminal=false
-Categories=Settings;System;

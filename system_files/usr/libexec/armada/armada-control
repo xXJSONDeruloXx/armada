@@ -34,7 +34,6 @@ MAX_REQUEST = 1024 * 1024
 CLIENT_TIMEOUT = 5
 CONTROLLER_TYPES = {"deck-uhid", "xb360", "ds5"}
 INTERCEPT_MODES = {"pass", "overlay", "reset"}
-OVERLAY_CHORDS = {"start_select", "guide", "quick_access", "select_l1", "select_r1"}
 SLEEP_CONFIG = Path("/etc/armada/sleep.conf")
 SUSPEND_MODE_KEY = "suspend_mode"
 NM_IGNORE_SLEEP = Path("/etc/NetworkManager/ignore-sleep")
@@ -364,14 +363,6 @@ def action_inputplumber_intercept(request):
     if mode not in INTERCEPT_MODES:
         raise ValueError("invalid intercept mode")
     run([INPUTPLUMBER_HELPER, mode], timeout=5)
-    return {"ok": True}
-
-
-def action_set_overlay_activation(request):
-    chord = str(request.get("chord", "start_select"))
-    if chord not in OVERLAY_CHORDS:
-        raise ValueError("invalid overlay activation chord")
-    run([INPUTPLUMBER_HELPER, "activation", chord], timeout=5)
     return {"ok": True}
 
 
@@ -791,7 +782,6 @@ def overlay_actions():
         "get_device_env": action_get_device_env,
         "get_abl_version": action_get_abl_version,
         "inputplumber_intercept": action_inputplumber_intercept,
-        "set_overlay_activation": action_set_overlay_activation,
         "reapply_perf": action_reapply_perf,
         "restart_game_mode": action_restart_game_mode,
     }
