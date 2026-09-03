@@ -1,7 +1,7 @@
 {
   "plugin.id": "armada-control",
   "plugin.name": "Armada Control",
-  "plugin.version": "0.1.23",
+  "plugin.version": "0.1.24",
   "plugin.min-api-version": "2.0.0",
   "plugin.link": "https://github.com/armada-os/armada",
   "plugin.source": "https://github.com/armada-os/armada/tree/feat/armada-ogui-overlay/docs/ogui-spike-v046",
