@@ -2,6 +2,7 @@ extends Control
 
 const CARD_BUTTON_SETTING := preload("res://core/ui/components/card_button_setting.tscn")
 const DROPDOWN := preload("res://core/ui/components/dropdown.tscn")
+const QUICK_BAR_CARD := preload("res://core/ui/card_ui/quick_bar/qb_card.tscn")
 const SLIDER := preload("res://core/ui/components/slider.tscn")
 const TOGGLE := preload("res://core/ui/components/toggle.tscn")
 const BODY_LABELS := preload("res://plugins/armada-control/ogui-body-label.tres")
@@ -13,6 +14,9 @@ var selected_profile := "balanced"
 var cpu_slider: ValueSlider
 var gpu_min_slider: ValueSlider
 var gpu_slider: ValueSlider
+var fan_curve_dropdown: Dropdown
+var governor_dropdown: Dropdown
+var underclock_dropdown: Dropdown
 var status_label: Label
 var fan_state: Dictionary = {}
 var current_appid := ""
@@ -69,17 +73,31 @@ func _build() -> void:
     status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
     content.add_child(status_label)
 
-    _build_power(content)
-    _build_fans(content)
-    _build_games(content)
-    _build_compatibility(content)
-    _build_system(content)
-    _build_actions(content)
+    _section(content, "Power", _build_power)
+    _section(content, "Fans", _build_fans)
+    _section(content, "Games", _build_games)
+    _section(content, "Compatibility", _build_compatibility)
+    _section(content, "System", _build_system)
+    _section(content, "Actions", _build_actions)
     _update_status()
 
     var focus_group := FocusGroup.new()
     focus_group.current_focus = _first_focusable(content)
     add_child(focus_group)
+
+
+func _section(parent: Container, title: String, builder: Callable) -> void:
+    var card := QUICK_BAR_CARD.instantiate() as QuickBarCard
+    card.title = title
+
+    var content := VBoxContainer.new()
+    card.add_content(content)
+    builder.call(content)
+
+    var focus_group := FocusGroup.new()
+    focus_group.current_focus = _first_focusable(content)
+    content.add_child(focus_group)
+    parent.add_child(card)
 
 
 func _build_power(parent: Container) -> void:
@@ -98,19 +116,28 @@ func _build_power(parent: Container) -> void:
     _dropdown(parent, "Power profile", options, selected_profile, _select_profile)
 
     var profile: Dictionary = profiles.get(selected_profile, {})
-    cpu_slider = _slider(parent, "CPU maximum", _percent(profile.get("cpu_max", "1.0")), 35, 100, func(value): _save_profile_limit("cpu_max", value / 100.0))
+    var device_class := String(config.get("cpuDeviceClass", ""))
+    var underclock_sets: Dictionary = power.get("underclocks", {})
+    var underclocks: Dictionary = underclock_sets.get(device_class, {})
+    if not underclocks.is_empty():
+        var underclock_options: Array = [{"data": "none", "label": "None"}]
+        for name in underclocks:
+            underclock_options.append({"data": name, "label": String(name).capitalize()})
+        underclock_dropdown = _dropdown(parent, "CPU underclock", underclock_options, String(profile.get("cpu_underclock", "none")), func(value): _save_profile_value("cpu_underclock", value))
+    else:
+        cpu_slider = _slider(parent, "CPU maximum", _percent(profile.get("cpu_max", "1.0")), 35, 100, func(value): _save_profile_limit("cpu_max", value / 100.0))
     gpu_min_slider = _slider(parent, "GPU minimum", _percent(profile.get("gpu_min", "0.0")), 0, 100, func(value): _save_profile_limit("gpu_min", value / 100.0))
     gpu_slider = _slider(parent, "GPU maximum", _percent(profile.get("gpu_max", "1.0")), 35, 100, func(value): _save_profile_limit("gpu_max", value / 100.0))
     var curves: Array = []
     for name in power.get("fan_curves", {}):
         curves.append({"data": name, "label": String(power["fan_curves"][name].get("label", name))})
     if not curves.is_empty():
-        _dropdown(parent, "Fan curve", curves, String(profile.get("fan_curve", curves[0]["data"])), func(value): _save_profile_value("fan_curve", value))
+        fan_curve_dropdown = _dropdown(parent, "Fan curve", curves, String(profile.get("fan_curve", curves[0]["data"])), func(value): _save_profile_value("fan_curve", value))
     var governors: Array = []
     for name in config.get("perf", {}).get("governors", []):
         governors.append({"data": name, "label": name})
     if not governors.is_empty():
-        _dropdown(parent, "CPU governor", governors, String(profile.get("cpu_governor", governors[0]["data"])), func(value): _save_profile_value("cpu_governor", value))
+        governor_dropdown = _dropdown(parent, "CPU governor", governors, String(profile.get("cpu_governor", governors[0]["data"])), func(value): _save_profile_value("cpu_governor", value))
 
 
 func _build_system(parent: Container) -> void:
@@ -155,8 +182,10 @@ func _build_fans(parent: Container) -> void:
         temperature.text = "Fan temperature: %s °C" % current_temp
         temperature.label_settings = BODY_LABELS
         parent.add_child(temperature)
-    _slider(parent, "Fan smoothing", float(settings.get("smoothing", 0.0)), 0, 1, func(value): _stage_fan_setting("smoothing", value))
-    _slider(parent, "Minimum fan PWM", float(settings.get("min_pwm", 0)), 0, 255, func(value): _stage_fan_setting("min_pwm", value))
+    _slider(parent, "Ramp up", float(settings.get("ramp_up", 36)), 1, 255, func(value): _stage_fan_setting("ramp_up", value))
+    _slider(parent, "Ramp down", float(settings.get("ramp_down", 6)), 1, 255, func(value): _stage_fan_setting("ramp_down", value))
+    _slider(parent, "Smoothing (%)", roundi(float(settings.get("smoothing", 0.0)) * 100.0), 0, 99, func(value): _stage_fan_setting("smoothing", value / 100.0))
+    _slider(parent, "Min fan speed (%)", roundi(float(settings.get("min_pwm", 0)) / 255.0 * 100.0), 0, 100, func(value): _stage_fan_setting("min_pwm", roundi(value / 100.0 * 255.0)))
     _action(parent, "Save fan settings", _save_fans)
 
 
@@ -304,25 +333,41 @@ func _action(parent: Container, text: String, callback: Callable) -> CardButtonS
     return setting
 
 
-func _dropdown(parent: Container, title: String, options: Array, selected_value: String, callback: Callable) -> void:
+func _dropdown(parent: Container, title: String, options: Array, selected_value: String, callback: Callable) -> Dropdown:
     var dropdown := DROPDOWN.instantiate() as Dropdown
     dropdown.title = title
     parent.add_child(dropdown)
-    var selected_index := 0
-    for index in options.size():
-        var option = options[index]
-        var value := String(option.get("data", option)) if option is Dictionary else String(option)
-        var label := String(option.get("label", value)) if option is Dictionary else value
-        dropdown.add_item(label)
-        if value == selected_value:
-            selected_index = index
-    dropdown.select(selected_index)
-    dropdown.item_selected.connect(func(index: int):
-        if index >= 0 and index < options.size():
+    dropdown.ready.connect(func():
+        var selected_index := 0
+        var values: Array = []
+        for index in options.size():
             var option = options[index]
             var value := String(option.get("data", option)) if option is Dictionary else String(option)
-            callback.call(value)
+            var label := String(option.get("label", value)) if option is Dictionary else value
+            values.append(value)
+            dropdown.add_item(label)
+            if value == selected_value:
+                selected_index = index
+        dropdown.set_meta("armada_values", values)
+        dropdown.select(selected_index)
+        dropdown.item_selected.connect(func(index: int):
+            if index >= 0 and index < options.size():
+                var option = options[index]
+                var value := String(option.get("data", option)) if option is Dictionary else String(option)
+                callback.call(value)
+        )
     )
+    return dropdown
+
+
+func _dropdown_index(dropdown: Dropdown, value: String) -> int:
+    var values: Array = dropdown.get_meta("armada_values", [])
+    if values.is_empty():
+        return 0
+    for index in values.size():
+        if String(values[index]) == value:
+            return index
+    return 0
 
 
 func _toggle(parent: Container, title: String, value: bool, callback: Callable) -> void:
@@ -353,6 +398,12 @@ func _select_profile(name: String) -> void:
         gpu_slider.value = _percent(profile.get("gpu_max", "1.0"))
     if gpu_min_slider:
         gpu_min_slider.value = _percent(profile.get("gpu_min", "0.0"))
+    if fan_curve_dropdown:
+        fan_curve_dropdown.select(_dropdown_index(fan_curve_dropdown, String(profile.get("fan_curve", ""))))
+    if governor_dropdown:
+        governor_dropdown.select(_dropdown_index(governor_dropdown, String(profile.get("cpu_governor", ""))))
+    if underclock_dropdown:
+        underclock_dropdown.select(_dropdown_index(underclock_dropdown, String(profile.get("cpu_underclock", "none"))))
     var power: Dictionary = config.get("power", {}).duplicate(true)
     var general: Dictionary = power.get("general", {})
     general["default_profile"] = name
