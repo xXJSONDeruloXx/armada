@@ -179,6 +179,7 @@ func _mount_quick_bar_cards(viewport: VBoxContainer, item: Control) -> void:
         mounted_cards.append(child)
     item.visible = false
     item.focus_mode = Control.FOCUS_NONE
+    logger.info("Mounted %d Armada cards into native Quick Bar" % mounted_cards.size())
     var viewport_focus_group := viewport.get_node_or_null("FocusGroup") as FocusGroup
     if viewport_focus_group:
         viewport_focus_group.call_deferred("recalculate_focus")

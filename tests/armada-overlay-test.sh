@@ -119,6 +119,7 @@ if grep -Fq '_register_overlay\|OVERLAY_SCENE\|overlay_container' "$ROOT/docs/og
 fi
 grep -Fq 'call_deferred("_register_quick_bar")' "$ROOT/docs/ogui-spike-v046/plugin.gd"
 grep -Fq 'call_deferred("_claim_overlay_window")' "$ROOT/docs/ogui-spike-v046/plugin.gd"
+grep -Fq 'Mounted %d Armada cards into native Quick Bar' "$ROOT/docs/ogui-spike-v046/plugin.gd"
 test -f "$ROOT/docs/ogui-spike-v046/text-input-default.patch"
 grep -Fq '@export var description: String = "":' "$ROOT/docs/ogui-spike-v046/text-input-default.patch"
 grep -Fq 'line_edit.text_submitted.connect(on_text_submitted)' "$ROOT/docs/ogui-spike-v046/text-input-default.patch"
