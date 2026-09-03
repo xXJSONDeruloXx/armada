@@ -1250,7 +1250,7 @@ func _build_compatibility_controls(parent: Container) -> void:
     if compat_tools.is_empty():
         _action(parent, "Refresh Steam compatibility", _refresh_compatibility)
     else:
-        _dropdown(parent, "Default Proton", compat_tools, compat_tool, _save_global_tool)
+        _dropdown(parent, "Default Proton", _compat_options(compat_tools), compat_tool, _save_global_tool)
     _toggle(parent, "Apply to new games", _global_tweak("autoApplyCompat"), func(value): _save_tweak("autoApplyCompat", value))
     _dropdown(parent, "Default resolution", ["Default", "Native", "1280x720", "960x540"], global_resolution, _save_global_resolution)
     if compat_appid.is_valid_int() and not compat_appid.is_empty():
@@ -1260,7 +1260,15 @@ func _build_compatibility_controls(parent: Container) -> void:
             {"data": "__default", "label": "Use Default"},
             {"data": "", "label": "Follow Steam"},
         ]
-        app_options.append_array(app_tools)
+        var app_values: Dictionary = {"__default": true, "": true}
+        for option in _compat_options(app_tools) + _compat_options(compat_tools):
+            var value := String(option["data"])
+            if app_values.has(value):
+                continue
+            app_values[value] = true
+            app_options.append(option)
+        if not compat_game_tool.is_empty() and not app_values.has(compat_game_tool):
+            app_options.append({"data": compat_game_tool, "label": compat_game_tool})
         _dropdown(parent, "Compatibility tool", app_options, compat_game_tool, _save_compat_game_tool)
         _dropdown(parent, "Game resolution", ["Default", "Native", "1280x720", "960x540"], compat_game_resolution, _save_compat_game_resolution)
         compat_launch_input = _text_input(parent, "Launch options", compat_launch_options, "Steam launch options", _compat_input_submitted)
@@ -1319,6 +1327,32 @@ func _load_compat_game_state() -> void:
     var resolution := _call_steam("get_resolution", {"appid": compat_appid})
     if resolution.get("ok", false):
         compat_game_resolution = String(resolution.get("result", {}).get("value", "Default"))
+
+
+func _compat_options(tools: Array) -> Array:
+    var options: Array = []
+    var seen: Dictionary = {}
+    for tool in tools:
+        var value := ""
+        var label := ""
+        if tool is Dictionary:
+            value = String(tool.get("data", tool.get("id", tool.get("strToolName", ""))))
+            label = String(tool.get("label", tool.get("strDisplayName", value)))
+        else:
+            value = String(tool)
+            label = value
+        if value.is_empty() or seen.has(value):
+            continue
+        seen[value] = true
+        options.append({"data": value, "label": label})
+    return options
+
+
+func _has_compat_tool(value: String) -> bool:
+    for option in _compat_options(compat_tools):
+        if String(option["data"]) == value:
+            return true
+    return false
 
 
 func _save_global_resolution(value: String) -> void:
@@ -1397,12 +1431,26 @@ func _refresh_compatibility() -> void:
 
 
 func _save_global_tool(tool: String) -> void:
+    var old_tool := compat_tool
     compat_tool = tool
     var tweaks: Dictionary = config.get("tweaks", {}).duplicate(true)
     var global: Dictionary = tweaks.get("global", {})
     global["windowsCompatTool"] = tool
     tweaks["global"] = global
     _save_tweaks(tweaks)
+    if old_tool != tool:
+        var games: Array = []
+        for game in installed_games:
+            if game is Dictionary and not bool(game.get("nonSteam", false)) and String(game.get("appid", "")).is_valid_int():
+                games.append({"appid": String(game["appid"])})
+        var migration: Dictionary = {"games": games, "old_tool": old_tool, "new_tool": tool}
+        if not _has_compat_tool(old_tool):
+            var pinned = _call_result("get_compat_mapped_appids", {"tool": old_tool})
+            if pinned is Array:
+                migration["pinned"] = pinned
+        var migrated := _call_steam("migrate_compat", migration)
+        if not migrated.get("ok", false):
+            _update_status(backend.last_error)
     _sweep_compatibility()
 
 
@@ -1440,8 +1488,8 @@ func _dropdown(parent: Container, title: String, options: Array, selected_value:
         dropdown.clear()
         for index in options.size():
             var option = options[index]
-            var value := String(option.get("data", option)) if option is Dictionary else String(option)
-            var label := String(option.get("label", value)) if option is Dictionary else value
+            var value := String(option.get("data", option.get("id", option))) if option is Dictionary else String(option)
+            var label := String(option.get("label", option.get("strDisplayName", value))) if option is Dictionary else value
             values.append(value)
             dropdown.add_item(label)
             if value == selected_value:
