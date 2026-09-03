@@ -45,6 +45,9 @@ var compat_tools: Array = []
 var compat_tool := ""
 var global_resolution := "Default"
 var installed_games: Array = []
+var rgb_brightness_slider: ValueSlider
+var rgb_color_slider: ValueSlider
+var _syncing_rgb_controls := false
 var calibration_button: CardButtonSetting
 var calibration_timer: Timer
 var calibration_capture: Dictionary = {}
@@ -200,7 +203,6 @@ func _build_system(parent: Container) -> void:
         {"data": "ds5", "label": "DualSense"},
     ])
     _dropdown(parent, "Controller emulation", controller_options, String(config.get("controllerType", "deck-uhid")), func(value): _call("set_controller_type", {"value": value}))
-    _toggle(parent, "Automatic compatibility", _global_tweak("autoApplyCompat"), func(value): _save_tweak("autoApplyCompat", value))
     _toggle(parent, "Automatic ABL updates", bool(config.get("ablAutoEnabled", false)), func(value): _call("set_abl_auto_enabled", {"enabled": value}))
     _toggle(parent, "Enable SSH", bool(config.get("sshEnabled", false)), func(value): _call("set_ssh_enabled", {"enabled": value}))
     _toggle(parent, "Enable MTP", bool(config.get("mtpEnabled", false)), func(value): _call("set_mtp_enabled", {"enabled": value}))
@@ -214,7 +216,10 @@ func _build_system(parent: Container) -> void:
         var rgb = _call_result("get_rgb")
         if rgb is Dictionary:
             _toggle(parent, "RGB lighting", bool(rgb.get("enabled", false)), func(value): _set_rgb(value, rgb))
-            _slider(parent, "RGB brightness", float(rgb.get("brightness", 100)), 0, 100, func(value): _set_rgb_brightness(value, rgb))
+            rgb_brightness_slider = _slider(parent, "RGB brightness", float(rgb.get("brightness", 100)), 0, 100, func(value): _set_rgb_brightness(value, rgb))
+            rgb_color_slider = _slider(parent, "RGB color", _rgb_hue(String(rgb.get("color", "FFFFFF"))), 0, 359, func(value): _set_rgb_color(value, rgb))
+            rgb_brightness_slider.editable = bool(rgb.get("enabled", false))
+            rgb_color_slider.editable = bool(rgb.get("enabled", false))
 
     for item in [{"key": "osVersion", "label": "OS version"}, {"key": "ablVersion", "label": "ABL version"}]:
         var version := String(config.get(item["key"], ""))
@@ -1178,6 +1183,7 @@ func _build_compatibility_controls(parent: Container) -> void:
         _action(parent, "Refresh Steam compatibility", _refresh_compatibility)
     else:
         _dropdown(parent, "Default Proton", compat_tools, compat_tool, _save_global_tool)
+    _toggle(parent, "Apply to new games", _global_tweak("autoApplyCompat"), func(value): _save_tweak("autoApplyCompat", value))
     _dropdown(parent, "Default resolution", ["Default", "Native", "1280x720", "960x540"], global_resolution, _save_global_resolution)
     if compat_appid.is_valid_int() and not compat_appid.is_empty():
         var tools_response := _call_steam("get_app_compat_tools", {"appid": compat_appid})
@@ -1633,7 +1639,12 @@ func _set_rgb(enabled: bool, previous: Dictionary) -> void:
         "color": String(previous.get("color", "FFFFFF")),
         "brightness": int(previous.get("brightness", 100)),
     })
-    _update_status("Saved" if response.get("ok", false) else backend.last_error)
+    if response.get("ok", false):
+        previous["enabled"] = enabled
+        _sync_rgb_controls(previous)
+        _update_status("Saved")
+    else:
+        _update_status(backend.last_error)
 
 
 func _set_rgb_brightness(value: float, previous: Dictionary) -> void:
@@ -1642,7 +1653,47 @@ func _set_rgb_brightness(value: float, previous: Dictionary) -> void:
         "color": String(previous.get("color", "FFFFFF")),
         "brightness": int(value),
     })
-    _update_status("Saved" if response.get("ok", false) else backend.last_error)
+    if response.get("ok", false):
+        previous["brightness"] = int(value)
+        _update_status("Saved")
+    else:
+        _update_status(backend.last_error)
+
+
+func _set_rgb_color(value: float, previous: Dictionary) -> void:
+    if _syncing_rgb_controls:
+        return
+    var color := _rgb_color(value)
+    var response = backend.call_action("set_rgb", {
+        "enabled": bool(previous.get("enabled", true)),
+        "color": color,
+        "brightness": int(previous.get("brightness", 100)),
+    })
+    if response.get("ok", false):
+        previous["color"] = color
+        _update_status("Saved")
+    else:
+        _update_status(backend.last_error)
+
+
+func _sync_rgb_controls(rgb: Dictionary) -> void:
+    var enabled := bool(rgb.get("enabled", false))
+    _syncing_rgb_controls = true
+    if rgb_brightness_slider:
+        rgb_brightness_slider.editable = enabled
+    if rgb_color_slider:
+        rgb_color_slider.editable = enabled
+        rgb_color_slider.value = _rgb_hue(String(rgb.get("color", "FFFFFF")))
+    _syncing_rgb_controls = false
+
+
+func _rgb_hue(value: String) -> float:
+    var color := Color.from_string("#" + value.strip_edges().trim_prefix("#"), Color.WHITE)
+    return roundi(color.h * 359.0)
+
+
+func _rgb_color(value: float) -> String:
+    return Color.from_hsv(clampf(value / 360.0, 0.0, 1.0), 1.0, 1.0).to_html(false).to_upper()
 
 
 func _call(action: String, fields: Dictionary = {}) -> void:
