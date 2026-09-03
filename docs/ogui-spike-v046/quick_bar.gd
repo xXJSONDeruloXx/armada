@@ -25,6 +25,14 @@ var calibration_capture: Dictionary = {}
 var calibration_recording := false
 
 
+func _init() -> void:
+    var section := Label.new()
+    section.name = "SectionLabel"
+    section.text = "Armada Control"
+    section.label_settings = BODY_LABELS
+    add_child(section)
+
+
 func _ready() -> void:
     backend = BACKEND_SCRIPT.new()
     _load_config()
@@ -52,12 +60,6 @@ func _load_config() -> void:
 
 
 func _build() -> void:
-    var section := Label.new()
-    section.name = "SectionLabel"
-    section.text = "Armada Control"
-    section.label_settings = BODY_LABELS
-    add_child(section)
-
     var content := VBoxContainer.new()
     content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     add_child(content)
