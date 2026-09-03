@@ -25,4 +25,4 @@ When rebuilding the pinned OGUI source after changing scenes or core components,
 
 For a complete reproducible runtime bundle, run `./build-ogui.sh /path/to/OpenGamepadUI /path/to/output`. It checks the pinned source commit, applies the hardware, lifecycle, UI, and TextInput patches idempotently, installs the Armada plugin sources, forces the ARM64 export, builds the plugin archive, and prints hashes for the four staging artifacts.
 
-The Armada `Containerfile` also exposes an explicit `armada-ogui` image target. It bundles the same runtime under `/usr/share/armada/ogui` and provides `/usr/bin/armada-opengamepadui`; the default `armada` target remains unchanged and does not start OGUI.
+The Armada `Containerfile` also exposes an explicit `armada-ogui` image target. It bundles the same runtime under `/usr/share/armada/ogui` and provides `/usr/bin/armada-opengamepadui`. The launcher seeds the Armada archive into OGUI's user plugin directory before starting; the default `armada` target remains unchanged and does not start OGUI.

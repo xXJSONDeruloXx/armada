@@ -1,0 +1,16 @@
+#!/usr/bin/env sh
+set -eu
+
+user_home="${HOME:?HOME is not set}"
+data_home="${XDG_DATA_HOME:-${user_home}/.local/share}"
+plugin_dir="${data_home}/opengamepadui/plugins"
+plugin_archive="/usr/share/armada/ogui/armada-control.zip"
+
+mkdir -p "${plugin_dir}"
+if [ -f "${plugin_archive}" ]; then
+    if [ ! -f "${plugin_dir}/armada-control.zip" ] || ! cmp -s "${plugin_archive}" "${plugin_dir}/armada-control.zip"; then
+        cp "${plugin_archive}" "${plugin_dir}/armada-control.zip"
+    fi
+fi
+
+exec /usr/share/armada/ogui/opengamepad-ui.aarch64 "$@"

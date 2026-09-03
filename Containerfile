@@ -132,4 +132,5 @@ FROM armada-rootfs AS armada
 # Explicit opt-in variant for device testing and future session integration.
 FROM armada AS armada-ogui
 COPY --from=ogui-build /build/ogui-out/ /usr/share/armada/ogui/
-RUN ln -sf /usr/share/armada/ogui/opengamepad-ui.aarch64 /usr/bin/armada-opengamepadui
+COPY docs/ogui-spike-v046/armada-opengamepadui /usr/bin/armada-opengamepadui
+RUN chmod 0755 /usr/bin/armada-opengamepadui
