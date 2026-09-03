@@ -19,3 +19,5 @@ This directory preserves the isolated OGUI plugin used against OpenGamepadUI v0.
 The plugin intentionally does not copy OGUI source, binaries, native extensions, or assets into Armada. Rebuild the plugin archive from the files in this directory using OGUI's plugin archive layout. The earlier centered-provider probe remains in git history; the current implementation is Quick Bar-only. See the living PRD for device commands, hashes, startup output, and the adoption decision.
 
 Build an archive with `./build-plugin.sh /path/to/armada-control.zip`, then place it in OGUI's user plugin directory.
+
+When rebuilding the pinned OGUI source after changing scenes or core components, force the export target with `make -B GODOT=/usr/bin/godot build` so `.godot/exported` resources are regenerated. Verify the resulting PCK before staging it.
