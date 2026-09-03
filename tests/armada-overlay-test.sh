@@ -104,6 +104,8 @@ if grep -Fq 'general["default_profile"] = name' "$ROOT/docs/ogui-spike-v046/quic
 fi
 grep -Fq 'profile["gpu_max"] = "%.2f" % normalized' "$ROOT/docs/ogui-spike-v046/quick_bar.gd"
 grep -Fq 'profile["gpu_min"] = "%.2f" % normalized' "$ROOT/docs/ogui-spike-v046/quick_bar.gd"
+grep -Fq 'Refresh device state' "$ROOT/docs/ogui-spike-v046/quick_bar.gd"
+grep -Fq 'func _rebuild_sections()' "$ROOT/docs/ogui-spike-v046/quick_bar.gd"
 grep -Fq 'size_changed.connect(_update_overlay_geometry)' "$ROOT/docs/ogui-spike-v046/plugin.gd"
 test -f "$ROOT/docs/ogui-spike-v046/text-input-default.patch"
 grep -Fq '@export var description: String = "":' "$ROOT/docs/ogui-spike-v046/text-input-default.patch"

@@ -48,6 +48,7 @@ var installed_games: Array = []
 var rgb_brightness_slider: ValueSlider
 var rgb_color_slider: ValueSlider
 var _syncing_rgb_controls := false
+var content_root: VBoxContainer
 var calibration_button: CardButtonSetting
 var calibration_timer: Timer
 var calibration_capture: Dictionary = {}
@@ -91,10 +92,12 @@ func _ready() -> void:
     _build()
 
 
-func _load_config() -> void:
+func _load_config() -> bool:
+    var loaded := false
     var response = backend.call_action("get_config")
     if response.get("ok", false):
         config = response.get("result", {})
+        loaded = true
     var games = backend.call_action("get_installed_games")
     if games.get("ok", false):
         installed_games = games.get("result", [])
@@ -118,12 +121,14 @@ func _load_config() -> void:
         if game is Dictionary and String(game.get("appid", "")) == current_appid:
             selected_game_appid = current_appid
             break
+    return loaded
 
 
 func _build() -> void:
     var content := VBoxContainer.new()
     content.name = "ArmadaContent"
     content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    content_root = content
     add_child(content)
 
     status_label = Label.new()
@@ -201,6 +206,7 @@ func _build_power(parent: Container) -> void:
 
 
 func _build_system(parent: Container) -> void:
+    _action(parent, "Refresh device state", _refresh_device_state)
     var controller_options: Array = config.get("controllerTypes", [
         {"data": "deck-uhid", "label": "Steam Deck"},
         {"data": "xb360", "label": "Xbox 360"},
@@ -809,6 +815,64 @@ func _update_calibration_sliders(controls: Dictionary) -> void:
         var maximum := float(control.get("max", 1))
         var value := float(control.get("value", 0))
         calibration_sliders[name].value = clampf((value - minimum) / (maximum - minimum) * 100.0 if maximum != minimum else 0.0, 0.0, 100.0)
+
+
+func _refresh_device_state() -> void:
+    if not _load_config():
+        _update_status(backend.last_error)
+        return
+    _rebuild_sections()
+    _update_status("Device state refreshed")
+
+
+func _rebuild_sections() -> void:
+    if not content_root:
+        return
+    for child in content_root.get_children():
+        if child == status_label or child is FocusGroup:
+            continue
+        child.free()
+    cpu_slider = null
+    gpu_min_slider = null
+    gpu_slider = null
+    fan_curve_dropdown = null
+    governor_dropdown = null
+    underclock_dropdown = null
+    curve_editor_dropdown = null
+    curve_point_dropdown = null
+    curve_temp_slider = null
+    curve_pwm_slider = null
+    fan_stop_toggle = null
+    fan_stop_temp_slider = null
+    fan_fix_pwm_button = null
+    fan_reset_curve_button = null
+    curve_name_input = null
+    curve_delete_dropdown = null
+    fans_parent = null
+    games_controls = null
+    game_target_dropdown = null
+    environment_dropdown = null
+    environment_name_input = null
+    environment_value_input = null
+    compat_target_dropdown = null
+    compat_appid_input = null
+    compat_controls = null
+    compat_launch_input = null
+    rgb_brightness_slider = null
+    rgb_color_slider = null
+    calibration_button = null
+    calibration_sliders.clear()
+    _section(content_root, "Power", _build_power)
+    _section(content_root, "Fans", _build_fans)
+    _section(content_root, "Games", _build_games)
+    _section(content_root, "Compatibility", _build_compatibility)
+    _section(content_root, "System", _build_system)
+    _section(content_root, "Actions", _build_actions)
+    for child in get_children():
+        if child is FocusGroup:
+            child.current_focus = _first_focusable(content_root)
+            child.call_deferred("grab_focus")
+            break
 
 
 func _reset_calibration() -> void:
