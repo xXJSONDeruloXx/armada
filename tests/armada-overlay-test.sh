@@ -90,9 +90,12 @@ test -x "$ROOT/docs/ogui-spike-v046/build-plugin.sh"
 test -x "$ROOT/docs/ogui-spike-v046/build-ogui.sh"
 grep -Fq 'b149644f46b71e175a2ad223e84c18361596691e' "$ROOT/docs/ogui-spike-v046/build-ogui.sh"
 grep -Fq 'make -B' "$ROOT/docs/ogui-spike-v046/build-ogui.sh"
-grep -Fq 'overlay.gd' "$ROOT/docs/ogui-spike-v046/build-ogui.sh"
-test -f "$ROOT/docs/ogui-spike-v046/plugin-resource-pack.patch"
-grep -Fq 'plugin-resource-pack.patch' "$ROOT/docs/ogui-spike-v046/build-ogui.sh"
+grep -Fq 'overlay.gd' "$ROOT/docs/ogui-spike-v046/build-plugin.sh"
+grep -Fq 'source checkout contains an embedded Armada plugin' "$ROOT/docs/ogui-spike-v046/build-ogui.sh"
+if grep -Fq 'cp "$root"/{backend.gd' "$ROOT/docs/ogui-spike-v046/build-ogui.sh"; then
+    echo "OGUI build still embeds the Armada plugin in the PCK" >&2
+    exit 1
+fi
 grep -Fq 'migrate_compat' "$ROOT/docs/ogui-spike-v046/quick_bar.gd"
 grep -Fq 'get_compat_mapped_appids' "$ROOT/docs/ogui-spike-v046/quick_bar.gd"
 grep -Fq 'size_changed.connect(_update_overlay_geometry)' "$ROOT/docs/ogui-spike-v046/plugin.gd"

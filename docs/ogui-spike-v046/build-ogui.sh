@@ -36,13 +36,14 @@ apply_once() {
 
 apply_once "$root/hardware_manager.patch"
 apply_once "$root/plugin_manager.patch"
-apply_once "$root/plugin-resource-pack.patch"
 apply_once "$root/normal-ui-godot47.patch"
 apply_once "$root/text-input-default.patch"
 
-mkdir -p "$source_dir/plugins/armada-control" "$output_dir"
-cp "$root"/{backend.gd,ogui-body-label.tres,overlay.gd,overlay.tscn,plugin.gd,plugin.json,quick_bar.gd} \
-    "$source_dir/plugins/armada-control/"
+if [[ -e "$source_dir/plugins/armada-control" ]]; then
+    printf 'source checkout contains an embedded Armada plugin; use a fresh OGUI checkout: %s\n' "$source_dir" >&2
+    exit 1
+fi
+mkdir -p "$output_dir"
 
 if [[ "${ARMADA_OGUI_IN_BUILDER:-0}" == 1 ]]; then
     env HOME=/home/build TARGET_ARCH=aarch64 PKG_CONFIG_SYSROOT_DIR=/usr/aarch64-linux-gnu \
