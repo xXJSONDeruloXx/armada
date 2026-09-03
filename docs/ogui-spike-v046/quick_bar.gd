@@ -124,6 +124,7 @@ func _build() -> void:
     add_child(content)
 
     status_label = Label.new()
+    status_label.name = "ArmadaStatus"
     status_label.label_settings = BODY_LABELS
     status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
     content.add_child(status_label)

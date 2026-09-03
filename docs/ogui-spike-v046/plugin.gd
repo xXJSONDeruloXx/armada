@@ -3,6 +3,7 @@ extends Plugin
 const QUICK_BAR_META := "armada_control_quick_bar"
 
 var quick_bar_item: Control
+var mounted_status: Label
 var mounted_cards: Array[Control] = []
 
 
@@ -61,6 +62,11 @@ func _mount_quick_bar_cards(viewport: VBoxContainer, item: Control) -> void:
         logger.error("Armada Quick Bar content container could not be found")
         return
     for child in content.get_children():
+        if child is Label and child.name == "ArmadaStatus":
+            content.remove_child(child)
+            viewport.add_child(child)
+            mounted_status = child
+            continue
         if not child is QuickBarCard:
             continue
         content.remove_child(child)
@@ -79,5 +85,8 @@ func _exit_tree() -> void:
         if is_instance_valid(card):
             card.queue_free()
     mounted_cards.clear()
+    if is_instance_valid(mounted_status):
+        mounted_status.queue_free()
+    mounted_status = null
     if is_instance_valid(quick_bar_item):
         quick_bar_item.queue_free()
