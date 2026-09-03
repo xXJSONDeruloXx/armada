@@ -53,6 +53,8 @@ var calibration_timer: Timer
 var calibration_capture: Dictionary = {}
 var calibration_recording := false
 var calibration_sliders: Dictionary = {}
+var reset_calibration_pending := false
+var restart_game_mode_pending := false
 var selected_game_appid := ""
 var game_target_dropdown: Dropdown
 var games_controls: VBoxContainer
@@ -731,8 +733,8 @@ func _build_actions(parent: Container) -> void:
         if item["minimum"] < 0:
             slider.show_decimal = true
         calibration_sliders[item["key"]] = slider
-    _action(parent, "Reset controller calibration", func(): _call("reset_calibration"))
-    _action(parent, "Restart Game Mode", func(): _call("restart_game_mode"))
+    _action(parent, "Reset controller calibration", _reset_calibration)
+    _action(parent, "Restart Game Mode", _restart_game_mode)
     calibration_timer = Timer.new()
     calibration_timer.wait_time = 0.1
     calibration_timer.timeout.connect(_capture_calibration_sample)
@@ -800,6 +802,24 @@ func _update_calibration_sliders(controls: Dictionary) -> void:
         var maximum := float(control.get("max", 1))
         var value := float(control.get("value", 0))
         calibration_sliders[name].value = clampf((value - minimum) / (maximum - minimum) * 100.0 if maximum != minimum else 0.0, 0.0, 100.0)
+
+
+func _reset_calibration() -> void:
+    if not reset_calibration_pending:
+        reset_calibration_pending = true
+        _update_status("Press A again to reset calibration")
+        return
+    reset_calibration_pending = false
+    _call("reset_calibration")
+
+
+func _restart_game_mode() -> void:
+    if not restart_game_mode_pending:
+        restart_game_mode_pending = true
+        _update_status("Press A again to restart Game Mode")
+        return
+    restart_game_mode_pending = false
+    _call("restart_game_mode")
 
 
 func _build_games(parent: Container) -> void:
