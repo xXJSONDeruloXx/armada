@@ -31,6 +31,13 @@ assert module.gesture_reached("bottom", 0.5, 0.95, 0.5, 0.80, 0.1)
 assert not module.gesture_reached("left", 0.05, 0.5, 0.10, 0.6, 0.1)
 assert module.has_bit(root / "tests" / "missing-capability-file", 53) is False
 
+calls = []
+module.ogui_runtime_active = lambda: True
+module.INPUTPLUMBER_HELPER = "/tmp/inputplumber-intercept"
+module.subprocess.run = lambda *args, **kwargs: calls.append((args, kwargs))
+module.show_overlay()
+assert calls and calls[0][0][0] == ["/tmp/inputplumber-intercept", "trigger"], calls
+
 with tempfile.TemporaryDirectory() as directory:
     config = pathlib.Path(directory) / "overlay.json"
     config.write_text(json.dumps({"swipeEnabled": False, "swipeEdge": "right", "swipeDistance": 999}))

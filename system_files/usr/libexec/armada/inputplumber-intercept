@@ -74,9 +74,13 @@ case "${1:-}" in
   reset)
     busctl --system set-property "$service" "$path" "$iface" InterceptMode u 0
     ;;
+  trigger)
+    busctl --system call "$service" "$path" "$iface" SendButtonChord \
+      as 1 Gamepad:Button:QuickAccess2
+    ;;
   activation) activation "${2:-start_select}" ;;
   *)
-    echo "usage: inputplumber-intercept status|pass|overlay|gamepad|reset|activation [chord]" >&2
+    echo "usage: inputplumber-intercept status|pass|overlay|gamepad|reset|trigger|activation [chord]" >&2
     exit 2
     ;;
 esac

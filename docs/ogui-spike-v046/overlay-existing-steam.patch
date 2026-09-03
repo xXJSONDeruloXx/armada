@@ -1,0 +1,24 @@
+--- a/core/ui/card_ui_overlay_mode/card_ui_overlay_mode.gd
++++ b/core/ui/card_ui_overlay_mode/card_ui_overlay_mode.gd
+@@ -175,7 +175,7 @@ func _setup_overlay_mode(args: PackedStringArray) -> void:
+ 	# Don't crash if we're not launching another program.
+ 	if args.is_empty():
+ 		logger.warn("overlay mode started with no launcher arguments.")
+-		return
++		_find_underlay_window_id()
+ 
+-	if "steam" in args:
++	elif "steam" in args:
+ 		logger.info("Starting Steam with args:", args)
+@@ -271,6 +271,11 @@ func _find_underlay_window_id() -> void:
+ 	# Find Steam in the display tree
+ 	var root_win_id := xwayland_ogui.root_window_id
+ 	var all_windows := xwayland_ogui.get_all_windows(root_win_id)
++	var focused_window := xwayland_ogui.focused_window
++	if focused_window > 0 and focused_window != overlay_window_id:
++		underlay_window_id = focused_window
++		logger.info("Adopted existing Steam window: " + str(underlay_window_id))
++		return
+ 	for window in all_windows:
+ 		if window == overlay_window_id:
+ 			continue

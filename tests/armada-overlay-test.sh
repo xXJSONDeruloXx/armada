@@ -81,6 +81,9 @@ test -x "$ROOT/system_files/usr/libexec/armada/armada-steam-call"
 grep -Fq 'armada-steam-call' "$ROOT/docs/ogui-spike-v046/backend.gd"
 grep -Fq 'armada-overlay-call' "$ROOT/system_files/usr/libexec/armada/armada-overlay-call"
 grep -Fq 'inputplumber-intercept reset' "$ROOT/docs/ogui-spike-v046/armada-opengamepadui"
+grep -Fq 'opengamepadui.pid' "$ROOT/docs/ogui-spike-v046/armada-opengamepadui"
+grep -Fq 'SendButtonChord' "$ROOT/system_files/usr/libexec/armada/inputplumber-intercept"
+grep -Fq 'ogui_runtime_active' "$ROOT/system_files/usr/libexec/armada/overlay-gestures"
 if grep -Fq 'exec /usr/share/armada/ogui/opengamepad-ui.aarch64' "$ROOT/docs/ogui-spike-v046/armada-opengamepadui"; then
     echo "OGUI launcher bypasses cleanup trap" >&2
     exit 1
@@ -189,6 +192,9 @@ grep -Fq '/usr/share/armada/overlay' "$ROOT/build_files/40-vendor-system-files.s
 grep -Fq 'AS ogui-build' "$ROOT/Containerfile"
 grep -Fq 'AS armada-ogui' "$ROOT/Containerfile"
 grep -Fq 'ARMADA_OGUI_IN_BUILDER=1' "$ROOT/Containerfile"
+test -f "$ROOT/docs/ogui-spike-v046/overlay-existing-steam.patch"
+grep -Fq 'overlay-existing-steam.patch' "$ROOT/docs/ogui-spike-v046/build-ogui.sh"
+grep -Fq 'Adopted existing Steam window' "$ROOT/docs/ogui-spike-v046/overlay-existing-steam.patch"
 grep -Fq 'armada-opengamepadui' "$ROOT/Containerfile"
 test -x "$ROOT/docs/ogui-spike-v046/armada-opengamepadui"
 grep -Fq 'opengamepadui/plugins' "$ROOT/docs/ogui-spike-v046/armada-opengamepadui"

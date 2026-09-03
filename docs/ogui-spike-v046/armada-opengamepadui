@@ -5,6 +5,8 @@ user_home="${HOME:?HOME is not set}"
 data_home="${XDG_DATA_HOME:-${user_home}/.local/share}"
 plugin_dir="${data_home}/opengamepadui/plugins"
 plugin_archive="/usr/share/armada/ogui/armada-control.zip"
+runtime_dir="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/armada"
+runtime_marker="${runtime_dir}/opengamepadui.pid"
 
 mkdir -p "${plugin_dir}"
 if [ -f "${plugin_archive}" ]; then
@@ -15,12 +17,15 @@ fi
 
 runtime="/usr/share/armada/ogui/opengamepad-ui.aarch64"
 cleanup() {
+    rm -f "${runtime_marker}"
     /usr/libexec/armada/inputplumber-intercept reset >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
 
 "${runtime}" "$@" &
 runtime_pid=$!
+mkdir -p "${runtime_dir}"
+printf '%s\n' "${runtime_pid}" > "${runtime_marker}"
 trap 'kill -TERM "${runtime_pid}" 2>/dev/null || true; exit 143' INT TERM
 wait "${runtime_pid}" || status=$?
 exit "${status:-0}"

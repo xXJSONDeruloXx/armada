@@ -41,6 +41,7 @@ fi
 
 apply_once "$root/hardware_manager.patch"
 apply_once "$root/plugin_manager.patch"
+apply_once "$root/overlay-existing-steam.patch"
 apply_once "$root/normal-ui-godot47.patch"
 apply_once "$root/text-input-default.patch"
 
