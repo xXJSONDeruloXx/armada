@@ -1,0 +1,41 @@
+#!/usr/bin/env python3
+"""Run one fixed Armada Steam bridge action from an unprivileged UI."""
+
+import json
+import subprocess
+import sys
+
+
+BRIDGE = "/usr/libexec/armada/steam-bridge"
+
+
+def main():
+    if len(sys.argv) != 3:
+        print(json.dumps({"ok": False, "error": "usage: armada-steam-call ACTION JSON"}))
+        return 2
+    fields = json.loads(sys.argv[2])
+    if not isinstance(fields, dict):
+        raise ValueError("fields must be an object")
+    payload = {"action": sys.argv[1], **fields}
+    result = subprocess.run(
+        [BRIDGE],
+        input=json.dumps(payload, separators=(",", ":")) + "\n",
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        timeout=15,
+        check=False,
+    )
+    if result.stdout:
+        print(result.stdout.splitlines()[0])
+    if result.returncode:
+        return result.returncode
+    return 0
+
+
+if __name__ == "__main__":
+    try:
+        raise SystemExit(main())
+    except Exception as error:
+        print(json.dumps({"ok": False, "error": str(error)}))
+        raise SystemExit(1)

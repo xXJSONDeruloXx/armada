@@ -77,6 +77,8 @@ grep -Fq 'ExecStopPost=-/usr/libexec/armada/inputplumber-intercept reset' \
 grep -Fq 'armada-overlay-gestures.service' "$ROOT/build_files/40-vendor-system-files.sh"
 test -x "$ROOT/system_files/usr/libexec/armada/overlay-gestures"
 test -x "$ROOT/system_files/usr/libexec/armada/armada-overlay-call"
+test -x "$ROOT/system_files/usr/libexec/armada/armada-steam-call"
+grep -Fq 'armada-steam-call' "$ROOT/docs/ogui-spike-v046/backend.gd"
 grep -Fq 'armada-overlay-call' "$ROOT/system_files/usr/libexec/armada/armada-overlay-call"
 test -f "$ROOT/docs/ogui-spike-v046/quick_bar.gd"
 grep -Fq 'add_to_quick_bar' "$ROOT/docs/ogui-spike-v046/plugin.gd"

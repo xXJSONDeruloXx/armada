@@ -1,6 +1,7 @@
 extends RefCounted
 
 const DEFAULT_CALL := "/usr/libexec/armada/armada-overlay-call"
+const DEFAULT_STEAM_CALL := "/usr/libexec/armada/armada-steam-call"
 
 var last_error := ""
 
@@ -25,4 +26,22 @@ func call_action(action: String, fields: Dictionary = {}) -> Dictionary:
         return {"ok": false, "error": last_error}
     if not response.get("ok", false):
         last_error = String(response.get("error", "Armada service request failed"))
+    return response
+
+
+func call_steam(action: String, fields: Dictionary = {}) -> Dictionary:
+    var executable := OS.get_environment("ARMADA_STEAM_CALL")
+    if executable.is_empty():
+        executable = DEFAULT_STEAM_CALL
+    var output: Array = []
+    var exit_code := OS.execute(executable, [action, JSON.stringify(fields)], output, true)
+    if exit_code != OK or output.is_empty():
+        last_error = "Steam bridge is unavailable"
+        return {"ok": false, "error": last_error}
+    var response = JSON.parse_string(String(output[0]))
+    if not response is Dictionary:
+        last_error = "Invalid Steam bridge response"
+        return {"ok": false, "error": last_error}
+    if not response.get("ok", false):
+        last_error = String(response.get("error", "Steam bridge request failed"))
     return response

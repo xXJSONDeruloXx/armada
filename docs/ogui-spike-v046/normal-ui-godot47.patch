@@ -1,0 +1,114 @@
+diff --git a/core/ui/components/install_location_dialog.gd b/core/ui/components/install_location_dialog.gd
+--- a/core/ui/components/install_location_dialog.gd
++++ b/core/ui/components/install_location_dialog.gd
+@@ -31,9 +31,9 @@ signal choice_selected(accepted: bool, location: Library.InstallLocation)
+ ## Close the dialog when the user selects an option
+ @export var close_on_selected := true
+ ## Maximum size that the scroll container can grow to
+-@export var custom_maximum_size: Vector2i:
++@export var content_maximum_size: Vector2i:
+ 	set(v):
+-		custom_maximum_size = v
++		content_maximum_size = v
+ 		if scroll_container:
+ 			_recalculate_minimum_size()
+@@ -61,11 +61,11 @@ func _on_selected(accepted: bool, choice: Library.InstallLocation) -> void:
+ 	_return_node = null
+ 
+ 
+-## Updates the minimum size of the scroll container up to the custom_maximum_size.
++## Updates the minimum size of the scroll container up to the content_maximum_size.
+ ## This will allow the scroll container to dynamically grow based on the content
+ ## inside the scroll container up to a maximum size.
+ func _recalculate_minimum_size() -> void:
+-	if custom_maximum_size == Vector2i.ZERO:
++	if content_maximum_size == Vector2i.ZERO:
+ 		return
+ 	if scroll_container.get_child_count() < 1:
+ 		return
+@@ -78,13 +78,13 @@ func _recalculate_minimum_size() -> void:
+ 
+ 	# Check the size of the child to see if the max size has been reached. If not,
+ 	# adjust the size of the scroll container based on the content.
+-	if custom_maximum_size.x != 0.0 and child_size.x > custom_maximum_size.x:
+-		scroll_container.custom_minimum_size.x = custom_maximum_size.x
++	if content_maximum_size.x != 0.0 and child_size.x > content_maximum_size.x:
++		scroll_container.custom_minimum_size.x = content_maximum_size.x
+ 	else:
+ 		scroll_container.custom_minimum_size.x = child_size.x
+ 
+-	if custom_maximum_size.y != 0.0 and child_size.y > custom_maximum_size.y:
+-		scroll_container.custom_minimum_size.y = custom_maximum_size.y
++	if content_maximum_size.y != 0.0 and child_size.y > content_maximum_size.y:
++		scroll_container.custom_minimum_size.y = content_maximum_size.y
+ 	else:
+ 		scroll_container.custom_minimum_size.y = child_size.y
+diff --git a/core/ui/components/install_location_dialog.tscn b/core/ui/components/install_location_dialog.tscn
+--- a/core/ui/components/install_location_dialog.tscn
++++ b/core/ui/components/install_location_dialog.tscn
+@@ -17,7 +17,7 @@ anchor_bottom = 0.5
+ grow_horizontal = 2
+ grow_vertical = 2
+ script = ExtResource("1_op1tk")
+-custom_maximum_size = Vector2i(0, 600)
++content_maximum_size = Vector2i(0, 600)
+ 
+ [node name="FadeEffect" parent="." node_paths=PackedStringArray("target") instance=ExtResource("2_gwl35")]
+ unique_name_in_owner = true
+diff --git a/core/ui/components/install_options_dialog.gd b/core/ui/components/install_options_dialog.gd
+--- a/core/ui/components/install_options_dialog.gd
++++ b/core/ui/components/install_options_dialog.gd
+@@ -30,9 +30,9 @@ signal choice_selected(accepted: bool, choices: Dictionary)
+ ## Close the dialog when the user selects an option
+ @export var close_on_selected := true
+ ## Maximum size that the scroll container can grow to
+-@export var custom_maximum_size: Vector2i:
++@export var content_maximum_size: Vector2i:
+ 	set(v):
+-		custom_maximum_size = v
++		content_maximum_size = v
+ 		if scroll_container:
+ 			_recalculate_minimum_size()
+@@ -140,11 +140,11 @@ func _create_option_node(option: Library.InstallOption) -> Control:
+ 	return option_node
+ 
+ 
+-## Updates the minimum size of the scroll container up to the custom_maximum_size.
++## Updates the minimum size of the scroll container up to the content_maximum_size.
+ ## This will allow the scroll container to dynamically grow based on the content
+ ## inside the scroll container up to a maximum size.
+ func _recalculate_minimum_size() -> void:
+-	if custom_maximum_size == Vector2i.ZERO:
++	if content_maximum_size == Vector2i.ZERO:
+ 		return
+ 	if scroll_container.get_child_count() < 1:
+ 		return
+@@ -157,13 +157,13 @@ func _recalculate_minimum_size() -> void:
+ 
+ 	# Check the size of the child to see if the max size has been reached. If not,
+ 	# adjust the size of the scroll container based on the content.
+-	if custom_maximum_size.x != 0.0 and child_size.x > custom_maximum_size.x:
+-		scroll_container.custom_minimum_size.x = custom_maximum_size.x
++	if content_maximum_size.x != 0.0 and child_size.x > content_maximum_size.x:
++		scroll_container.custom_minimum_size.x = content_maximum_size.x
+ 	else:
+ 		scroll_container.custom_minimum_size.x = child_size.x
+ 
+-	if custom_maximum_size.y != 0.0 and child_size.y > custom_maximum_size.y:
+-		scroll_container.custom_minimum_size.y = custom_maximum_size.y
++	if content_maximum_size.y != 0.0 and child_size.y > content_maximum_size.y:
++		scroll_container.custom_minimum_size.y = content_maximum_size.y
+ 	else:
+ 		scroll_container.custom_minimum_size.y = child_size.y
+diff --git a/core/ui/components/install_options_dialog.tscn b/core/ui/components/install_options_dialog.tscn
+--- a/core/ui/components/install_options_dialog.tscn
++++ b/core/ui/components/install_options_dialog.tscn
+@@ -18,7 +18,7 @@ grow_horizontal = 2
+ grow_vertical = 2
+ script = ExtResource("1_khr1a")
+ text = "Select a location to install"
+-custom_maximum_size = Vector2i(0, 600)
++content_maximum_size = Vector2i(0, 600)
+ 
+ [node name="FadeEffect" parent="." node_paths=PackedStringArray("target") instance=ExtResource("2_2dmlt")]
+ unique_name_in_owner = true
