@@ -6,7 +6,7 @@ const OVERLAY_SCENE := preload("res://plugins/armada-control/overlay.tscn")
 var quick_bar_item: Control
 var mounted_status: Label
 var mounted_cards: Array[Control] = []
-var overlay_item: Control
+var overlay_item: OverlayProvider
 
 
 func _ready() -> void:
@@ -17,13 +17,53 @@ func _ready() -> void:
 
 
 func _register_overlay() -> void:
+    logger = Log.get_logger("ArmadaControl", Log.LEVEL.DEBUG)
+    var main: Control
+    for candidate in get_tree().get_nodes_in_group("main"):
+        if candidate is Control:
+            main = candidate
+            break
     var container := get_tree().get_first_node_in_group("overlay") as OverlayContainer
+    if not container and main:
+        container = OverlayContainer.new()
+        container.name = "ArmadaControlOverlayContainer"
+        container.z_index = 20
+        main.add_child(container)
+        container.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
     if not container:
-        logger = Log.get_logger("ArmadaControl", Log.LEVEL.DEBUG)
         logger.error("OGUI overlay container is unavailable")
         return
-    overlay_item = OVERLAY_SCENE.instantiate() as Control
+    overlay_item = OVERLAY_SCENE.instantiate() as OverlayProvider
+    if not overlay_item:
+        logger.error("Armada overlay scene could not be instantiated")
+        return
     container.add_overlay(overlay_item)
+    logger.info("Mounted Armada overlay provider")
+    _claim_overlay_window()
+
+
+func _claim_overlay_window() -> void:
+    var gamescope := load("res://core/systems/gamescope/gamescope.tres")
+    if not gamescope:
+        logger.warn("OGUI Gamescope integration is unavailable")
+        return
+    var xwayland = gamescope.get_xwayland(gamescope.XWAYLAND_TYPE_OGUI)
+    if not xwayland:
+        logger.warn("OGUI XWayland integration is unavailable")
+        return
+    var windows: PackedInt64Array = xwayland.get_windows_for_pid(OS.get_process_id())
+    if windows.is_empty():
+        logger.warn("OGUI window was not found")
+        return
+    var window_id := windows[0]
+    if xwayland.set_input_focus(window_id, 1) != OK:
+        logger.warn("Unable to set OGUI input focus")
+    if xwayland.set_overlay(window_id, 1) != OK:
+        logger.warn("Unable to set OGUI overlay state")
+    var input_plumber := load("res://core/systems/input/input_plumber.tres")
+    if input_plumber:
+        input_plumber.manage_all_devices = true
+        input_plumber.set_intercept_mode(2)
 
 
 func _register_quick_bar() -> void:
@@ -94,6 +134,10 @@ func _mount_quick_bar_cards(viewport: VBoxContainer, item: Control) -> void:
 
 
 func _exit_tree() -> void:
+    if "--overlay-mode" in OS.get_cmdline_args():
+        var input_plumber := load("res://core/systems/input/input_plumber.tres")
+        if input_plumber:
+            input_plumber.set_intercept_mode(1)
     for card in mounted_cards:
         if is_instance_valid(card):
             card.queue_free()
