@@ -1,0 +1,63 @@
+--- a/core/systems/hardware/hardware_manager.gd
++++ b/core/systems/hardware/hardware_manager.gd
+@@ -74,16 +74,19 @@ func get_gpu_info() -> GPUInfo:
+ 	gpu_info.vendor = RenderingServer.get_video_adapter_vendor()
+ 	gpu_info.model = RenderingServer.get_video_adapter_name()
+ 	gpu_info.driver = RenderingServer.get_video_adapter_api_version()
++	if gpu_info.vendor not in amd_vendor_ids and gpu_info.vendor not in intel_vendor_ids:
++		logger.info("Renderer vendor is not PCI/APU-capability-backed; keeping renderer identity only.")
++		return gpu_info
+ 
+ 	# Identify all installed GPU's
+ 	if cards.size() <= 0:
+-		logger.error("GPU Card subdata could not be derived.")
++		logger.info("GPU card identity unavailable; keeping renderer identity only.")
+ 		return gpu_info
+ 
+ 	var active_gpu_data := get_active_gpu_device()
+ 	if active_gpu_data.size() == 0:
+ 		logger.debug("Found GPU:", gpu_info)
+-		logger.error("Could not identify active GPU.")
++		logger.info("Could not identify a PCI active GPU; GPU-specific capabilities remain disabled.")
+ 		return gpu_info
+ 
+ 	for card in cards:
+@@ -94,7 +97,7 @@ func get_gpu_info() -> GPUInfo:
+ 
+ 	if not gpu_info.card:
+ 		logger.debug("Found GPU:", gpu_info)
+-		logger.error("Could not identify active GPU.")
++		logger.info("Active GPU is not present in PCI card data; GPU-specific capabilities remain disabled.")
+ 		return gpu_info
+ 
+ 	if gpu_info.card.device_type != "PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU":
+@@ -284,8 +287,8 @@ func get_active_gpu_card() -> DRMCardInfo:
+ 
+ ## Returns the string of the currently active GPU
+ func get_active_gpu_device() -> PackedStringArray:
+-	var vendor: String
+-	var device: String
++	var vendor := ""
++	var device := ""
+ 	var args = ["-B"]
+ 	var output: Array = _exec("glxinfo", args)
+ 	var exit_code = output[1]
+@@ -311,6 +314,9 @@ func get_active_gpu_device() -> PackedStringArray:
+ 		var match_str := result.get_string()
+ 		if "Device: " in line:
+ 			device = match_str.replace("0x", "").replace(")", "").to_lower()
++			if device == "ffffffff":
++				logger.info("Ignoring invalid GLX device id 0xffffffff.")
++				device = ""
+ 			logger.debug("Found device:", device)
+ 		if "Vendor: " in line:
+ 			vendor = match_str.replace("0x", "").replace(")", "").to_lower()
+@@ -406,6 +412,8 @@ func _read_sys(path: String) -> String:
+ ## Used to read values from sysfs
+ func _read_sys(path: String) -> String:
+ 	var file := FileAccess.open(path, FileAccess.READ)
++	if not file:
++		return ""
+ 	var length := file.get_length()
+ 	var bytes := file.get_buffer(length)
+ 	return bytes.get_string_from_utf8().strip_escapes()

@@ -1,0 +1,14 @@
+--- a/core/systems/plugin/plugin_manager.gd
++++ b/core/systems/plugin/plugin_manager.gd
+@@ -6,4 +6,11 @@ var PluginLoader := load("res://core/global/plugin_loader.tres") as PluginLoader
+ 
+ 
+ func _init() -> void:
++	if is_inside_tree():
++		PluginLoader.init(self)
++	else:
++		tree_entered.connect(_init_plugin_loader, CONNECT_ONE_SHOT)
++
++
++func _init_plugin_loader() -> void:
+ 	PluginLoader.init(self)
