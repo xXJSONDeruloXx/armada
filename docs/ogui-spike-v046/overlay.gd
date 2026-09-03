@@ -41,3 +41,5 @@ func _unhandled_input(event: InputEvent) -> void:
             or event.is_action_released("ogui_east_ov"):
         get_viewport().set_input_as_handled()
         queue_free()
+        if "--overlay-mode" in OS.get_cmdline_args():
+            get_tree().call_deferred("quit")
