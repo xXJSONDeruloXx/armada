@@ -36,6 +36,24 @@ stock, and ours never produced a working summon on this stack. Fix (commit
 intercept activation at all. OGUI core owns the chord. Do not re-add trigger
 programming without solving the single-writer race first.
 
+## OGUI core owns Gamescope/input state, not us
+
+Upstream `card_ui_overlay_mode` switches the full hardware contract on
+menu/base state transitions (`_on_base_state_entered/_on_base_state_exited`):
+closed = InputPlumber PASS + OGUI focus 0 + underlay focus 1 + OGUI
+overlay 0; open menu = InputPlumber ALL + OGUI focus 1 + underlay focus 0 +
+OGUI overlay 1. Our plugin used to grab all of that unconditionally at
+startup (`_claim_overlay_window`), which put hardware in "menu open" state
+while the state machine sat in base: Steam lost input, no menu was visible,
+and no chord could summon. The plugin must never write Gamescope
+focus/overlay atoms, `manage_all_devices`, or the intercept mode. The repo
+test enforces this. Symptom signature of this bug class: cards log mounted
+but nothing is visible and Steam loses controller focus.
+
+The launcher exit trap (`inputplumber-intercept reset`) is the deliberate
+exception: it only restores PASS at process exit so a crash cannot brick
+gamepad input, and never grabs anything at startup.
+
 ## Currently inert prefs (reserved, do nothing today)
 
 `~/.config/armada/overlay.json` keys `layout`, `centeredChord`, `sideChord`,

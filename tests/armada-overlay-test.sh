@@ -120,7 +120,16 @@ if grep -Fq '_register_overlay\|OVERLAY_SCENE\|overlay_container' "$ROOT/docs/og
     exit 1
 fi
 grep -Fq 'call_deferred("_register_quick_bar")' "$ROOT/docs/ogui-spike-v046/plugin.gd"
-grep -Fq 'call_deferred("_claim_overlay_window")' "$ROOT/docs/ogui-spike-v046/plugin.gd"
+# OGUI core owns Gamescope focus/overlay atoms and the intercept mode;
+# the plugin must never write them (see overlay-summon.md).
+for banned in set_intercept_mode set_input_focus set_overlay manage_all_devices _claim_overlay_window _release_overlay_window overlay_window_id; do
+    if grep -Fq "$banned" "$ROOT/docs/ogui-spike-v046/plugin.gd"; then
+        echo "plugin must not touch Gamescope/input ownership: $banned" >&2
+        exit 1
+    fi
+done
+grep -Fq '_watch_menu_state' "$ROOT/docs/ogui-spike-v046/plugin.gd"
+grep -Fq 'Native Quick Bar opened' "$ROOT/docs/ogui-spike-v046/plugin.gd"
 grep -Fq 'Mounted %d Armada cards into native Quick Bar' "$ROOT/docs/ogui-spike-v046/plugin.gd"
 test -f "$ROOT/docs/ogui-spike-v046/text-input-default.patch"
 grep -Fq '@export var description: String = "":' "$ROOT/docs/ogui-spike-v046/text-input-default.patch"

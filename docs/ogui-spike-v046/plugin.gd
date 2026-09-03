@@ -5,59 +5,51 @@ const QUICK_BAR_META := "armada_control_quick_bar"
 var quick_bar_item: Control
 var mounted_status: Label
 var mounted_cards: Array[Control] = []
-var overlay_window_id := 0
+var state_watch_connected := false
 
 
 func _ready() -> void:
-    # Overlay summoning (Guide+B) is owned entirely by OGUI core and
-    # InputPlumber's stock intercept triggers. This plugin never programs
-    # activation chords: the intercept slot is single-writer and overriding
-    # it breaks the native summon. See overlay-summon.md.
+    # Overlay summoning (Guide+B), Gamescope focus/overlay atoms, and the
+    # InputPlumber intercept mode are owned entirely by OGUI core, which
+    # switches them on menu/base state transitions. This plugin never
+    # programs activation chords and never writes focus/overlay atoms or
+    # the intercept mode: the intercept slot is single-writer and our old
+    # startup claim broke the native summon. See overlay-summon.md.
     if "--overlay-mode" in OS.get_cmdline_args():
         call_deferred("_register_quick_bar")
-        call_deferred("_claim_overlay_window")
+        call_deferred("_watch_menu_state")
         return
     call_deferred("_register_quick_bar")
 
 
-func _claim_overlay_window() -> void:
-    var gamescope := load("res://core/systems/gamescope/gamescope.tres")
-    if not gamescope:
-        logger.warn("OGUI Gamescope integration is unavailable")
+func _watch_menu_state() -> void:
+    if state_watch_connected:
         return
-    var xwayland = gamescope.get_xwayland(gamescope.XWAYLAND_TYPE_OGUI)
-    if not xwayland:
-        logger.warn("OGUI XWayland integration is unavailable")
-        return
-    var windows: PackedInt64Array = xwayland.get_windows_for_pid(OS.get_process_id())
-    if windows.is_empty():
-        logger.warn("OGUI window was not found")
-        return
-    var window_id := windows[0]
-    overlay_window_id = window_id
-    if xwayland.set_input_focus(window_id, 1) != OK:
-        logger.warn("Unable to set OGUI input focus")
-    if xwayland.set_overlay(window_id, 1) != OK:
-        logger.warn("Unable to set OGUI overlay state")
-    var input_plumber := load("res://core/systems/input/input_plumber.tres")
-    if input_plumber:
-        input_plumber.manage_all_devices = true
-        input_plumber.set_intercept_mode(2)
+    var quick_bar_state = load("res://assets/state/states/quick_bar_menu.tres")
+    if quick_bar_state and quick_bar_state.has_signal("state_entered"):
+        quick_bar_state.state_entered.connect(_on_quick_bar_opened)
+        quick_bar_state.state_exited.connect(_on_quick_bar_closed)
+        state_watch_connected = true
+    var quick_bar := get_tree().get_first_node_in_group("quick-bar")
+    if quick_bar and quick_bar is Control:
+        if not quick_bar.visibility_changed.is_connected(_on_quick_bar_visibility):
+            quick_bar.visibility_changed.connect(_on_quick_bar_visibility)
 
 
-func _release_overlay_window() -> void:
-    if overlay_window_id <= 0:
-        return
-    var gamescope := load("res://core/systems/gamescope/gamescope.tres")
-    if gamescope:
-        var xwayland = gamescope.get_xwayland(gamescope.XWAYLAND_TYPE_OGUI)
-        if xwayland:
-            xwayland.set_input_focus(overlay_window_id, 0)
-            xwayland.set_overlay(overlay_window_id, 0)
-    var input_plumber := load("res://core/systems/input/input_plumber.tres")
-    if input_plumber:
-        input_plumber.set_intercept_mode(InputPlumberInstance.INTERCEPT_MODE_NONE)
-    overlay_window_id = 0
+func _on_quick_bar_opened(_from) -> void:
+    var quick_bar := get_tree().get_first_node_in_group("quick-bar")
+    Log.get_logger("ArmadaControl", Log.LEVEL.DEBUG).info(
+        "Native Quick Bar opened (visible=%s)" % str(quick_bar.visible if quick_bar else false))
+
+
+func _on_quick_bar_closed(_to) -> void:
+    Log.get_logger("ArmadaControl", Log.LEVEL.DEBUG).info("Native Quick Bar closed")
+
+
+func _on_quick_bar_visibility() -> void:
+    var quick_bar := get_tree().get_first_node_in_group("quick-bar")
+    Log.get_logger("ArmadaControl", Log.LEVEL.DEBUG).info(
+        "Native Quick Bar visibility=%s" % str(quick_bar.visible if quick_bar else false))
 
 
 func _register_quick_bar() -> void:
@@ -129,13 +121,8 @@ func _mount_quick_bar_cards(viewport: VBoxContainer, item: Control) -> void:
 
 
 func _exit_tree() -> void:
-    _release_overlay_window()
     if is_instance_valid(quick_bar_item) and quick_bar_item.has_method("_stop_calibration_session"):
         quick_bar_item.call("_stop_calibration_session")
-    if "--overlay-mode" in OS.get_cmdline_args():
-        var input_plumber := load("res://core/systems/input/input_plumber.tres")
-        if input_plumber:
-            input_plumber.set_intercept_mode(InputPlumberInstance.INTERCEPT_MODE_NONE)
     for card in mounted_cards:
         if is_instance_valid(card):
             card.queue_free()
