@@ -19,4 +19,5 @@ mkdir -p "$stage/plugins/armada-control"
 cp "$root"/{backend.gd,ogui-body-label.tres,overlay.gd,overlay.tscn,plugin.gd,plugin.json,quick_bar.gd} \
     "$stage/plugins/armada-control/"
 mkdir -p "$(dirname -- "$output")"
-(cd "$stage" && zip -q -r "$output" plugins)
+find "$stage" -exec touch -t 198001010000 {} +
+(cd "$stage" && LC_ALL=C zip -X -q -r "$output" plugins)

@@ -112,6 +112,8 @@ grep -Fq '"auto_apply": _global_tweak("autoApplyCompat")' "$ROOT/docs/ogui-spike
 grep -Fq 'HBoxContainer' "$ROOT/docs/ogui-spike-v046/overlay.gd"
 grep -Fq 'armada/overlay.json' "$ROOT/docs/ogui-spike-v046/overlay.gd"
 grep -Fq 'ARMADA_OGUI_LAYOUT' "$ROOT/docs/ogui-spike-v046/overlay.gd"
+grep -Fq 'touch -t 198001010000' "$ROOT/docs/ogui-spike-v046/build-plugin.sh"
+grep -Fq 'zip -X' "$ROOT/docs/ogui-spike-v046/build-plugin.sh"
 grep -Fq '_configure_overlay_activation' "$ROOT/docs/ogui-spike-v046/plugin.gd"
 grep -Fq 'centeredChord' "$ROOT/docs/ogui-spike-v046/plugin.gd"
 grep -Fq 'sideChord' "$ROOT/docs/ogui-spike-v046/plugin.gd"
