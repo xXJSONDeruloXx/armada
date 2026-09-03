@@ -50,10 +50,10 @@ QString discoverInputEventPath()
     const QString compositeInterface = QStringLiteral("org.shadowblip.Input.CompositeDevice");
     QDBusInterface manager(service, managerPath, QStringLiteral("org.shadowblip.InputManager"),
         QDBusConnection::systemBus());
-    const QStringList composites = manager.property(QStringLiteral("GamepadOrder")).toStringList();
+    const QStringList composites = manager.property("GamepadOrder").toStringList();
     for (const QString &composite : composites) {
         QDBusInterface device(service, composite, compositeInterface, QDBusConnection::systemBus());
-        const QStringList targets = device.property(QStringLiteral("DbusDevices")).toStringList();
+        const QStringList targets = device.property("DbusDevices").toStringList();
         for (const QString &target : targets)
             if (target.startsWith(QStringLiteral("/org/shadowblip/InputPlumber/devices/target/dbus")))
                 return target;
@@ -679,7 +679,7 @@ private:
         return overlayConfig_.value(key).toString();
     }
 
-    void applyOverlayActivation()
+    bool applyOverlayActivation()
     {
         const RpcResult activation = request(
             QStringLiteral("set_overlay_activation"), {{QStringLiteral("chord"), activeChord()}});
