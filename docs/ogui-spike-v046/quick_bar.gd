@@ -1576,18 +1576,18 @@ func _select_profile(name: String) -> void:
     selected_profile = name
     var profile: Dictionary = config.get("power", {}).get("profiles", {}).get(name, {})
     _sync_profile_controls(profile)
-    var power: Dictionary = config.get("power", {}).duplicate(true)
-    var general: Dictionary = power.get("general", {})
-    general["default_profile"] = name
-    power["general"] = general
-    _save_power(power)
 
 
 func _save_profile_limit(key: String, value: float) -> void:
     var power: Dictionary = config.get("power", {}).duplicate(true)
     var profiles: Dictionary = power.get("profiles", {})
     var profile: Dictionary = profiles.get(selected_profile, {})
-    profile[key] = "%.2f" % clampf(value, 0.0, 1.0)
+    var normalized := clampf(value, 0.0, 1.0)
+    profile[key] = "%.2f" % normalized
+    if key == "gpu_min" and normalized > float(profile.get("gpu_max", 0.0)):
+        profile["gpu_max"] = "%.2f" % normalized
+    elif key == "gpu_max" and normalized < float(profile.get("gpu_min", 0.0)):
+        profile["gpu_min"] = "%.2f" % normalized
     profiles[selected_profile] = profile
     power["profiles"] = profiles
     _save_power(power)

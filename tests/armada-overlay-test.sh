@@ -98,6 +98,12 @@ if grep -Fq 'cp "$root"/{backend.gd' "$ROOT/docs/ogui-spike-v046/build-ogui.sh";
 fi
 grep -Fq 'migrate_compat' "$ROOT/docs/ogui-spike-v046/quick_bar.gd"
 grep -Fq 'get_compat_mapped_appids' "$ROOT/docs/ogui-spike-v046/quick_bar.gd"
+if grep -Fq 'general["default_profile"] = name' "$ROOT/docs/ogui-spike-v046/quick_bar.gd"; then
+    echo "OGUI profile selection changes the persisted default" >&2
+    exit 1
+fi
+grep -Fq 'profile["gpu_max"] = "%.2f" % normalized' "$ROOT/docs/ogui-spike-v046/quick_bar.gd"
+grep -Fq 'profile["gpu_min"] = "%.2f" % normalized' "$ROOT/docs/ogui-spike-v046/quick_bar.gd"
 grep -Fq 'size_changed.connect(_update_overlay_geometry)' "$ROOT/docs/ogui-spike-v046/plugin.gd"
 test -f "$ROOT/docs/ogui-spike-v046/text-input-default.patch"
 grep -Fq '@export var description: String = "":' "$ROOT/docs/ogui-spike-v046/text-input-default.patch"
