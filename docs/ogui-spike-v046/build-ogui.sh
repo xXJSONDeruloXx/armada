@@ -43,13 +43,18 @@ mkdir -p "$source_dir/plugins/armada-control" "$output_dir"
 cp "$root"/{backend.gd,ogui-body-label.tres,plugin.gd,plugin.json,quick_bar.gd} \
     "$source_dir/plugins/armada-control/"
 
-docker run --rm --platform linux/amd64 \
-    -v "$source_dir:/src" \
-    --mount type=volume,source=armada-ogui-godot-cache,target=/home/build/.local/share/godot \
-    --workdir /src \
-    -e HOME=/home/build -e PWD=/src -e TARGET_ARCH=aarch64 \
-    -e PKG_CONFIG_SYSROOT_DIR=/usr/aarch64-linux-gnu \
-    "$builder_image" make -B GODOT=/usr/bin/godot build
+if [[ "${ARMADA_OGUI_IN_BUILDER:-0}" == 1 ]]; then
+    env HOME=/home/build TARGET_ARCH=aarch64 PKG_CONFIG_SYSROOT_DIR=/usr/aarch64-linux-gnu \
+        make -C "$source_dir" -B GODOT=/usr/bin/godot build
+else
+    docker run --rm --platform linux/amd64 \
+        -v "$source_dir:/src" \
+        --mount type=volume,source=armada-ogui-godot-cache,target=/home/build/.local/share/godot \
+        --workdir /src \
+        -e HOME=/home/build -e PWD=/src -e TARGET_ARCH=aarch64 \
+        -e PKG_CONFIG_SYSROOT_DIR=/usr/aarch64-linux-gnu \
+        "$builder_image" make -B GODOT=/usr/bin/godot build
+fi
 
 cp "$source_dir/build/opengamepad-ui.aarch64" "$output_dir/"
 cp "$source_dir/build/opengamepad-ui.pck" "$output_dir/"

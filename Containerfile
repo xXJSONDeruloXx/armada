@@ -18,6 +18,7 @@ ARG ARMADA_RGB_PKG=ghcr.io/armada-os/armada-packages/armada-rgb@sha256:a7b66324d
 ARG UMTP_RESPONDER_PKG=ghcr.io/armada-os/armada-packages/umtp-responder@sha256:b0fe59bf87bccdde7273d7ade9f824171a5b4ac5f132b4670b32a73bb1f871b3
 ARG CHUNKAH_IMAGE=quay.io/coreos/chunkah@sha256:ff8b8b466a942ec6000445d4001fc661e2fc5a952ad9ee29b4de9ab09d1d1708
 ARG BASE_IMAGE=quay.io/fedora/fedora-bootc:44
+ARG OGUI_BUILDER_PLATFORM=linux/amd64
 
 FROM ${FEX_PKG} AS fex
 FROM ${MESA_PKG} AS mesa
@@ -56,6 +57,19 @@ RUN dnf5 -y install --setopt=install_weak_deps=False cmake gcc-c++ make qt6-qtba
 WORKDIR /build/overlay
 COPY overlay/ ./
 RUN cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build --parallel && cmake --install build --prefix /build/overlay/install
+
+# Optional OGUI image variant. The default Armada image does not build or start
+# OGUI until the alternate-session path has passed physical acceptance.
+FROM --platform=${OGUI_BUILDER_PLATFORM} ghcr.io/shadowblip/opengamepadui-builder:latest AS ogui-build
+ARG OGUI_COMMIT=b149644f46b71e175a2ad223e84c18361596691e
+WORKDIR /build
+RUN git clone --filter=blob:none https://github.com/ShadowBlip/OpenGamepadUI.git opengamepadui && \
+    git -C opengamepadui checkout "${OGUI_COMMIT}"
+COPY docs/ogui-spike-v046 /build/armada-ogui
+RUN --mount=type=cache,target=/home/build/.local/share/godot \
+    --mount=type=cache,target=/home/build/.cargo \
+    HOME=/home/build ARMADA_OGUI_IN_BUILDER=1 \
+    /build/armada-ogui/build-ogui.sh /build/opengamepadui /build/ogui-out
 
 FROM scratch AS ctx
 COPY abl /abl/
@@ -114,3 +128,8 @@ RUN --mount=from=armada-rootfs,target=/chunkah,ro \
     '
 
 FROM armada-rootfs AS armada
+
+# Explicit opt-in variant for device testing and future session integration.
+FROM armada AS armada-ogui
+COPY --from=ogui-build /build/ogui-out/ /usr/share/armada/ogui/
+RUN ln -sf /usr/share/armada/ogui/opengamepad-ui.aarch64 /usr/bin/armada-opengamepadui
