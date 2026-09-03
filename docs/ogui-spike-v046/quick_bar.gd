@@ -754,12 +754,19 @@ func _toggle_calibration() -> void:
         _update_status("Move both sticks and press both triggers")
         return
 
-    calibration_timer.stop()
-    backend.call_action("end_calibration_session", {"token": "armada-ogui-quickbar"})
+    _stop_calibration_session()
     var response = backend.call_action("save_calibration", {"capture": calibration_capture})
-    calibration_recording = false
     calibration_button.button_text = "Start controller calibration"
     _update_status("Calibration saved" if response.get("ok", false) else backend.last_error)
+
+
+func _stop_calibration_session() -> void:
+    if calibration_timer:
+        calibration_timer.stop()
+    if not calibration_recording:
+        return
+    backend.call_action("end_calibration_session", {"token": "armada-ogui-quickbar"})
+    calibration_recording = false
 
 
 func _capture_calibration_sample() -> void:
@@ -810,6 +817,7 @@ func _reset_calibration() -> void:
         _update_status("Press A again to reset calibration")
         return
     reset_calibration_pending = false
+    _stop_calibration_session()
     _call("reset_calibration")
 
 

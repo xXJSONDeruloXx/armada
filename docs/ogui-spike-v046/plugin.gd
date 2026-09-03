@@ -139,6 +139,8 @@ func _mount_quick_bar_cards(viewport: VBoxContainer, item: Control) -> void:
 
 
 func _exit_tree() -> void:
+    if is_instance_valid(quick_bar_item) and quick_bar_item.has_method("_stop_calibration_session"):
+        quick_bar_item.call("_stop_calibration_session")
     if "--overlay-mode" in OS.get_cmdline_args():
         var input_plumber := load("res://core/systems/input/input_plumber.tres")
         if input_plumber:
