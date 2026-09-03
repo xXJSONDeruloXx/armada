@@ -1,16 +1,29 @@
 extends Plugin
 
 const QUICK_BAR_META := "armada_control_quick_bar"
+const OVERLAY_SCENE := preload("res://plugins/armada-control/overlay.tscn")
 
 var quick_bar_item: Control
 var mounted_status: Label
 var mounted_cards: Array[Control] = []
+var overlay_item: Control
 
 
 func _ready() -> void:
     if "--overlay-mode" in OS.get_cmdline_args():
+        call_deferred("_register_overlay")
         return
     call_deferred("_register_quick_bar")
+
+
+func _register_overlay() -> void:
+    var container := get_tree().get_first_node_in_group("overlay") as OverlayContainer
+    if not container:
+        logger = Log.get_logger("ArmadaControl", Log.LEVEL.DEBUG)
+        logger.error("OGUI overlay container is unavailable")
+        return
+    overlay_item = OVERLAY_SCENE.instantiate() as Control
+    container.add_overlay(overlay_item)
 
 
 func _register_quick_bar() -> void:
@@ -90,3 +103,5 @@ func _exit_tree() -> void:
     mounted_status = null
     if is_instance_valid(quick_bar_item):
         quick_bar_item.queue_free()
+    if is_instance_valid(overlay_item):
+        overlay_item.queue_free()

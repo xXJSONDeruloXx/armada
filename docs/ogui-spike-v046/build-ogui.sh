@@ -40,7 +40,7 @@ apply_once "$root/normal-ui-godot47.patch"
 apply_once "$root/text-input-default.patch"
 
 mkdir -p "$source_dir/plugins/armada-control" "$output_dir"
-cp "$root"/{backend.gd,ogui-body-label.tres,plugin.gd,plugin.json,quick_bar.gd} \
+cp "$root"/{backend.gd,ogui-body-label.tres,overlay.gd,overlay.tscn,plugin.gd,plugin.json,quick_bar.gd} \
     "$source_dir/plugins/armada-control/"
 
 if [[ "${ARMADA_OGUI_IN_BUILDER:-0}" == 1 ]]; then

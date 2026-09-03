@@ -16,7 +16,7 @@ fi
 stage="$(mktemp -d -t armada-ogui-plugin.XXXXXX)"
 trap 'rm -rf "$stage"' EXIT
 mkdir -p "$stage/plugins/armada-control"
-cp "$root"/{backend.gd,ogui-body-label.tres,plugin.gd,plugin.json,quick_bar.gd} \
+cp "$root"/{backend.gd,ogui-body-label.tres,overlay.gd,overlay.tscn,plugin.gd,plugin.json,quick_bar.gd} \
     "$stage/plugins/armada-control/"
 mkdir -p "$(dirname -- "$output")"
 (cd "$stage" && zip -q -r "$output" plugins)
