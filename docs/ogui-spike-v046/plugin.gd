@@ -8,6 +8,7 @@ var mounted_status: Label
 var mounted_cards: Array[Control] = []
 var overlay_item: OverlayProvider
 var overlay_container: OverlayContainer
+var overlay_window_id := 0
 
 
 func _ready() -> void:
@@ -45,6 +46,7 @@ func _register_overlay() -> void:
     overlay_item.custom_minimum_size = container.size
     overlay_container = container
     container.add_overlay(overlay_item)
+    overlay_item.tree_exited.connect(_release_overlay_window)
     logger.info("Mounted Armada overlay provider")
     get_viewport().size_changed.connect(_update_overlay_geometry)
     _update_overlay_geometry()
@@ -74,6 +76,7 @@ func _claim_overlay_window() -> void:
         logger.warn("OGUI window was not found")
         return
     var window_id := windows[0]
+    overlay_window_id = window_id
     if xwayland.set_input_focus(window_id, 1) != OK:
         logger.warn("Unable to set OGUI input focus")
     if xwayland.set_overlay(window_id, 1) != OK:
@@ -82,6 +85,21 @@ func _claim_overlay_window() -> void:
     if input_plumber:
         input_plumber.manage_all_devices = true
         input_plumber.set_intercept_mode(2)
+
+
+func _release_overlay_window() -> void:
+    if overlay_window_id <= 0:
+        return
+    var gamescope := load("res://core/systems/gamescope/gamescope.tres")
+    if gamescope:
+        var xwayland = gamescope.get_xwayland(gamescope.XWAYLAND_TYPE_OGUI)
+        if xwayland:
+            xwayland.set_input_focus(overlay_window_id, 0)
+            xwayland.set_overlay(overlay_window_id, 0)
+    var input_plumber := load("res://core/systems/input/input_plumber.tres")
+    if input_plumber:
+        input_plumber.set_intercept_mode(InputPlumberInstance.INTERCEPT_MODE_NONE)
+    overlay_window_id = 0
 
 
 func _register_quick_bar() -> void:
@@ -152,12 +170,13 @@ func _mount_quick_bar_cards(viewport: VBoxContainer, item: Control) -> void:
 
 
 func _exit_tree() -> void:
+    _release_overlay_window()
     if is_instance_valid(quick_bar_item) and quick_bar_item.has_method("_stop_calibration_session"):
         quick_bar_item.call("_stop_calibration_session")
     if "--overlay-mode" in OS.get_cmdline_args():
         var input_plumber := load("res://core/systems/input/input_plumber.tres")
         if input_plumber:
-            input_plumber.set_intercept_mode(1)
+            input_plumber.set_intercept_mode(InputPlumberInstance.INTERCEPT_MODE_NONE)
     for card in mounted_cards:
         if is_instance_valid(card):
             card.queue_free()
