@@ -1113,7 +1113,8 @@ func _refresh_environment_dropdown() -> void:
     environment_dropdown.set_meta("armada_values", values)
     if selected_environment_key.is_empty() or not values.has(selected_environment_key):
         selected_environment_key = String(values[0]) if not values.is_empty() else ""
-    environment_dropdown.select(_dropdown_index(environment_dropdown, selected_environment_key))
+    if not values.is_empty():
+        environment_dropdown.select(_dropdown_index(environment_dropdown, selected_environment_key))
     _sync_environment_inputs()
 
 
