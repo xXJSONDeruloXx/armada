@@ -1,5 +1,10 @@
 extends Plugin
 
+const QUICK_BAR_META := "armada_control_quick_bar"
+
+var quick_bar_item: Control
+
+
 func _ready() -> void:
     if "--overlay-mode" in OS.get_cmdline_args():
         return
@@ -26,7 +31,11 @@ func _add_quick_bar_item(quick_bar: Control) -> void:
         logger = Log.get_logger("ArmadaControl", Log.LEVEL.DEBUG)
         logger.error("Armada Quick Bar script could not be loaded")
         return
-    var quick_bar_item = quick_bar_script.new()
+    var item := quick_bar_script.new() as Control
+    if not item:
+        logger = Log.get_logger("ArmadaControl", Log.LEVEL.DEBUG)
+        logger.error("Armada Quick Bar script is not a Control")
+        return
     var viewport := quick_bar.get_node_or_null(
         "MarginContainer/PanelContainer/MarginContainer/VBoxContainer/ScrollContainer/Viewport"
     ) as VBoxContainer
@@ -34,5 +43,16 @@ func _add_quick_bar_item(quick_bar: Control) -> void:
         logger = Log.get_logger("ArmadaControl", Log.LEVEL.DEBUG)
         logger.error("OGUI Quick Bar content viewport could not be found")
         return
-    quick_bar_item.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-    viewport.add_child(quick_bar_item)
+    for child in viewport.get_children():
+        if child is Control and child.get_meta(QUICK_BAR_META, false):
+            quick_bar_item = child
+            return
+    item.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    item.set_meta(QUICK_BAR_META, true)
+    quick_bar_item = item
+    viewport.add_child(item)
+
+
+func _exit_tree() -> void:
+    if is_instance_valid(quick_bar_item):
+        quick_bar_item.queue_free()

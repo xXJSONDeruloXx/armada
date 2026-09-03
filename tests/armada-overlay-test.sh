@@ -99,6 +99,8 @@ for section in Power Fans Games Compatibility System Actions; do
 done
 grep -Fq 'ScrollContainer/Viewport' "$ROOT/docs/ogui-spike-v046/plugin.gd"
 grep -Fq 'is_node_ready' "$ROOT/docs/ogui-spike-v046/plugin.gd"
+grep -Fq 'armada_control_quick_bar' "$ROOT/docs/ogui-spike-v046/plugin.gd"
+grep -Fq 'func _exit_tree' "$ROOT/docs/ogui-spike-v046/plugin.gd"
 grep -Fq 'Guide+B' "$ROOT/docs/ogui-spike-v046/README.md"
 grep -Fq 'PartOf=armada-control-overlay.service' "$ROOT/system_files/usr/lib/systemd/user/armada-overlay-gestures.service"
 grep -Fq -- '--cleanup' "$ROOT/system_files/usr/lib/systemd/user/armada-control-overlay.service"
