@@ -178,6 +178,13 @@ grep -Fq '_hide_component_description' "$ROOT/docs/ogui-spike-v046/quick_bar.gd"
 grep -Fq 'func _exit_tree' "$ROOT/docs/ogui-spike-v046/plugin.gd"
 grep -Fq 'Guide+B' "$ROOT/docs/ogui-spike-v046/README.md"
 grep -Fq 'PartOf=armada-control-overlay.service' "$ROOT/system_files/usr/lib/systemd/user/armada-overlay-gestures.service"
+grep -Fq 'PartOf=armada-control-overlay.service armada-opengamepadui.service' \
+    "$ROOT/system_files/usr/lib/systemd/user/armada-overlay-gestures.service"
+test -f "$ROOT/system_files/usr/lib/systemd/user/armada-opengamepadui.service"
+grep -Fq 'ExecStart=/usr/bin/armada-opengamepadui --overlay-mode' \
+    "$ROOT/system_files/usr/lib/systemd/user/armada-opengamepadui.service"
+grep -Fq 'disable armada-control-overlay.service' "$ROOT/Containerfile"
+grep -Fq 'enable armada-opengamepadui.service' "$ROOT/Containerfile"
 grep -Fq -- '--cleanup' "$ROOT/system_files/usr/lib/systemd/user/armada-control-overlay.service"
 grep -Fq 'ExecStartPre=-/usr/bin/armada-control-overlay --cleanup' \
     "$ROOT/system_files/usr/lib/systemd/user/armada-control-overlay.service"

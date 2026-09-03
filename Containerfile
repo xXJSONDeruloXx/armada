@@ -134,3 +134,5 @@ FROM armada AS armada-ogui
 COPY --from=ogui-build /build/ogui-out/ /usr/share/armada/ogui/
 COPY docs/ogui-spike-v046/armada-opengamepadui /usr/bin/armada-opengamepadui
 RUN chmod 0755 /usr/bin/armada-opengamepadui
+RUN systemctl --global disable armada-control-overlay.service || true; \
+    systemctl --global enable armada-opengamepadui.service armada-overlay-gestures.service

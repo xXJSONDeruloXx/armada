@@ -1,7 +1,7 @@
 [Unit]
 Description=Armada touchscreen edge gesture monitor
-PartOf=armada-control-overlay.service
-After=armada-control-overlay.service
+PartOf=armada-control-overlay.service armada-opengamepadui.service
+After=armada-control-overlay.service armada-opengamepadui.service
 
 [Service]
 ExecStart=/usr/libexec/armada/overlay-gestures
