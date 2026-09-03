@@ -11,6 +11,7 @@ Item {
     property var theme
     property var focusOwner
     property bool selected: false
+    property bool popupOpen: false
     signal activated
     signal focused
     signal valueEdited(string value)
@@ -34,8 +35,31 @@ Item {
         valueEdited(currentValue);
     }
     function open() {
+        if (!options.length) return;
+        root.requestFocus();
         selector.forceActiveFocus();
+        popupOpen = true;
         selector.popup.open();
+    }
+    function close() {
+        selector.popup.close();
+        popupOpen = false;
+    }
+    function handleAction(action) {
+        if (!popupOpen) return false;
+        if (action === "up" || action === "left") {
+            adjust(-1);
+            return true;
+        }
+        if (action === "down" || action === "right") {
+            adjust(1);
+            return true;
+        }
+        if (action === "accept" || action === "back") {
+            close();
+            return true;
+        }
+        return false;
     }
     function requestFocus() {
         if (focusOwner && focusOwner.setFocusedRow) focusOwner.setFocusedRow(root);
@@ -102,6 +126,10 @@ Item {
             root.currentValue = root.optionValue(root.options[index]);
             root.valueEdited(root.currentValue);
         }
+    }
+    Connections {
+        target: selector.popup
+        function onClosed() { root.popupOpen = false; }
     }
     MouseArea {
         anchors.left: parent.left

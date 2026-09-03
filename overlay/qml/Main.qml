@@ -34,11 +34,20 @@ Window {
         showPage(Math.max(0, Math.min(pageTitles.length - 1, navigation.currentIndex + direction)));
     }
 
+    function handlePopupAction(action) {
+        var item = stack.currentItem;
+        if (!item || !item.rows || item.focusIndex === undefined) return false;
+        var row = item.rows[item.focusIndex];
+        return row && row.handleAction ? row.handleAction(action) : false;
+    }
+
     function handleInput(action) {
         if (action === "guide")
             return;
         if (action === "back") {
             if (!navigationActive) {
+                if (handlePopupAction(action))
+                    return;
                 if (stack.currentItem && stack.currentItem.handleBack && stack.currentItem.handleBack())
                     return;
                 focusNavigation();
@@ -68,6 +77,8 @@ Window {
             else if (action === "accept") navigationActive = false;
             return;
         }
+        if (!navigationActive && handlePopupAction(action))
+            return;
         if (stack.currentItem && stack.currentItem.handleAction)
             stack.currentItem.handleAction(action);
     }
