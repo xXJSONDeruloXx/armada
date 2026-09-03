@@ -1,13 +1,35 @@
 diff --git a/core/ui/components/text_input.gd b/core/ui/components/text_input.gd
+index 1d215dd..4d8d5cb 100644
 --- a/core/ui/components/text_input.gd
 +++ b/core/ui/components/text_input.gd
-@@ -16 +16 @@
+@@ -13,7 +13,7 @@ signal text_submitted(new_text: String)
+ 		if label:
+ 			label.text = v
+ 			label.visible = v != ""
 -@export var description: String = "Description":
 +@export var description: String = "":
+ 	set(v):
+ 		description = v
+ 		if description_label:
+@@ -82,6 +82,6 @@ func _ready() -> void:
+ 	var on_text_submitted := func(v: String):
+ 		text_submitted.emit(v)
+-	line_edit.text_change_rejected.connect(on_text_submitted)
++	line_edit.text_submitted.connect(on_text_submitted)
+ 	var on_focus_exited := func():
+ 		focus_exited.emit()
+ 	line_edit.focus_exited.connect(on_focus_exited)
 
 diff --git a/core/ui/components/text_input.tscn b/core/ui/components/text_input.tscn
+index 1c4305b..9de2636 100644
 --- a/core/ui/components/text_input.tscn
 +++ b/core/ui/components/text_input.tscn
-@@ -25 +25 @@
+@@ -22,7 +22,7 @@ label_settings = ExtResource("2_w0wib")
+ [node name="DescriptionLabel" type="Label" parent="."]
+ unique_name_in_owner = true
+ layout_mode = 2
 -text = "Description"
 +text = ""
+ label_settings = ExtResource("3_8vwuq")
+ 
+ [node name="LineEdit" type="LineEdit" parent="."]
