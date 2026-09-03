@@ -1523,7 +1523,11 @@ func _sweep_compatibility() -> void:
     for game in installed_games:
         if game is Dictionary and not bool(game.get("nonSteam", false)) and String(game.get("appid", "")).is_valid_int():
             games.append({"appid": String(game["appid"])})
-    var response = _call_steam("sweep_compat", {"games": games, "tool": compat_tool, "auto_apply": true})
+    var response = _call_steam("sweep_compat", {
+        "games": games,
+        "tool": compat_tool,
+        "auto_apply": _global_tweak("autoApplyCompat"),
+    })
     _update_status("Compatibility sweep complete" if response.get("ok", false) else backend.last_error)
 
 
