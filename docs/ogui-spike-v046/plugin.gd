@@ -1,13 +1,10 @@
 extends Plugin
 
 const QUICK_BAR_META := "armada_control_quick_bar"
-const OVERLAY_SCENE := preload("res://plugins/armada-control/overlay.tscn")
 
 var quick_bar_item: Control
 var mounted_status: Label
 var mounted_cards: Array[Control] = []
-var overlay_item: OverlayProvider
-var overlay_container: OverlayContainer
 var overlay_window_id := 0
 var activation_input_plumber
 
@@ -15,7 +12,8 @@ var activation_input_plumber
 func _ready() -> void:
     if "--overlay-mode" in OS.get_cmdline_args():
         call_deferred("_configure_overlay_activation")
-        call_deferred("_register_overlay")
+        call_deferred("_register_quick_bar")
+        call_deferred("_claim_overlay_window")
         return
     call_deferred("_register_quick_bar")
 
@@ -77,50 +75,6 @@ func _overlay_activation_events() -> PackedStringArray:
             return PackedStringArray(["Gamepad:Button:Select", "Gamepad:Button:RightTop"])
         _:
             return PackedStringArray(["Gamepad:Button:Start", "Gamepad:Button:Select"])
-
-
-func _register_overlay() -> void:
-    logger = Log.get_logger("ArmadaControl", Log.LEVEL.DEBUG)
-    var main: Control
-    for candidate in get_tree().get_nodes_in_group("main"):
-        if candidate is Control:
-            main = candidate
-            break
-    var container := get_tree().get_first_node_in_group("overlay") as OverlayContainer
-    if not container and main:
-        container = OverlayContainer.new()
-        container.name = "ArmadaControlOverlayContainer"
-        container.z_index = 20
-        main.add_child(container)
-    if container and main:
-        container.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-        container.size = main.size
-    if not container:
-        logger.error("OGUI overlay container is unavailable")
-        return
-    overlay_item = OVERLAY_SCENE.instantiate() as OverlayProvider
-    if not overlay_item:
-        logger.error("Armada overlay scene could not be instantiated")
-        return
-    overlay_item.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-    overlay_item.size_flags_vertical = Control.SIZE_EXPAND_FILL
-    overlay_item.custom_minimum_size = container.size
-    overlay_container = container
-    container.add_overlay(overlay_item)
-    overlay_item.tree_exited.connect(_release_overlay_window)
-    logger.info("Mounted Armada overlay provider")
-    get_viewport().size_changed.connect(_update_overlay_geometry)
-    _update_overlay_geometry()
-    _claim_overlay_window()
-
-
-func _update_overlay_geometry() -> void:
-    if not is_instance_valid(overlay_container):
-        return
-    var size := get_viewport().get_visible_rect().size
-    overlay_container.size = size
-    if is_instance_valid(overlay_item):
-        overlay_item.custom_minimum_size = size
 
 
 func _claim_overlay_window() -> void:
@@ -247,5 +201,3 @@ func _exit_tree() -> void:
     mounted_status = null
     if is_instance_valid(quick_bar_item):
         quick_bar_item.queue_free()
-    if is_instance_valid(overlay_item):
-        overlay_item.queue_free()

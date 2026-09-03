@@ -75,7 +75,10 @@ grep -Fq 'b149644f46b71e175a2ad223e84c18361596691e' "$ROOT/docs/ogui-spike-v046/
 grep -Fq 'make -B' "$ROOT/docs/ogui-spike-v046/build-ogui.sh"
 grep -Fq 'ARMADA_OGUI_PCK_ONLY' "$ROOT/docs/ogui-spike-v046/build-ogui.sh"
 grep -Fq -- '--export-pack' "$ROOT/docs/ogui-spike-v046/build-ogui.sh"
-grep -Fq 'overlay.gd' "$ROOT/docs/ogui-spike-v046/build-plugin.sh"
+if grep -Fq 'overlay.gd' "$ROOT/docs/ogui-spike-v046/build-plugin.sh"; then
+    echo "plugin archive must not ship the retired overlay provider" >&2
+    exit 1
+fi
 grep -Fq 'source checkout contains an embedded Armada plugin' "$ROOT/docs/ogui-spike-v046/build-ogui.sh"
 if grep -Fq 'cp "$root"/{backend.gd' "$ROOT/docs/ogui-spike-v046/build-ogui.sh"; then
     echo "OGUI build still embeds the Armada plugin in the PCK" >&2
@@ -94,13 +97,9 @@ grep -Fq 'profile["gpu_min"] = "%.2f" % normalized' "$ROOT/docs/ogui-spike-v046/
 grep -Fq 'Refresh device state' "$ROOT/docs/ogui-spike-v046/quick_bar.gd"
 grep -Fq 'func _rebuild_sections()' "$ROOT/docs/ogui-spike-v046/quick_bar.gd"
 grep -Fq '"auto_apply": _global_tweak("autoApplyCompat")' "$ROOT/docs/ogui-spike-v046/quick_bar.gd"
-grep -Fq 'HBoxContainer' "$ROOT/docs/ogui-spike-v046/overlay.gd"
-if grep -Fq '.quit()' "$ROOT/docs/ogui-spike-v046/overlay.gd"; then
-    echo "overlay provider must stay resident for re-summon; dismiss hides, never quits" >&2
-    exit 1
-fi
-grep -Fq 'armada/overlay.json' "$ROOT/docs/ogui-spike-v046/overlay.gd"
-grep -Fq 'ARMADA_OGUI_LAYOUT' "$ROOT/docs/ogui-spike-v046/overlay.gd"
+test ! -e "$ROOT/docs/ogui-spike-v046/overlay.gd"
+test ! -e "$ROOT/docs/ogui-spike-v046/overlay.tscn"
+grep -Fq 'ARMADA_OGUI_LAYOUT' "$ROOT/docs/ogui-spike-v046/plugin.gd"
 grep -Fq 'touch -t 198001010000' "$ROOT/docs/ogui-spike-v046/build-plugin.sh"
 grep -Fq 'zip -X' "$ROOT/docs/ogui-spike-v046/build-plugin.sh"
 grep -Fq '_configure_overlay_activation' "$ROOT/docs/ogui-spike-v046/plugin.gd"
@@ -114,18 +113,17 @@ grep -Fq 'Slide-out activation' "$ROOT/docs/ogui-spike-v046/quick_bar.gd"
 grep -Fq 'Edge swipe to open' "$ROOT/docs/ogui-spike-v046/quick_bar.gd"
 grep -Fq 'DirAccess.rename_absolute' "$ROOT/docs/ogui-spike-v046/quick_bar.gd"
 grep -Fq 'config = response["result"]' "$ROOT/docs/ogui-spike-v046/quick_bar.gd"
-grep -Fq 'size_changed.connect(_update_overlay_geometry)' "$ROOT/docs/ogui-spike-v046/plugin.gd"
+if grep -Fq '_register_overlay\|OVERLAY_SCENE\|overlay_container' "$ROOT/docs/ogui-spike-v046/plugin.gd"; then
+    echo "plugin must mount cards into OGUI native quick bar menu, not a private container" >&2
+    exit 1
+fi
+grep -Fq 'call_deferred("_register_quick_bar")' "$ROOT/docs/ogui-spike-v046/plugin.gd"
+grep -Fq 'call_deferred("_claim_overlay_window")' "$ROOT/docs/ogui-spike-v046/plugin.gd"
 test -f "$ROOT/docs/ogui-spike-v046/text-input-default.patch"
 grep -Fq '@export var description: String = "":' "$ROOT/docs/ogui-spike-v046/text-input-default.patch"
 grep -Fq 'line_edit.text_submitted.connect(on_text_submitted)' "$ROOT/docs/ogui-spike-v046/text-input-default.patch"
 grep -Fq 'qb_card.tscn' "$ROOT/docs/ogui-spike-v046/quick_bar.gd"
 grep -Fq 'text_input.tscn' "$ROOT/docs/ogui-spike-v046/quick_bar.gd"
-test -f "$ROOT/docs/ogui-spike-v046/overlay.gd"
-test -f "$ROOT/docs/ogui-spike-v046/overlay.tscn"
-grep -Fq 'OVERLAY_SCENE' "$ROOT/docs/ogui-spike-v046/plugin.gd"
-grep -Fq '_register_overlay' "$ROOT/docs/ogui-spike-v046/plugin.gd"
-grep -Fq 'ScrollContainer' "$ROOT/docs/ogui-spike-v046/overlay.gd"
-grep -Fq 'ogui_back' "$ROOT/docs/ogui-spike-v046/overlay.gd"
 grep -Fq 'save_fan_curves' "$ROOT/docs/ogui-spike-v046/quick_bar.gd"
 grep -Fq 'selected_game_appid' "$ROOT/docs/ogui-spike-v046/quick_bar.gd"
 grep -Fq 'factoryFanCurves' "$ROOT/docs/ogui-spike-v046/quick_bar.gd"
