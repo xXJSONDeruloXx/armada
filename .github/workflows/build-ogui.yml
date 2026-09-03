@@ -1,0 +1,38 @@
+---
+name: Build OGUI ARM64 bundle
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build pinned OGUI bundle
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout Armada
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Build OGUI bundle
+        env:
+          OGUI_SOURCE_DIR: ${{ runner.temp }}/opengamepadui
+          OGUI_OUTPUT_DIR: ${{ runner.temp }}/ogui-out
+        run: |
+          set -euxo pipefail
+          git clone --filter=blob:none https://github.com/ShadowBlip/OpenGamepadUI.git "${OGUI_SOURCE_DIR}"
+          ogui_commit="$(sed -n 's/^expected_commit=\"\([^\"]*\)\"/\1/p' docs/ogui-spike-v046/build-ogui.sh)"
+          test -n "${ogui_commit}"
+          git -C "${OGUI_SOURCE_DIR}" checkout "${ogui_commit}"
+          docs/ogui-spike-v046/build-ogui.sh "${OGUI_SOURCE_DIR}" "${OGUI_OUTPUT_DIR}"
+
+      - name: Upload OGUI bundle
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: armada-ogui-arm64
+          path: ${{ runner.temp }}/ogui-out
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0

@@ -98,6 +98,8 @@ if grep -Fq 'cp "$root"/{backend.gd' "$ROOT/docs/ogui-spike-v046/build-ogui.sh";
 fi
 grep -Fq 'migrate_compat' "$ROOT/docs/ogui-spike-v046/quick_bar.gd"
 grep -Fq 'get_compat_mapped_appids' "$ROOT/docs/ogui-spike-v046/quick_bar.gd"
+test -f "$ROOT/.github/workflows/build-ogui.yml"
+grep -Fq 'build-ogui.sh' "$ROOT/.github/workflows/build-ogui.yml"
 if grep -Fq 'general["default_profile"] = name' "$ROOT/docs/ogui-spike-v046/quick_bar.gd"; then
     echo "OGUI profile selection changes the persisted default" >&2
     exit 1
