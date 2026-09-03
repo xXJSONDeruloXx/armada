@@ -29,7 +29,9 @@ func _register_overlay() -> void:
         container.name = "ArmadaControlOverlayContainer"
         container.z_index = 20
         main.add_child(container)
+    if container and main:
         container.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+        container.size = main.size
     if not container:
         logger.error("OGUI overlay container is unavailable")
         return
@@ -37,6 +39,9 @@ func _register_overlay() -> void:
     if not overlay_item:
         logger.error("Armada overlay scene could not be instantiated")
         return
+    overlay_item.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    overlay_item.size_flags_vertical = Control.SIZE_EXPAND_FILL
+    overlay_item.custom_minimum_size = container.size
     container.add_overlay(overlay_item)
     logger.info("Mounted Armada overlay provider")
     _claim_overlay_window()
