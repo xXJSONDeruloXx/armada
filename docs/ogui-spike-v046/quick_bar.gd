@@ -52,6 +52,7 @@ var calibration_button: CardButtonSetting
 var calibration_timer: Timer
 var calibration_capture: Dictionary = {}
 var calibration_recording := false
+var calibration_sliders: Dictionary = {}
 var selected_game_appid := ""
 var game_target_dropdown: Dropdown
 var games_controls: VBoxContainer
@@ -716,6 +717,20 @@ func _revert_fans() -> void:
 func _build_actions(parent: Container) -> void:
     _action(parent, "Reapply performance settings", func(): _call("reapply_perf"))
     calibration_button = _action(parent, "Start controller calibration", _toggle_calibration)
+    for item in [
+        {"key": "left_x", "label": "Left X", "minimum": -1.0, "maximum": 1.0},
+        {"key": "left_y", "label": "Left Y", "minimum": -1.0, "maximum": 1.0},
+        {"key": "right_x", "label": "Right X", "minimum": -1.0, "maximum": 1.0},
+        {"key": "right_y", "label": "Right Y", "minimum": -1.0, "maximum": 1.0},
+        {"key": "left_trigger", "label": "LT (%)", "minimum": 0.0, "maximum": 100.0},
+        {"key": "right_trigger", "label": "RT (%)", "minimum": 0.0, "maximum": 100.0},
+    ]:
+        var slider := _slider(parent, item["label"], 0, item["minimum"], item["maximum"], func(_value): pass)
+        slider.focus_mode = Control.FOCUS_NONE
+        slider.editable = false
+        if item["minimum"] < 0:
+            slider.show_decimal = true
+        calibration_sliders[item["key"]] = slider
     _action(parent, "Reset controller calibration", func(): _call("reset_calibration"))
     _action(parent, "Restart Game Mode", func(): _call("restart_game_mode"))
     calibration_timer = Timer.new()
@@ -753,6 +768,7 @@ func _capture_calibration_sample() -> void:
         _update_status(backend.last_error)
         return
     var controls: Dictionary = response.get("result", {}).get("controls", {})
+    _update_calibration_sliders(controls)
     for name in ["left_x", "left_y", "right_x", "right_y", "left_trigger", "right_trigger"]:
         var control: Dictionary = controls.get(name, {})
         if not control.has("value"):
@@ -764,6 +780,26 @@ func _capture_calibration_sample() -> void:
         capture["min"] = minf(float(capture["min"]), value)
         capture["max"] = maxf(float(capture["max"]), value)
         capture["range"] = float(capture["max"]) - float(capture["min"])
+
+
+func _update_calibration_sliders(controls: Dictionary) -> void:
+    for name in ["left_x", "left_y", "right_x", "right_y"]:
+        var control: Dictionary = controls.get(name, {})
+        if not calibration_sliders.has(name) or not control.has("value"):
+            continue
+        var minimum := float(control.get("min", -32768))
+        var maximum := float(control.get("max", 32767))
+        var value := float(control.get("value", 0))
+        var side := absf(minimum) if value < 0 else maximum
+        calibration_sliders[name].value = clampf(value / side if side else 0.0, -1.0, 1.0)
+    for name in ["left_trigger", "right_trigger"]:
+        var control: Dictionary = controls.get(name, {})
+        if not calibration_sliders.has(name) or not control.has("value"):
+            continue
+        var minimum := float(control.get("min", 0))
+        var maximum := float(control.get("max", 1))
+        var value := float(control.get("value", 0))
+        calibration_sliders[name].value = clampf((value - minimum) / (maximum - minimum) * 100.0 if maximum != minimum else 0.0, 0.0, 100.0)
 
 
 func _build_games(parent: Container) -> void:
