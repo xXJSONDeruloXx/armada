@@ -34,15 +34,16 @@ apply_once() {
     fi
 }
 
+if [[ -e "$source_dir/plugins/armada-control" ]]; then
+    printf 'source checkout contains an embedded Armada plugin; use a fresh OGUI checkout: %s\n' "$source_dir" >&2
+    exit 1
+fi
+
 apply_once "$root/hardware_manager.patch"
 apply_once "$root/plugin_manager.patch"
 apply_once "$root/normal-ui-godot47.patch"
 apply_once "$root/text-input-default.patch"
 
-if [[ -e "$source_dir/plugins/armada-control" ]]; then
-    printf 'source checkout contains an embedded Armada plugin; use a fresh OGUI checkout: %s\n' "$source_dir" >&2
-    exit 1
-fi
 mkdir -p "$output_dir"
 
 if [[ "${ARMADA_OGUI_IN_BUILDER:-0}" == 1 ]]; then
