@@ -10,12 +10,17 @@ func _ready() -> void:
 
     var panel := PanelContainer.new()
     panel.name = "ArmadaControlOverlay"
-    panel.custom_minimum_size = Vector2(720, 760)
+    panel.custom_minimum_size = Vector2(720, 640)
     panel.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
     add_child(panel)
 
+    var scroll := ScrollContainer.new()
+    scroll.name = "ArmadaControlScroll"
+    panel.add_child(scroll)
+
     content = QUICK_BAR_SCRIPT.new() as Control
-    panel.add_child(content)
+    content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    scroll.add_child(content)
 
     var focus_group := FocusGroup.new()
     focus_group.current_focus = _first_focusable(content)
