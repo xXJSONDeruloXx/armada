@@ -80,6 +80,11 @@ test -x "$ROOT/system_files/usr/libexec/armada/armada-overlay-call"
 test -x "$ROOT/system_files/usr/libexec/armada/armada-steam-call"
 grep -Fq 'armada-steam-call' "$ROOT/docs/ogui-spike-v046/backend.gd"
 grep -Fq 'armada-overlay-call' "$ROOT/system_files/usr/libexec/armada/armada-overlay-call"
+grep -Fq 'inputplumber-intercept reset' "$ROOT/docs/ogui-spike-v046/armada-opengamepadui"
+if grep -Fq 'exec /usr/share/armada/ogui/opengamepad-ui.aarch64' "$ROOT/docs/ogui-spike-v046/armada-opengamepadui"; then
+    echo "OGUI launcher bypasses cleanup trap" >&2
+    exit 1
+fi
 test -f "$ROOT/docs/ogui-spike-v046/quick_bar.gd"
 test -x "$ROOT/docs/ogui-spike-v046/build-plugin.sh"
 test -x "$ROOT/docs/ogui-spike-v046/build-ogui.sh"
