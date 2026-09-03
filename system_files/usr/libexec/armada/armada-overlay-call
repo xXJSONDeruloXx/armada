@@ -1,0 +1,42 @@
+#!/usr/bin/env python3
+"""Call the group-scoped Armada overlay API from a user-session UI."""
+
+import json
+import socket
+import sys
+
+
+SOCKET = "/run/armada/overlay.sock"
+
+
+def main():
+    if len(sys.argv) != 3:
+        print(json.dumps({"ok": False, "error": "usage: armada-overlay-call ACTION JSON"}))
+        return 2
+
+    try:
+        fields = json.loads(sys.argv[2])
+        if not isinstance(fields, dict):
+            raise ValueError("fields must be an object")
+        payload = {"action": sys.argv[1], **fields}
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
+            client.settimeout(5)
+            client.connect(SOCKET)
+            client.sendall((json.dumps(payload, separators=(",", ":")) + "\n").encode())
+            response = b""
+            while b"\n" not in response:
+                chunk = client.recv(65536)
+                if not chunk:
+                    break
+                response += chunk
+        if not response:
+            raise RuntimeError("overlay service returned no response")
+        print(response.split(b"\n", 1)[0].decode())
+        return 0
+    except Exception as error:
+        print(json.dumps({"ok": False, "error": str(error)}))
+        return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

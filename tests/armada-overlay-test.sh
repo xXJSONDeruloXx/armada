@@ -76,6 +76,11 @@ grep -Fq 'ExecStopPost=-/usr/libexec/armada/inputplumber-intercept reset' \
     "$ROOT/system_files/usr/lib/systemd/user/armada-control-overlay.service"
 grep -Fq 'armada-overlay-gestures.service' "$ROOT/build_files/40-vendor-system-files.sh"
 test -x "$ROOT/system_files/usr/libexec/armada/overlay-gestures"
+test -x "$ROOT/system_files/usr/libexec/armada/armada-overlay-call"
+grep -Fq 'armada-overlay-call' "$ROOT/system_files/usr/libexec/armada/armada-overlay-call"
+test -f "$ROOT/docs/ogui-spike-v046/quick_bar.gd"
+grep -Fq 'add_to_quick_bar' "$ROOT/docs/ogui-spike-v046/plugin.gd"
+grep -Fq 'Guide+B' "$ROOT/docs/ogui-spike-v046/README.md"
 grep -Fq 'PartOf=armada-control-overlay.service' "$ROOT/system_files/usr/lib/systemd/user/armada-overlay-gestures.service"
 grep -Fq -- '--cleanup' "$ROOT/system_files/usr/lib/systemd/user/armada-control-overlay.service"
 grep -Fq 'ExecStartPre=-/usr/bin/armada-control-overlay --cleanup' \

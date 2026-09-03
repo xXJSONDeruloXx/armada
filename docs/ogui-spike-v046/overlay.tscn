@@ -3,5 +3,5 @@
 [ext_resource type="Script" path="res://plugins/armada-control/overlay.gd" id="1_armada"]
 
 [node name="ArmadaControlOverlay" type="Control"]
-provider_id = "armada-control-test"
+provider_id = "armada-control"
 script = ExtResource("1_armada")
