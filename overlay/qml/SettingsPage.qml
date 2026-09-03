@@ -30,7 +30,10 @@ Item {
                    {data: "select_r1", label: "Select + R1"}]
                 : [{data: "left", label: "Left edge"}, {data: "right", label: "Right edge"}, {data: "bottom", label: "Bottom edge"}];
     }
-    function overlayValue(key, fallback) { return (armada.overlayConfig || {})[key] || fallback; }
+    function overlayValue(key, fallback) {
+        var config = armada.overlayConfig || {};
+        return config[key] !== undefined ? config[key] : fallback;
+    }
     function saveOverlay(patch) {
         if (armada.saveOverlayConfig(patch)) {
             statusText = "Saved";
