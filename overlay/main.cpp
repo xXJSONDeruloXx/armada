@@ -400,9 +400,13 @@ public:
             connect(server_, &QLocalServer::newConnection, this, &QmlOverlayController::commands);
         connectInputEvents();
         inputDiscoveryTimer_.setInterval(5000);
-        connect(&inputDiscoveryTimer_, &QTimer::timeout, this, &QmlOverlayController::connectInputEvents);
+        connect(&inputDiscoveryTimer_, &QTimer::timeout, this, [this] {
+            connectInputEvents();
+            if (!activationReady_ && !overlayVisible_)
+                activationReady_ = applyOverlayActivation();
+        });
         inputDiscoveryTimer_.start();
-        request(QStringLiteral("set_overlay_activation"), {{QStringLiteral("chord"), activeChord()}});
+        activationReady_ = applyOverlayActivation();
     }
 
     ~QmlOverlayController() override
@@ -490,7 +494,7 @@ public:
             return false;
         overlayConfig_ = next;
         emit overlayConfigChanged();
-        applyOverlayActivation();
+        activationReady_ = applyOverlayActivation();
         configureEdgeSensor();
         return true;
     }
@@ -524,7 +528,6 @@ public:
             request(QStringLiteral("end_calibration_session"), {{QStringLiteral("token"), calibrationSessionToken_}});
             calibrationSessionActive_ = false;
         }
-        request(QStringLiteral("inputplumber_intercept"), {{QStringLiteral("mode"), QStringLiteral("reset")} });
         overlayVisible_ = false;
         emit overlayVisibleChanged();
         if (window_) {
@@ -533,6 +536,7 @@ public:
         } else {
             cleanupGamescopeState();
         }
+        activationReady_ = request(QStringLiteral("inputplumber_intercept"), {{QStringLiteral("mode"), QStringLiteral("pass")} }).ok;
     }
 
     Q_INVOKABLE void toggleOverlay()
@@ -687,7 +691,12 @@ private:
 
     void applyOverlayActivation()
     {
-        request(QStringLiteral("set_overlay_activation"), {{QStringLiteral("chord"), activeChord()}});
+        const RpcResult activation = request(
+            QStringLiteral("set_overlay_activation"), {{QStringLiteral("chord"), activeChord()}});
+        if (!activation.ok || overlayVisible_)
+            return activation.ok;
+        return request(
+            QStringLiteral("inputplumber_intercept"), {{QStringLiteral("mode"), QStringLiteral("pass")} }).ok;
     }
 
     void configureEdgeSensor()
@@ -728,6 +737,7 @@ private:
     QVariantMap overlayConfig_;
     bool overlayVisible_ = false;
     bool edgeSensorReady_ = false;
+    bool activationReady_ = false;
     QTimer compatibilityTimer_;
     QTimer inputDiscoveryTimer_;
     QProcess compatibilityProcess_;

@@ -65,6 +65,9 @@ case "${1:-}" in
   overlay)
     busctl --system set-property "$service" "$path" "$iface" InterceptMode u 2
     ;;
+  pass)
+    busctl --system set-property "$service" "$path" "$iface" InterceptMode u 1
+    ;;
   gamepad)
     busctl --system set-property "$service" "$path" "$iface" InterceptMode u 3
     ;;
@@ -73,7 +76,7 @@ case "${1:-}" in
     ;;
   activation) activation "${2:-start_select}" ;;
   *)
-    echo "usage: inputplumber-intercept status|overlay|gamepad|reset|activation [chord]" >&2
+    echo "usage: inputplumber-intercept status|pass|overlay|gamepad|reset|activation [chord]" >&2
     exit 2
     ;;
 esac

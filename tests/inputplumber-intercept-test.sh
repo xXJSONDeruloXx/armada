@@ -32,6 +32,12 @@ BUSCTL_LOG="$WORK/busctl.log" PATH="$WORK:$PATH" \
 grep -Fq 'CompositeDevice9' "$WORK/busctl.log"
 grep -Fq 'ass 2 Gamepad:Button:Select Gamepad:Button:LeftBumper Gamepad:Button:Guide' "$WORK/busctl.log"
 
+: > "$WORK/busctl.log"
+BUSCTL_LOG="$WORK/busctl.log" PATH="$WORK:$PATH" \
+    "$ROOT/system_files/usr/libexec/armada/inputplumber-intercept" pass >/dev/null
+grep -Fq 'CompositeDevice9' "$WORK/busctl.log"
+grep -Fq 'set-property org.shadowblip.InputPlumber /org/shadowblip/InputPlumber/CompositeDevice9 org.shadowblip.Input.CompositeDevice InterceptMode u 1' "$WORK/busctl.log"
+
 if BUSCTL_LOG="$WORK/busctl.log" PATH="$WORK:$PATH" \
     "$ROOT/system_files/usr/libexec/armada/inputplumber-intercept" activation arbitrary >/dev/null 2>&1; then
     echo "helper accepted an arbitrary activation chord" >&2
