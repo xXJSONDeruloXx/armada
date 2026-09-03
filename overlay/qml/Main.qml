@@ -104,7 +104,9 @@ Window {
             z: 0
             property real startX: 0
             property real startY: 0
+            property real startTime: 0
             property bool tracking: false
+            property int maxDurationMs: 700
             function edgeWidth() { return Math.max(16, Math.min(48, width / 40)); }
             function startsAtEdge(x, y) {
                 var edge = edgeWidth();
@@ -117,6 +119,7 @@ Window {
                 if (tracking) {
                     startX = mouse.x;
                     startY = mouse.y;
+                    startTime = Date.now();
                 }
                 mouse.accepted = tracking;
             }
@@ -124,12 +127,13 @@ Window {
                 if (!tracking) return;
                 var dx = mouse.x - startX;
                 var dy = mouse.y - startY;
+                var duration = Date.now() - startTime;
                 var horizontal = Math.abs(dx) > Math.abs(dy);
                 var inward = root.swipeEdge === "left" ? dx >= root.swipeDistance
                     : root.swipeEdge === "right" ? dx <= -root.swipeDistance
                     : dy <= -root.swipeDistance;
                 tracking = false;
-                if ((root.swipeEdge === "bottom" || horizontal) && inward)
+                if (duration <= maxDurationMs && (root.swipeEdge === "bottom" || horizontal) && inward)
                     armada.showOverlay();
             }
             onCanceled: tracking = false;
