@@ -27,6 +27,14 @@ func _ready() -> void:
     content.add_child(focus_group)
 
 
+func _unhandled_input(event: InputEvent) -> void:
+    if event.is_action_released("ogui_east") \
+            or event.is_action_released("ogui_back") \
+            or event.is_action_released("ogui_east_ov"):
+        get_viewport().set_input_as_handled()
+        queue_free()
+
+
 func _first_focusable(node: Node) -> Control:
     for child in node.get_children():
         if child is Control and child.focus_mode != Control.FOCUS_NONE and child.visible:
