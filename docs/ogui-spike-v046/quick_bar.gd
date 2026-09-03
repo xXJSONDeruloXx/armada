@@ -256,7 +256,8 @@ func _build_fans(parent: Container) -> void:
     curve_point_dropdown = _dropdown(parent, "Point", [], "", _select_curve_point)
     curve_point_dropdown.ready.connect(_populate_curve_points)
     curve_temp_slider = _slider(parent, "Point temperature", 60, 0, 120, _stage_curve_temperature)
-    curve_pwm_slider = _slider(parent, "Point PWM (%)", 50, 0, 100, _stage_curve_pwm)
+    curve_pwm_slider = _slider(parent, "Point PWM", 128, 0, 255, _stage_curve_pwm)
+    curve_pwm_slider.step = 5
     _action(parent, "Add point", _add_curve_point)
     _action(parent, "Remove point", _remove_curve_point)
     var fan_stop_enabled := _curve_has_fan_stop()
@@ -278,7 +279,8 @@ func _build_fans(parent: Container) -> void:
     _slider(parent, "Ramp up", float(settings.get("ramp_up", 36)), 1, 255, func(value): _stage_fan_setting("ramp_up", value))
     _slider(parent, "Ramp down", float(settings.get("ramp_down", 6)), 1, 255, func(value): _stage_fan_setting("ramp_down", value))
     _slider(parent, "Smoothing (%)", roundi(float(settings.get("smoothing", 0.0)) * 100.0), 0, 99, func(value): _stage_fan_setting("smoothing", value / 100.0))
-    _slider(parent, "Min fan speed (%)", roundi(float(settings.get("min_pwm", 0)) / 255.0 * 100.0), 0, 100, func(value): _stage_fan_setting("min_pwm", roundi(value / 100.0 * 255.0)))
+    var minimum_pwm_slider := _slider(parent, "Minimum PWM", float(settings.get("min_pwm", 0)), 0, 255, func(value): _stage_fan_setting("min_pwm", roundi(value)))
+    minimum_pwm_slider.step = 5
     _action(parent, "Save fan settings", _save_fans)
     _action(parent, "Revert changes", _revert_fans)
 
@@ -493,7 +495,7 @@ func _sync_curve_point(point: Dictionary) -> void:
         return
     _syncing_curve_controls = true
     curve_temp_slider.value = int(point.get("temp", 60))
-    curve_pwm_slider.value = roundi(float(point.get("pwm", 128)) / 255.0 * 100.0)
+    curve_pwm_slider.value = int(point.get("pwm", 128))
     _syncing_curve_controls = false
 
 
@@ -531,7 +533,7 @@ func _stage_curve_pwm(value: float) -> void:
     var points := _curve_points()
     if selected_curve_point < 0 or selected_curve_point >= points.size():
         return
-    points[selected_curve_point]["pwm"] = clampi(roundi(value / 100.0 * 255.0), 0, 255)
+    points[selected_curve_point]["pwm"] = clampi(roundi(value), 0, 255)
     _write_curve_points(points)
     _populate_curve_points()
     _update_status("Fan point staged")
