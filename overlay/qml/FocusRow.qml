@@ -14,8 +14,8 @@ Item {
     signal adjusted(int direction)
     width: parent ? parent.width : 0
     height: theme.rowHeight
-    focus: true
-    activeFocusOnTab: true
+    focus: false
+    activeFocusOnTab: false
 
     function requestFocus() {
         if (focusOwner && focusOwner.setFocusedRow) focusOwner.setFocusedRow(root);

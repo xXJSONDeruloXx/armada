@@ -24,6 +24,8 @@ Window {
         pageIndex = index;
         navigation.currentIndex = index;
         stack.replace(pageComponents[index]);
+        if (navigationActive)
+            Qt.callLater(function() { navigation.forceActiveFocus(); });
     }
 
     function focusNavigation() {

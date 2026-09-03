@@ -166,6 +166,8 @@ if grep -Fq 'devices/target/dbus0' "$ROOT/overlay/main.cpp"; then
     exit 1
 fi
 grep -Fq 'navigationActive' "$ROOT/overlay/qml/Main.qml"
+grep -Fq 'Qt.callLater(function() { navigation.forceActiveFocus(); })' "$ROOT/overlay/qml/Main.qml"
+grep -Fq 'focus: false' "$ROOT/overlay/qml/FocusRow.qml"
 grep -Fq 'sidePanel' "$ROOT/overlay/qml/Main.qml"
 grep -Fq 'overlay-gestures' "$ROOT/tests/armada-overlay-gestures-test.sh"
 grep -Fq 'panelAnimationMs' "$ROOT/overlay/qml/Theme.qml"
