@@ -14,3 +14,5 @@ This directory preserves the isolated OGUI plugin used against OpenGamepadUI v0.
 - Both patches apply cleanly to upstream commit `b149644f46b71e175a2ad223e84c18361596691e` (v0.46.0). The source-built ARM64 runtime was smoke-tested on Nova: it remains alive, loads the plugin, owns `STEAM_INPUT_FOCUS`/`STEAM_OVERLAY`, and uses OGUI's own Gamescope/InputPlumber resources.
 
 The plugin intentionally does not copy OGUI source, binaries, native extensions, or assets into Armada. Rebuild the plugin archive from the files in this directory using OGUI's plugin archive layout. The earlier centered-provider probe remains in git history; the current implementation is Quick Bar-only. See the living PRD for device commands, hashes, startup output, and the adoption decision.
+
+Build an archive with `./build-plugin.sh /path/to/armada-control.zip`, then place it in OGUI's user plugin directory.
