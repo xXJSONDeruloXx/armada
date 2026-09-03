@@ -25,15 +25,20 @@ var curve_temp_slider: ValueSlider
 var curve_pwm_slider: ValueSlider
 var fan_stop_toggle: Toggle
 var fan_stop_temp_slider: ValueSlider
+var fan_fix_pwm_button: CardButtonSetting
+var fan_reset_curve_button: CardButtonSetting
 var curve_name_input: ComponentTextInput
 var curve_delete_dropdown: Dropdown
 var selected_curve := ""
 var selected_curve_point := 0
 var selected_delete_curve := ""
 var delete_curve_pending := false
+var reset_curve_pending := false
 var _syncing_curve_controls := false
 var status_label: Label
 var fan_state: Dictionary = {}
+var fan_original_state: Dictionary = {}
+var fan_stop_previous_min_pwm := -1
 var fans_parent: Container
 var current_appid := ""
 var compat_tools: Array = []
@@ -90,6 +95,7 @@ func _load_config() -> void:
     var fans = backend.call_action("get_fans_state")
     if fans.get("ok", false):
         fan_state = fans.get("result", {})
+        fan_original_state = fan_state.duplicate(true)
     var runtime = backend.call_action("get_runtime_game")
     if runtime.get("ok", false) and runtime.get("result") is Dictionary:
         current_appid = String(runtime["result"].get("appid", ""))
@@ -251,6 +257,10 @@ func _build_fans(parent: Container) -> void:
     fan_stop_toggle = _toggle(parent, "Fan stop", fan_stop_enabled, _toggle_fan_stop)
     fan_stop_temp_slider = _slider(parent, "Fan stop temperature", _fan_stop_temperature(), 0, 120, _stage_fan_stop_temperature)
     fan_stop_temp_slider.visible = fan_stop_enabled
+    fan_fix_pwm_button = _action(parent, "Fix minimum PWM", _fix_minimum_pwm)
+    fan_fix_pwm_button.visible = _fan_below_min_pwm()
+    fan_reset_curve_button = _action(parent, "Reset curve to factory", _reset_curve)
+    fan_reset_curve_button.visible = fan_state.get("factoryFanCurves", {}).has(selected_curve)
     _build_curve_management(parent)
 
     var current_temp = fan_state.get("currentTemp")
@@ -264,6 +274,7 @@ func _build_fans(parent: Container) -> void:
     _slider(parent, "Smoothing (%)", roundi(float(settings.get("smoothing", 0.0)) * 100.0), 0, 99, func(value): _stage_fan_setting("smoothing", value / 100.0))
     _slider(parent, "Min fan speed (%)", roundi(float(settings.get("min_pwm", 0)) / 255.0 * 100.0), 0, 100, func(value): _stage_fan_setting("min_pwm", roundi(value / 100.0 * 255.0)))
     _action(parent, "Save fan settings", _save_fans)
+    _action(parent, "Revert changes", _revert_fans)
 
 
 func _build_curve_management(parent: Container) -> void:
@@ -368,7 +379,8 @@ func _refresh_curve_dropdowns() -> void:
             curve_editor_dropdown.add_item(String(option["label"]))
             values.append(String(option["data"]))
         curve_editor_dropdown.set_meta("armada_values", values)
-        curve_editor_dropdown.select(_dropdown_index(curve_editor_dropdown, selected_curve))
+        if not values.is_empty():
+            curve_editor_dropdown.select(_dropdown_index(curve_editor_dropdown, selected_curve))
     if curve_delete_dropdown:
         var protected: Dictionary = fan_state.get("factoryFanCurves", {})
         var profiles: Dictionary = fan_state.get("profiles", {})
@@ -389,8 +401,18 @@ func _refresh_curve_dropdowns() -> void:
         curve_delete_dropdown.set_meta("armada_values", delete_values)
         if selected_delete_curve.is_empty() or not delete_values.has(selected_delete_curve):
             selected_delete_curve = String(delete_values[0]) if not delete_values.is_empty() else ""
-        curve_delete_dropdown.select(_dropdown_index(curve_delete_dropdown, selected_delete_curve))
+        if not delete_values.is_empty():
+            curve_delete_dropdown.select(_dropdown_index(curve_delete_dropdown, selected_delete_curve))
     _populate_curve_points()
+    if fan_stop_toggle:
+        fan_stop_toggle.button_pressed = _curve_has_fan_stop()
+    if fan_stop_temp_slider:
+        fan_stop_temp_slider.value = _fan_stop_temperature()
+        fan_stop_temp_slider.visible = fan_stop_toggle.button_pressed if fan_stop_toggle else false
+    if fan_fix_pwm_button:
+        fan_fix_pwm_button.visible = _fan_below_min_pwm()
+    if fan_reset_curve_button:
+        fan_reset_curve_button.visible = fan_state.get("factoryFanCurves", {}).has(selected_curve)
 
 
 func _curve_slug(value: String) -> String:
@@ -472,6 +494,7 @@ func _sync_curve_point(point: Dictionary) -> void:
 func _select_curve(name: String) -> void:
     selected_curve = name
     selected_curve_point = 0
+    reset_curve_pending = false
     _populate_curve_points()
 
 
@@ -511,6 +534,12 @@ func _stage_curve_pwm(value: float) -> void:
 func _add_curve_point() -> void:
     var points := _curve_points()
     var added := {"temp": 60, "pwm": 128}
+    if not points.is_empty():
+        var last: Dictionary = points[points.size() - 1]
+        if int(last["temp"]) >= 120:
+            _update_status("Curve already reaches 120 °C")
+            return
+        added = {"temp": mini(int(last["temp"]) + 10, 120), "pwm": int(last["pwm"])}
     points.append(added)
     points.sort_custom(func(a, b): return int(a["temp"]) < int(b["temp"]))
     selected_curve_point = points.find(added)
@@ -548,9 +577,13 @@ func _fan_stop_temperature() -> float:
 
 func _toggle_fan_stop(enabled: bool) -> void:
     if enabled:
+        fan_stop_previous_min_pwm = int(fan_state.get("fanSettings", {}).get("min_pwm", 0))
         _set_fan_stop_points(60)
     else:
         _restore_fan_points()
+        if not _other_curve_has_fan_stop() and fan_stop_previous_min_pwm >= 0:
+            _stage_fan_setting("min_pwm", fan_stop_previous_min_pwm)
+        fan_stop_previous_min_pwm = -1
     if fan_stop_temp_slider:
         fan_stop_temp_slider.visible = enabled
     if enabled:
@@ -579,7 +612,7 @@ func _set_fan_stop_points(temperature: int) -> void:
     if zeroed.is_empty() or int(zeroed[zeroed.size() - 1]["temp"]) != temperature:
         zeroed.append({"temp": temperature, "pwm": 0})
     if above.is_empty() and temperature < 120:
-        zeroed.append({"temp": mini(temperature + 20, 120), "pwm": 128})
+        zeroed.append({"temp": mini(temperature + 10, 120), "pwm": 128})
     elif not above.is_empty():
         zeroed.append_array(above)
     _write_curve_points(zeroed)
@@ -603,6 +636,73 @@ func _restore_fan_points_array(points: Array) -> Array:
     if zero_count == points.size() and int(points[zero_count - 1]["temp"]) < 120:
         points.append({"temp": mini(int(points[zero_count - 1]["temp"]) + 20, 120), "pwm": restore_pwm})
     return points
+
+
+func _other_curve_has_fan_stop() -> bool:
+    var curves: Dictionary = fan_state.get("fanCurves", {})
+    for name in curves:
+        if String(name) == selected_curve:
+            continue
+        var points: Array = []
+        for item in String(curves[name].get("curve", "")).split(","):
+            var parts := item.strip_edges().split(":")
+            if parts.size() == 2 and parts[0].is_valid_int() and parts[1].is_valid_int():
+                points.append({"pwm": int(parts[1])})
+        if not points.is_empty() and int(points[0]["pwm"]) == 0:
+            return true
+    return false
+
+
+func _fan_below_min_pwm() -> bool:
+    var minimum := int(fan_state.get("fanSettings", {}).get("min_pwm", 0))
+    for point in _curve_points():
+        if int(point["pwm"]) < minimum:
+            return true
+    return false
+
+
+func _fix_minimum_pwm() -> void:
+    var points := _curve_points()
+    if points.is_empty():
+        return
+    var minimum := int(points[0]["pwm"])
+    for point in points:
+        minimum = mini(minimum, int(point["pwm"]))
+    _stage_fan_setting("min_pwm", minimum)
+    if fan_fix_pwm_button:
+        fan_fix_pwm_button.visible = false
+    _update_status("Minimum PWM staged")
+
+
+func _reset_curve() -> void:
+    var factory: Dictionary = fan_state.get("factoryFanCurves", {}).get(selected_curve, {})
+    if factory.is_empty():
+        _update_status("No factory curve")
+        return
+    if not reset_curve_pending:
+        reset_curve_pending = true
+        _update_status("Press A again to reset curve")
+        return
+    var curves: Dictionary = fan_state.get("fanCurves", {}).duplicate(true)
+    curves[selected_curve] = factory.duplicate(true)
+    fan_state["fanCurves"] = curves
+    reset_curve_pending = false
+    selected_curve_point = 0
+    _refresh_curve_dropdowns()
+    _update_status("Curve reset")
+
+
+func _revert_fans() -> void:
+    if fan_original_state.is_empty():
+        _update_status("Original fan state unavailable")
+        return
+    fan_state = fan_original_state.duplicate(true)
+    selected_curve = _active_curve(fan_state.get("fanCurves", {}))
+    selected_curve_point = 0
+    reset_curve_pending = false
+    fan_stop_previous_min_pwm = -1
+    _rebuild_fan_controls()
+    _update_status("Fan changes reverted")
 
 
 func _build_actions(parent: Container) -> void:
@@ -1394,19 +1494,25 @@ func _refresh_fans() -> void:
     var response = backend.call_action("get_fans_state")
     if response.get("ok", false):
         fan_state = response.get("result", {})
-        if fans_parent:
-            for child in fans_parent.get_children():
-                if child is FocusGroup:
-                    continue
-                child.free()
-            _build_fans(fans_parent)
-            for child in fans_parent.get_children():
-                if child is FocusGroup:
-                    child.current_focus = _first_focusable(fans_parent)
-                    break
+        fan_original_state = fan_state.duplicate(true)
+        _rebuild_fan_controls()
         _update_status("Fan state refreshed")
     else:
         _update_status(backend.last_error)
+
+
+func _rebuild_fan_controls() -> void:
+    if not fans_parent:
+        return
+    for child in fans_parent.get_children():
+        if child is FocusGroup:
+            continue
+        child.free()
+    _build_fans(fans_parent)
+    for child in fans_parent.get_children():
+        if child is FocusGroup:
+            child.current_focus = _first_focusable(fans_parent)
+            break
 
 
 func _stage_fan_setting(key: String, value: float) -> void:
@@ -1423,6 +1529,7 @@ func _save_fans() -> void:
     })
     if response.get("ok", false):
         fan_state = response.get("result", fan_state)
+        fan_original_state = fan_state.duplicate(true)
         _update_status("Fan settings saved")
     else:
         _update_status(backend.last_error)
