@@ -177,6 +177,25 @@ grep -Fq 'armada-opengamepadui' "$ROOT/Containerfile"
 test -x "$ROOT/docs/ogui-spike-v046/armada-opengamepadui"
 grep -Fq 'opengamepadui/plugins' "$ROOT/docs/ogui-spike-v046/armada-opengamepadui"
 grep -Fq 'armada-control.zip' "$ROOT/docs/ogui-spike-v046/armada-opengamepadui"
+grep -Fq 'discover_display' "$ROOT/docs/ogui-spike-v046/armada-opengamepadui"
+grep -Fq 'GAMESCOPE_FOCUSED_WINDOW' "$ROOT/docs/ogui-spike-v046/armada-opengamepadui"
+# launcher prefers the X socket with Gamescope focus state, else the first socket
+discover_tmp="$(mktemp -d)"
+mkdir -p "$discover_tmp/sock" "$discover_tmp/bin"
+touch "$discover_tmp/sock/X0" "$discover_tmp/sock/X1"
+cat > "$discover_tmp/bin/xprop" <<'XPROP_EOF'
+#!/bin/sh
+[ "$DISPLAY" = ":1" ]
+XPROP_EOF
+chmod +x "$discover_tmp/bin/xprop"
+discover_fn="$(sed -n '/^discover_display() {/,/^}/p' "$ROOT/docs/ogui-spike-v046/armada-opengamepadui")"
+[ "$(X11_SOCKET_DIR="$discover_tmp/sock" PATH="$discover_tmp/bin:$PATH" sh -c "$discover_fn; discover_display")" = ":1" ]
+cat > "$discover_tmp/bin/xprop" <<'XPROP_EOF'
+#!/bin/sh
+exit 1
+XPROP_EOF
+[ "$(X11_SOCKET_DIR="$discover_tmp/sock" PATH="$discover_tmp/bin:$PATH" sh -c "$discover_fn; discover_display")" = ":0" ]
+rm -rf "$discover_tmp"
 grep -Fq 'SetInterceptActivation' "$ROOT/system_files/usr/libexec/armada/inputplumber-intercept"
 grep -Fq 'pass)' "$ROOT/system_files/usr/libexec/armada/inputplumber-intercept"
 grep -Fq 'GamepadOrder' "$ROOT/system_files/usr/libexec/armada/inputplumber-intercept"

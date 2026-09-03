@@ -16,6 +16,32 @@ if [ -f "${plugin_archive}" ]; then
 fi
 
 runtime="/usr/share/armada/ogui/opengamepad-ui.aarch64"
+
+# OGUI needs a display, but user services do not inherit one from the
+# Gamescope session. Prefer the X11 socket whose root window carries
+# Gamescope focus state, falling back to the first X11 socket.
+discover_display() {
+    first=""
+    for sock in "${X11_SOCKET_DIR:-/tmp/.X11-unix}"/X*; do
+        [ -e "$sock" ] || continue
+        n="${sock##*/X}"
+        case "$n" in ''|*[!0-9]*) continue;; esac
+        [ -z "$first" ] && first=":$n"
+        if DISPLAY=":$n" xprop -root GAMESCOPE_FOCUSED_WINDOW >/dev/null 2>&1; then
+            printf '%s\n' ":$n"
+            return 0
+        fi
+    done
+    [ -n "$first" ] && printf '%s\n' "$first" && return 0
+    return 1
+}
+if [ -z "${DISPLAY:-}" ]; then
+    if found="$(discover_display)"; then
+        DISPLAY="$found"
+        export DISPLAY
+    fi
+fi
+
 cleanup() {
     rm -f "${runtime_marker}"
     /usr/libexec/armada/inputplumber-intercept reset >/dev/null 2>&1 || true
