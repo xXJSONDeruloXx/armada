@@ -90,12 +90,22 @@ Window {
         function onErrorMessage(message) { root.errorText = message; }
     }
 
-    Rectangle {
-        anchors.fill: parent
-        color: theme.transparent
+            Rectangle {
+                anchors.fill: parent
+                color: theme.transparent
 
-        Rectangle {
-            id: panel
+                MouseArea {
+                    anchors.fill: parent
+                    z: 0
+                    visible: armada.overlayVisible
+                    acceptedButtons: Qt.AllButtons
+                    onPressed: mouse.accepted = true
+                    onReleased: mouse.accepted = true
+                }
+
+                Rectangle {
+                    id: panel
+                    z: 1
             property real slideOffset: root.sidePanel && armada.overlayVisible ? 0 : width
             anchors.verticalCenter: root.sidePanel ? undefined : parent.verticalCenter
             anchors.horizontalCenter: root.sidePanel ? undefined : parent.horizontalCenter

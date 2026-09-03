@@ -1,5 +1,6 @@
 #include <QDBusConnection>
-#include <QDBusInterface>
+#include <QDBusMessage>
+#include <QDBusVariant>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -48,12 +49,20 @@ QString discoverInputEventPath()
     const QString service = QStringLiteral("org.shadowblip.InputPlumber");
     const QString managerPath = QStringLiteral("/org/shadowblip/InputPlumber/Manager");
     const QString compositeInterface = QStringLiteral("org.shadowblip.Input.CompositeDevice");
-    QDBusInterface manager(service, managerPath, QStringLiteral("org.shadowblip.InputManager"),
-        QDBusConnection::systemBus());
-    const QStringList composites = manager.property("GamepadOrder").toStringList();
+    const auto property = [&](const QString &path, const QString &interface, const QString &name) {
+        QDBusMessage message = QDBusMessage::createMethodCall(
+            service, path, QStringLiteral("org.freedesktop.DBus.Properties"), QStringLiteral("Get"));
+        message << interface << name;
+        const QDBusMessage reply = QDBusConnection::systemBus().call(message, QDBus::Block, 1000);
+        if (reply.type() != QDBusMessage::ReplyMessage || reply.arguments().size() != 1)
+            return QVariant();
+        return qvariant_cast<QDBusVariant>(reply.arguments().constFirst()).variant();
+    };
+    const QStringList composites = property(
+        managerPath, QStringLiteral("org.shadowblip.InputManager"), QStringLiteral("GamepadOrder"))
+        .toStringList();
     for (const QString &composite : composites) {
-        QDBusInterface device(service, composite, compositeInterface, QDBusConnection::systemBus());
-        const QStringList targets = device.property("DbusDevices").toStringList();
+        const QStringList targets = property(composite, compositeInterface, QStringLiteral("DbusDevices")).toStringList();
         for (const QString &target : targets)
             if (target.startsWith(QStringLiteral("/org/shadowblip/InputPlumber/devices/target/dbus")))
                 return target;
@@ -405,6 +414,8 @@ public:
                 activationReady_ = applyOverlayActivation();
         });
         inputDiscoveryTimer_.start();
+        focusRecoveryTimer_.setInterval(250);
+        connect(&focusRecoveryTimer_, &QTimer::timeout, this, &QmlOverlayController::ensureOverlayFocus);
         activationReady_ = applyOverlayActivation();
     }
 
@@ -511,6 +522,8 @@ public:
         window_->show();
         window_->raise();
         window_->requestActivate();
+        focusRecoveryTimer_.start();
+        ensureOverlayFocus();
         markGamescopeOverlay(window_->winId());
         QTimer::singleShot(0, this, [this] {
             if (window_ && window_->isVisible())
@@ -525,6 +538,7 @@ public:
             request(QStringLiteral("end_calibration_session"), {{QStringLiteral("token"), calibrationSessionToken_}});
             calibrationSessionActive_ = false;
         }
+        focusRecoveryTimer_.stop();
         overlayVisible_ = false;
         emit overlayVisibleChanged();
         if (window_) {
@@ -654,6 +668,19 @@ private slots:
     }
 
 private:
+    void ensureOverlayFocus()
+    {
+        if (!window_ || !overlayVisible_ || !window_->isVisible())
+            return;
+        QWindow *focused = QGuiApplication::focusWindow();
+        if (focused && focused != window_ && focused->transientParent() == window_)
+            return;
+        if (!window_->isActive()) {
+            window_->raise();
+            window_->requestActivate();
+        }
+    }
+
     void connectInputEvents()
     {
         const QString nextPath = discoverInputEventPath();
@@ -698,6 +725,7 @@ private:
     bool activationReady_ = false;
     QTimer compatibilityTimer_;
     QTimer inputDiscoveryTimer_;
+    QTimer focusRecoveryTimer_;
     QProcess compatibilityProcess_;
     QString inputEventPath_;
     QString calibrationSessionToken_;
