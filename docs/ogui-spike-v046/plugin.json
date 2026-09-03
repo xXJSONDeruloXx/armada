@@ -1,11 +1,11 @@
 {
   "plugin.id": "armada-control",
   "plugin.name": "Armada Control",
-  "plugin.version": "0.1.24",
+  "plugin.version": "0.1.25",
   "plugin.min-api-version": "2.0.0",
   "plugin.link": "https://github.com/armada-os/armada",
   "plugin.source": "https://github.com/armada-os/armada/tree/feat/armada-ogui-overlay/docs/ogui-spike-v046",
-  "plugin.description": "Armada Control in the OpenGamepadUI Guide+B Quick Bar.",
+  "plugin.description": "Armada Control in the OpenGamepadUI Quick Bar and overlay.",
   "store.tags": ["quick-bar"],
   "store.images": [],
   "author.name": "Armada",
