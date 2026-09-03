@@ -12,6 +12,7 @@ const BACKEND_SCRIPT := preload("res://plugins/armada-control/backend.gd")
 var backend
 var config: Dictionary = {}
 var selected_profile := "balanced"
+var reset_profile_pending := false
 var cpu_slider: ValueSlider
 var gpu_min_slider: ValueSlider
 var gpu_slider: ValueSlider
@@ -46,6 +47,11 @@ var game_target_dropdown: Dropdown
 var games_controls: VBoxContainer
 var custom_cores_text := ""
 var custom_gamescope_cores_text := ""
+var environment_dropdown: Dropdown
+var environment_name_input: ComponentTextInput
+var environment_value_input: ComponentTextInput
+var selected_environment_key := ""
+var reset_game_pending := false
 
 
 func _init() -> void:
@@ -161,6 +167,7 @@ func _build_power(parent: Container) -> void:
         governors.append({"data": name, "label": name})
     if not governors.is_empty():
         governor_dropdown = _dropdown(parent, "CPU governor", governors, String(profile.get("cpu_governor", governors[0]["data"])), func(value): _save_profile_value("cpu_governor", value))
+    _action(parent, "Reset profile", _reset_profile)
 
 
 func _build_system(parent: Container) -> void:
@@ -185,6 +192,14 @@ func _build_system(parent: Container) -> void:
         if rgb is Dictionary:
             _toggle(parent, "RGB lighting", bool(rgb.get("enabled", false)), func(value): _set_rgb(value, rgb))
             _slider(parent, "RGB brightness", float(rgb.get("brightness", 100)), 0, 100, func(value): _set_rgb_brightness(value, rgb))
+
+    for item in [{"key": "osVersion", "label": "OS version"}, {"key": "ablVersion", "label": "ABL version"}]:
+        var version := String(config.get(item["key"], ""))
+        if not version.is_empty():
+            var version_label := Label.new()
+            version_label.text = "%s: %s" % [item["label"], version]
+            version_label.label_settings = BODY_LABELS
+            parent.add_child(version_label)
 
     var temp = _call_result("get_current_temp")
     if temp != null:
@@ -680,6 +695,7 @@ func _build_games_controls(parent: Container) -> void:
     for scheduler in perf.get("schedulers", []):
         scheduler_options.append({"data": scheduler, "label": String(scheduler).to_upper()})
     _dropdown(parent, "CPU scheduler", scheduler_options, String(target.get("scheduler", "default")), _select_scheduler)
+    _build_environment(parent)
 
 
 func _select_game_target(appid: String) -> void:
@@ -806,6 +822,158 @@ func _select_scheduler(value: String) -> void:
     _save_selected_value("scheduler", null if value == "default" else value)
 
 
+func _build_environment(parent: Container) -> void:
+    var options := _environment_options()
+    if selected_environment_key.is_empty() or not _option_has_data(options, selected_environment_key):
+        selected_environment_key = String(options[0]["data"]) if not options.is_empty() else ""
+    environment_dropdown = _dropdown(parent, "Environment variable", options, selected_environment_key, _select_environment_variable)
+    environment_name_input = _text_input(parent, "Name", selected_environment_key, "Variable", _environment_input_submitted)
+    environment_value_input = _text_input(parent, "Value", _environment_value(selected_environment_key), "Value", _environment_input_submitted)
+    environment_value_input.ready.connect(_sync_environment_inputs)
+    _action(parent, "Save variable", _save_environment_variable)
+    _action(parent, "New variable", _new_environment_variable)
+    _action(parent, "Delete variable", _delete_environment_variable)
+    _action(parent, "Reset game settings" if not selected_game_appid.is_empty() else "Reset all game settings", _reset_game_tweaks)
+
+
+func _environment_options() -> Array:
+    var keys: Dictionary = {}
+    var tweaks: Dictionary = config.get("tweaks", {})
+    var global: Dictionary = tweaks.get("global", {}).get("env", {})
+    for key in global:
+        keys[String(key)] = true
+    if not selected_game_appid.is_empty():
+        var games: Dictionary = tweaks.get("games", {})
+        var own: Dictionary = games.get(selected_game_appid, {}).get("env", {})
+        for key in own:
+            keys[String(key)] = true
+    var names: Array = keys.keys()
+    names.sort()
+    var options: Array = []
+    for name in names:
+        options.append({"data": name, "label": name})
+    return options
+
+
+func _environment_value(key: String) -> String:
+    if key.is_empty():
+        return ""
+    var tweaks: Dictionary = config.get("tweaks", {})
+    var global: Dictionary = tweaks.get("global", {}).get("env", {})
+    if not selected_game_appid.is_empty():
+        var games: Dictionary = tweaks.get("games", {})
+        var own: Dictionary = games.get(selected_game_appid, {}).get("env", {})
+        if own.has(key):
+            return "" if own[key] == null else String(own[key])
+    return String(global.get(key, ""))
+
+
+func _select_environment_variable(key: String) -> void:
+    selected_environment_key = key
+    _sync_environment_inputs()
+
+
+func _sync_environment_inputs() -> void:
+    if environment_name_input:
+        environment_name_input.text = selected_environment_key
+    if environment_value_input:
+        environment_value_input.text = _environment_value(selected_environment_key)
+
+
+func _environment_input_submitted(_value: String) -> void:
+    _update_status("Press Save variable")
+
+
+func _save_environment_variable() -> void:
+    var key := environment_name_input.text.strip_edges()
+    if key.is_empty() or key.contains("=") or key.contains("\u0000"):
+        _update_status("Invalid variable name")
+        return
+    var tweaks: Dictionary = config.get("tweaks", {}).duplicate(true)
+    var target: Dictionary = _selected_tweak_map(tweaks).duplicate(true)
+    var env: Dictionary = target.get("env", {}).duplicate(true)
+    if selected_game_appid.is_empty():
+        if selected_environment_key != key:
+            env.erase(selected_environment_key)
+    else:
+        if selected_environment_key != key:
+            env.erase(selected_environment_key)
+    env[key] = environment_value_input.text
+    target["env"] = env
+    _set_selected_tweaks(tweaks, target)
+    selected_environment_key = key
+    _save_tweaks(tweaks)
+    _refresh_environment_dropdown()
+    _update_status("Variable staged")
+
+
+func _new_environment_variable() -> void:
+    selected_environment_key = ""
+    _sync_environment_inputs()
+    if environment_name_input:
+        environment_name_input.grab_focus()
+
+
+func _delete_environment_variable() -> void:
+    var key := selected_environment_key
+    if key.is_empty():
+        return
+    var tweaks: Dictionary = config.get("tweaks", {}).duplicate(true)
+    var target: Dictionary = _selected_tweak_map(tweaks).duplicate(true)
+    var env: Dictionary = target.get("env", {}).duplicate(true)
+    if selected_game_appid.is_empty():
+        env.erase(key)
+    else:
+        var global_env: Dictionary = tweaks.get("global", {}).get("env", {})
+        if not env.has(key) and global_env.has(key):
+            env[key] = null
+        else:
+            env.erase(key)
+    if env.is_empty():
+        target.erase("env")
+    else:
+        target["env"] = env
+    _set_selected_tweaks(tweaks, target)
+    selected_environment_key = ""
+    _save_tweaks(tweaks)
+    _refresh_environment_dropdown()
+    _update_status("Variable deleted")
+
+
+func _refresh_environment_dropdown() -> void:
+    if not environment_dropdown:
+        return
+    var options := _environment_options()
+    environment_dropdown.clear()
+    var values: Array = []
+    for option in options:
+        environment_dropdown.add_item(String(option["label"]))
+        values.append(String(option["data"]))
+    environment_dropdown.set_meta("armada_values", values)
+    if selected_environment_key.is_empty() or not values.has(selected_environment_key):
+        selected_environment_key = String(values[0]) if not values.is_empty() else ""
+    environment_dropdown.select(_dropdown_index(environment_dropdown, selected_environment_key))
+    _sync_environment_inputs()
+
+
+func _reset_game_tweaks() -> void:
+    if not reset_game_pending:
+        reset_game_pending = true
+        _update_status("Press A again to reset settings")
+        return
+    var tweaks: Dictionary = config.get("tweaks", {}).duplicate(true)
+    if selected_game_appid.is_empty():
+        tweaks["games"] = {}
+    else:
+        var games: Dictionary = tweaks.get("games", {})
+        games.erase(selected_game_appid)
+        tweaks["games"] = games
+    reset_game_pending = false
+    _save_tweaks(tweaks)
+    _rebuild_games_controls()
+    _update_status("Settings reset")
+
+
 func _fex_callback(key: String) -> Callable:
     return func(value): _save_fex_knob(key, value)
 
@@ -927,9 +1095,27 @@ func _slider(parent: Container, title: String, value: float, minimum: float, max
     return slider
 
 
-func _select_profile(name: String) -> void:
-    selected_profile = name
-    var profile: Dictionary = config.get("power", {}).get("profiles", {}).get(name, {})
+func _reset_profile() -> void:
+    if not reset_profile_pending:
+        reset_profile_pending = true
+        _update_status("Press A again to reset profile")
+        return
+    var defaults: Dictionary = config.get("powerDefaults", {}).get("profiles", {}).get(selected_profile, {})
+    if defaults.is_empty():
+        reset_profile_pending = false
+        _update_status("Profile defaults unavailable")
+        return
+    var power: Dictionary = config.get("power", {}).duplicate(true)
+    var profiles: Dictionary = power.get("profiles", {})
+    profiles[selected_profile] = defaults.duplicate(true)
+    power["profiles"] = profiles
+    reset_profile_pending = false
+    _save_power(power)
+    _sync_profile_controls(profiles[selected_profile])
+    _update_status("Profile reset")
+
+
+func _sync_profile_controls(profile: Dictionary) -> void:
     if cpu_slider:
         cpu_slider.value = _percent(profile.get("cpu_max", "1.0"))
     if gpu_slider:
@@ -942,6 +1128,12 @@ func _select_profile(name: String) -> void:
         governor_dropdown.select(_dropdown_index(governor_dropdown, String(profile.get("cpu_governor", ""))))
     if underclock_dropdown:
         underclock_dropdown.select(_dropdown_index(underclock_dropdown, String(profile.get("cpu_underclock", "none"))))
+
+
+func _select_profile(name: String) -> void:
+    selected_profile = name
+    var profile: Dictionary = config.get("power", {}).get("profiles", {}).get(name, {})
+    _sync_profile_controls(profile)
     var power: Dictionary = config.get("power", {}).duplicate(true)
     var general: Dictionary = power.get("general", {})
     general["default_profile"] = name

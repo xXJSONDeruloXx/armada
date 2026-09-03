@@ -86,6 +86,11 @@ grep -Fq 'text_input.tscn' "$ROOT/docs/ogui-spike-v046/quick_bar.gd"
 grep -Fq 'save_fan_curves' "$ROOT/docs/ogui-spike-v046/quick_bar.gd"
 grep -Fq 'selected_game_appid' "$ROOT/docs/ogui-spike-v046/quick_bar.gd"
 grep -Fq 'factoryFanCurves' "$ROOT/docs/ogui-spike-v046/quick_bar.gd"
+grep -Fq '_build_environment' "$ROOT/docs/ogui-spike-v046/quick_bar.gd"
+grep -Fq 'Variable staged' "$ROOT/docs/ogui-spike-v046/quick_bar.gd"
+grep -Fq 'Invalid CPU list' "$ROOT/docs/ogui-spike-v046/quick_bar.gd"
+grep -Fq 'Environment variable' "$ROOT/docs/ogui-spike-v046/quick_bar.gd"
+grep -Fq 'Reset profile' "$ROOT/docs/ogui-spike-v046/quick_bar.gd"
 for section in Power Fans Games Compatibility System Actions; do
     grep -Fq "_section(content, \"$section\"" "$ROOT/docs/ogui-spike-v046/quick_bar.gd"
 done
