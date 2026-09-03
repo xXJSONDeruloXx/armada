@@ -34,6 +34,7 @@ var delete_curve_pending := false
 var _syncing_curve_controls := false
 var status_label: Label
 var fan_state: Dictionary = {}
+var fans_parent: Container
 var current_appid := ""
 var compat_tools: Array = []
 var compat_tool := ""
@@ -109,6 +110,7 @@ func _load_config() -> void:
 
 func _build() -> void:
     var content := VBoxContainer.new()
+    content.name = "ArmadaContent"
     content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     add_child(content)
 
@@ -225,6 +227,7 @@ func _build_system(parent: Container) -> void:
 
 
 func _build_fans(parent: Container) -> void:
+    fans_parent = parent
     var settings: Dictionary = fan_state.get("fanSettings", {})
     if settings.is_empty():
         _action(parent, "Refresh fan state", _refresh_fans)
@@ -266,8 +269,21 @@ func _build_fans(parent: Container) -> void:
 func _build_curve_management(parent: Container) -> void:
     curve_name_input = TEXT_INPUT.instantiate() as ComponentTextInput
     curve_name_input.title = "New curve"
+    curve_name_input.description = ""
     curve_name_input.placeholder_text = "Name"
     parent.add_child(curve_name_input)
+    var curve_description := curve_name_input.get_node_or_null("DescriptionLabel") as Label
+    if curve_description:
+        curve_description.visible = false
+    curve_name_input.ready.connect(func():
+        curve_name_input.description = ""
+        var ready_curve_description := curve_name_input.get_node_or_null("DescriptionLabel") as Label
+        if ready_curve_description:
+            ready_curve_description.visible = false
+        call_deferred("_hide_component_description", curve_name_input)
+    )
+    curve_name_input.tree_entered.connect(func(): call_deferred("_hide_component_description", curve_name_input))
+    call_deferred("_hide_component_description", curve_name_input)
     _action(parent, "Create curve", _create_curve)
 
     var curves: Dictionary = fan_state.get("fanCurves", {})
@@ -777,11 +793,36 @@ func _option_has_data(options: Array, value: String) -> bool:
 func _text_input(parent: Container, title: String, value: String, placeholder: String, callback: Callable) -> ComponentTextInput:
     var input := TEXT_INPUT.instantiate() as ComponentTextInput
     input.title = title
+    input.description = ""
     input.text = value
     input.placeholder_text = placeholder
     parent.add_child(input)
+    var description_label := input.get_node_or_null("DescriptionLabel") as Label
+    if description_label:
+        description_label.visible = false
+    input.ready.connect(func():
+        var ready_description := input.get_node_or_null("DescriptionLabel") as Label
+        if ready_description:
+            ready_description.visible = false
+        call_deferred("_hide_component_description", input)
+    )
+    input.tree_entered.connect(func(): call_deferred("_hide_component_description", input))
+    call_deferred("_hide_component_description", input)
     input.text_submitted.connect(callback)
     return input
+
+
+func _hide_component_description(input: Control) -> void:
+    if not is_instance_valid(input):
+        return
+    if input.is_inside_tree():
+        await get_tree().process_frame
+    if not is_instance_valid(input):
+        return
+    var description := input.get_node_or_null("DescriptionLabel") as Label
+    if description:
+        description.text = ""
+        description.visible = false
 
 
 func _select_core_setting(value: String, key: String) -> void:
@@ -1175,6 +1216,7 @@ func _refresh_compatibility() -> void:
     var response = backend.call_steam("get_global_compat_tools")
     if response.get("ok", false):
         compat_tools = response.get("result", {}).get("tools", [])
+        _rebuild_compatibility_controls()
         _update_status("Steam compatibility refreshed")
     else:
         _update_status(backend.last_error)
@@ -1199,11 +1241,6 @@ func _sweep_compatibility() -> void:
     _update_status("Compatibility sweep complete" if response.get("ok", false) else backend.last_error)
 
 
-func _reset_running_game() -> void:
-    var response = _call_steam("reset_game", {"appid": current_appid, "tool": compat_tool})
-    _update_status("Running game reset" if response.get("ok", false) else backend.last_error)
-
-
 func _call_steam(action: String, fields: Dictionary = {}) -> Dictionary:
     return backend.call_steam(action, fields)
 
@@ -1211,6 +1248,7 @@ func _call_steam(action: String, fields: Dictionary = {}) -> Dictionary:
 func _action(parent: Container, text: String, callback: Callable) -> CardButtonSetting:
     var setting := CARD_BUTTON_SETTING.instantiate() as CardButtonSetting
     setting.text = text
+    setting.description = ""
     setting.button_text = "A"
     parent.add_child(setting)
     setting.pressed.connect(callback)
@@ -1220,10 +1258,12 @@ func _action(parent: Container, text: String, callback: Callable) -> CardButtonS
 func _dropdown(parent: Container, title: String, options: Array, selected_value: String, callback: Callable) -> Dropdown:
     var dropdown := DROPDOWN.instantiate() as Dropdown
     dropdown.title = title
+    dropdown.description = ""
     parent.add_child(dropdown)
     dropdown.ready.connect(func():
         var selected_index := 0
         var values: Array = []
+        dropdown.clear()
         for index in options.size():
             var option = options[index]
             var value := String(option.get("data", option)) if option is Dictionary else String(option)
@@ -1233,7 +1273,8 @@ func _dropdown(parent: Container, title: String, options: Array, selected_value:
             if value == selected_value:
                 selected_index = index
         dropdown.set_meta("armada_values", values)
-        dropdown.select(selected_index)
+        if not values.is_empty():
+            dropdown.select(selected_index)
         dropdown.item_selected.connect(func(index: int):
             var current_values: Array = dropdown.get_meta("armada_values", [])
             if index >= 0 and index < current_values.size():
@@ -1256,6 +1297,7 @@ func _dropdown_index(dropdown: Dropdown, value: String) -> int:
 func _toggle(parent: Container, title: String, value: bool, callback: Callable) -> Toggle:
     var toggle := TOGGLE.instantiate() as Toggle
     toggle.text = title
+    toggle.description = ""
     toggle.button_pressed = value
     parent.add_child(toggle)
     toggle.toggled.connect(callback)
@@ -1352,6 +1394,16 @@ func _refresh_fans() -> void:
     var response = backend.call_action("get_fans_state")
     if response.get("ok", false):
         fan_state = response.get("result", {})
+        if fans_parent:
+            for child in fans_parent.get_children():
+                if child is FocusGroup:
+                    continue
+                child.free()
+            _build_fans(fans_parent)
+            for child in fans_parent.get_children():
+                if child is FocusGroup:
+                    child.current_focus = _first_focusable(fans_parent)
+                    break
         _update_status("Fan state refreshed")
     else:
         _update_status(backend.last_error)

@@ -3,6 +3,7 @@ extends Plugin
 const QUICK_BAR_META := "armada_control_quick_bar"
 
 var quick_bar_item: Control
+var mounted_cards: Array[Control] = []
 
 
 func _ready() -> void:
@@ -47,12 +48,36 @@ func _add_quick_bar_item(quick_bar: Control) -> void:
         if child is Control and child.get_meta(QUICK_BAR_META, false):
             quick_bar_item = child
             return
-    item.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    item.ready.connect(_mount_quick_bar_cards.bind(viewport, item))
     item.set_meta(QUICK_BAR_META, true)
     quick_bar_item = item
     viewport.add_child(item)
 
 
+func _mount_quick_bar_cards(viewport: VBoxContainer, item: Control) -> void:
+    var content := item.get_node_or_null("ArmadaContent") as VBoxContainer
+    if not content:
+        logger = Log.get_logger("ArmadaControl", Log.LEVEL.DEBUG)
+        logger.error("Armada Quick Bar content container could not be found")
+        return
+    for child in content.get_children():
+        if not child is QuickBarCard:
+            continue
+        content.remove_child(child)
+        child.set_meta(QUICK_BAR_META, true)
+        viewport.add_child(child)
+        mounted_cards.append(child)
+    item.visible = false
+    item.focus_mode = Control.FOCUS_NONE
+    var viewport_focus_group := viewport.get_node_or_null("FocusGroup") as FocusGroup
+    if viewport_focus_group:
+        viewport_focus_group.call_deferred("recalculate_focus")
+
+
 func _exit_tree() -> void:
+    for card in mounted_cards:
+        if is_instance_valid(card):
+            card.queue_free()
+    mounted_cards.clear()
     if is_instance_valid(quick_bar_item):
         quick_bar_item.queue_free()

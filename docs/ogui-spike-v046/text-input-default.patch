@@ -1,0 +1,13 @@
+diff --git a/core/ui/components/text_input.gd b/core/ui/components/text_input.gd
+--- a/core/ui/components/text_input.gd
++++ b/core/ui/components/text_input.gd
+@@ -16 +16 @@
+-@export var description: String = "Description":
++@export var description: String = "":
+
+diff --git a/core/ui/components/text_input.tscn b/core/ui/components/text_input.tscn
+--- a/core/ui/components/text_input.tscn
++++ b/core/ui/components/text_input.tscn
+@@ -25 +25 @@
+-text = "Description"
++text = ""
