@@ -8,6 +8,14 @@ const TEXT_INPUT := preload("res://core/ui/components/text_input.tscn")
 const TOGGLE := preload("res://core/ui/components/toggle.tscn")
 const BODY_LABELS := preload("res://plugins/armada-control/ogui-body-label.tres")
 const BACKEND_SCRIPT := preload("res://plugins/armada-control/backend.gd")
+const OVERLAY_DEFAULTS := {
+    "layout": "centered",
+    "centeredChord": "start_select",
+    "sideChord": "start_select",
+    "swipeEnabled": true,
+    "swipeEdge": "left",
+    "swipeDistance": 120,
+}
 
 var backend
 var config: Dictionary = {}
@@ -76,6 +84,12 @@ var compat_game_tool := ""
 var compat_game_resolution := "Default"
 var compat_reset_pending := false
 var compat_reset_all_pending := false
+var overlay_config: Dictionary = {}
+var overlay_layout_dropdown: Dropdown
+var centered_chord_dropdown: Dropdown
+var side_chord_dropdown: Dropdown
+var swipe_enabled_toggle: Toggle
+var swipe_edge_dropdown: Dropdown
 
 
 func _init() -> void:
@@ -94,6 +108,7 @@ func _ready() -> void:
 
 func _load_config() -> bool:
     var loaded := false
+    _load_overlay_config()
     var response = backend.call_action("get_config")
     if response.get("ok", false):
         config = response.get("result", {})
@@ -207,6 +222,28 @@ func _build_power(parent: Container) -> void:
 
 func _build_system(parent: Container) -> void:
     _action(parent, "Refresh device state", _refresh_device_state)
+    overlay_layout_dropdown = _dropdown(parent, "Overlay layout", [
+        {"data": "centered", "label": "Centered panel"},
+        {"data": "side", "label": "Right slide-out"},
+    ], String(overlay_config.get("layout", "centered")), func(value): _save_overlay_config({"layout": value}))
+    var chord_options := [
+        {"data": "start_select", "label": "Start + Select"},
+        {"data": "guide", "label": "Guide"},
+        {"data": "quick_access", "label": "Quick Access"},
+        {"data": "select_l1", "label": "Select + L1"},
+        {"data": "select_r1", "label": "Select + R1"},
+    ]
+    centered_chord_dropdown = _dropdown(parent, "Centered activation", chord_options,
+        String(overlay_config.get("centeredChord", "start_select")), func(value): _save_overlay_config({"centeredChord": value}))
+    side_chord_dropdown = _dropdown(parent, "Slide-out activation", chord_options,
+        String(overlay_config.get("sideChord", "start_select")), func(value): _save_overlay_config({"sideChord": value}))
+    swipe_enabled_toggle = _toggle(parent, "Edge swipe to open", bool(overlay_config.get("swipeEnabled", true)), _save_overlay_swipe_enabled)
+    swipe_edge_dropdown = _dropdown(parent, "Swipe edge", [
+        {"data": "left", "label": "Left edge"},
+        {"data": "right", "label": "Right edge"},
+        {"data": "bottom", "label": "Bottom edge"},
+    ], String(overlay_config.get("swipeEdge", "left")), func(value): _save_overlay_config({"swipeEdge": value}))
+    swipe_edge_dropdown.visible = bool(overlay_config.get("swipeEnabled", true))
     var controller_options: Array = config.get("controllerTypes", [
         {"data": "deck-uhid", "label": "Steam Deck"},
         {"data": "xb360", "label": "Xbox 360"},
@@ -245,6 +282,67 @@ func _build_system(parent: Container) -> void:
         temperature.text = "Temperature: %s °C" % temp
         temperature.label_settings = BODY_LABELS
         parent.add_child(temperature)
+
+
+func _overlay_config_path() -> String:
+    var config_home := OS.get_environment("XDG_CONFIG_HOME")
+    if config_home.is_empty():
+        config_home = OS.get_environment("HOME").path_join(".config")
+    return config_home.path_join("armada/overlay.json")
+
+
+func _load_overlay_config() -> void:
+    overlay_config = OVERLAY_DEFAULTS.duplicate(true)
+    var file := FileAccess.open(_overlay_config_path(), FileAccess.READ)
+    if not file:
+        return
+    var parsed = JSON.parse_string(file.get_as_text())
+    if parsed is Dictionary:
+        for key in OVERLAY_DEFAULTS:
+            if parsed.has(key):
+                overlay_config[key] = parsed[key]
+    if not _valid_overlay_config(overlay_config):
+        overlay_config = OVERLAY_DEFAULTS.duplicate(true)
+
+
+func _valid_overlay_config(value: Dictionary) -> bool:
+    return value.get("layout") in ["centered", "side"] \
+        and value.get("centeredChord") in ["start_select", "guide", "quick_access", "select_l1", "select_r1"] \
+        and value.get("sideChord") in ["start_select", "guide", "quick_access", "select_l1", "select_r1"] \
+        and value.get("swipeEdge") in ["left", "right", "bottom"] \
+        and value.get("swipeEnabled") is bool \
+        and int(value.get("swipeDistance", 120)) >= 48 \
+        and int(value.get("swipeDistance", 120)) <= 320
+
+
+func _save_overlay_config(patch: Dictionary) -> void:
+    var next := overlay_config.duplicate(true)
+    for key in patch:
+        if next.has(key):
+            next[key] = patch[key]
+    if not _valid_overlay_config(next):
+        _update_status("Overlay setting unavailable")
+        return
+    var path := _overlay_config_path()
+    DirAccess.make_dir_recursive_absolute(path.get_base_dir())
+    var temporary := path + ".tmp"
+    var file := FileAccess.open(temporary, FileAccess.WRITE)
+    if not file:
+        _update_status("Overlay setting unavailable")
+        return
+    file.store_string(JSON.stringify(next, "\t"))
+    file.close()
+    if DirAccess.rename_absolute(temporary, path) != OK:
+        _update_status("Overlay setting unavailable")
+        return
+    overlay_config = next
+    _update_status("Overlay setting saved")
+
+
+func _save_overlay_swipe_enabled(value: bool) -> void:
+    _save_overlay_config({"swipeEnabled": value})
+    if swipe_edge_dropdown:
+        swipe_edge_dropdown.visible = value
 
 
 func _build_fans(parent: Container) -> void:
