@@ -1742,6 +1742,19 @@ def parse_rfkill_state(text: str) -> Dict[str, Optional[str]]:
     return {"soft": soft.group(1) if soft else None, "hard": hard.group(1) if hard else None}
 
 
+def bluetooth_power_restore_decision(
+    power_before_restore: Optional[str],
+    power_after_rfkill_restore: Optional[str],
+    requested_power: str,
+    original_power: str,
+) -> str:
+    if power_before_restore != requested_power:
+        return "conflict"
+    if power_after_rfkill_restore not in ("yes", "no"):
+        return "unavailable"
+    return "restore" if power_after_rfkill_restore != original_power else "unchanged"
+
+
 def capture_radio_state(run: DeviceRun, label: str = "before") -> Dict[str, Any]:
     wifi_result = capture_command(run, "radio-%s-wifi" % label, ["nmcli", "-t", "-f", "WIFI", "radio"], timeout=15)
     bluetooth_result = capture_command(run, "radio-%s-bluetooth" % label, ["bluetoothctl", "show"], timeout=20)
@@ -1835,21 +1848,30 @@ def restore_radios(run: DeviceRun) -> Dict[str, Any]:
     current_rfkill = current.get("bluetooth_rfkill") or {}
     original_soft = before_rfkill.get("soft")
     desired_soft = "no" if bluetooth_requested == "on" else "yes"
+    bluetooth_rfkill_restored = False
     if bluetooth_requested != "preserve" and original_soft in ("yes", "no") and original_soft != desired_soft:
         if current_rfkill.get("soft") != desired_soft:
             actions.append({"radio": "bluetooth", "result": "conflict-left-unchanged", "current": current_rfkill.get("soft"), "expected": desired_soft})
         elif original_soft == "no":
             result = capture_command(run, "radio-restore-bluetooth-unblock", ["rfkill", "unblock", "bluetooth"], timeout=20)
             actions.append({"radio": "bluetooth", "result": "restore-rfkill", **result.as_json()})
+            bluetooth_rfkill_restored = result.returncode == 0
         else:
             result = capture_command(run, "radio-restore-bluetooth-block", ["rfkill", "block", "bluetooth"], timeout=20)
             actions.append({"radio": "bluetooth", "result": "restore-rfkill", **result.as_json()})
+            bluetooth_rfkill_restored = result.returncode == 0
     original_power = before.get("bluetooth_powered")
     desired_power = "yes" if bluetooth_requested == "on" else "no"
-    if bluetooth_requested != "preserve" and original_power in ("yes", "no") and original_power != desired_power:
-        if current.get("bluetooth_powered") != desired_power:
+    if bluetooth_requested != "preserve" and original_power in ("yes", "no"):
+        power_after_rfkill = current.get("bluetooth_powered")
+        if bluetooth_rfkill_restored:
+            power_after_rfkill = capture_radio_state(run, "cleanup-after-rfkill").get("bluetooth_powered")
+        decision = bluetooth_power_restore_decision(
+            current.get("bluetooth_powered"), power_after_rfkill, desired_power, original_power
+        )
+        if decision == "conflict":
             actions.append({"radio": "bluetooth", "result": "conflict-left-unchanged", "current": current.get("bluetooth_powered"), "expected": desired_power})
-        else:
+        elif decision == "restore":
             result = capture_command(
                 run,
                 "radio-restore-bluetooth-power-%s" % original_power,
@@ -2084,6 +2106,10 @@ def parse_systemd_environment(text: str) -> Dict[str, str]:
         if key in ("ARMADA_SUSPEND_MODE", "ARMADA_SLEEP_CONFIG"):
             result[key] = value
     return result
+
+
+def requested_mode_matches(requested: str, observed: Optional[str]) -> bool:
+    return requested == "policy" or requested == observed
 
 
 def configure_transient_mode(run: DeviceRun, mode: str) -> Dict[str, Any]:
@@ -2511,6 +2537,7 @@ def derive_summary(run: DeviceRun, *, command_returncode: Optional[int]) -> Dict
     requested_mode = str(config.get("mode", "policy"))
     observed_modes = suspend_log.get("entry_modes", [])
     observed_mode = observed_modes[-1] if observed_modes else None
+    mode_matches_request = requested_mode_matches(requested_mode, observed_mode)
     suspend_job_duration = number(sleep_command.get("duration_seconds"))
     before_clock = parse_clock_file(run.run_dir / "meta/suspend-start.clock.json")
     after_clock = parse_clock_file(run.run_dir / "meta/resume-return.clock.json")
@@ -2624,6 +2651,7 @@ def derive_summary(run: DeviceRun, *, command_returncode: Optional[int]) -> Dict
         boot_same is True
         and kernel_suspend_success
         and sleep_observed
+        and mode_matches_request
         and command_returncode == 0
     )
     metrics = {
@@ -2636,6 +2664,7 @@ def derive_summary(run: DeviceRun, *, command_returncode: Optional[int]) -> Dict
         "suspend_job_duration_seconds": round(suspend_job_duration, 6) if suspend_job_duration is not None else None,
         "suspend_mode_requested": requested_mode,
         "suspend_mode_observed": observed_mode,
+        "suspend_mode_matches_request": mode_matches_request,
         "suspend_markers_observed": suspend_markers_observed,
         "suspend_log_observation": suspend_log,
         "sleep_observed_basis": sleep_observed_basis,
@@ -2736,7 +2765,8 @@ def write_device_result(run: DeviceRun, summary: Dict[str, Any]) -> None:
             metrics.get("qcom_sleep_deltas", {}).get("aosd", {}).get("count_delta"),
             metrics.get("qcom_sleep_deltas", {}).get("cxsd", {}).get("count_delta"),
         ),
-        "- Conclusion: suspend success requires clock-proven sleep, an unchanged boot ID, a kernel success increment, and a zero-return suspend job; this receipt does not by itself establish causality or a safe optimization.",
+        "- Conclusion: success also requires the observed kernel mode to match the request; this receipt does not by itself establish causality or a safe optimization.",
+        "- Requested mode matched observed mode: `%s`." % metrics.get("suspend_mode_matches_request"),
         "- Confidence: %s" % config.get("confidence", "single-cycle evidence; repeat identical clean cycles before drawing a platform conclusion"),
         "- Recommended next experiment: %s" % config.get("recommendation", "Repeat the exact same mode and physical-cable state for an independent clean cycle."),
         "",
@@ -3789,6 +3819,11 @@ def host_wait_and_retrieve(args: argparse.Namespace, run_id: str) -> int:
 def self_test() -> int:
     valid = new_run_id()
     assert RUN_ID_RE.fullmatch(valid)
+    assert requested_mode_matches("policy", "s2idle")
+    assert not requested_mode_matches("deep", "s2idle")
+    assert bluetooth_power_restore_decision("no", "yes", "no", "no") == "restore"
+    assert bluetooth_power_restore_decision("yes", "no", "no", "no") == "conflict"
+    assert bluetooth_power_restore_decision("no", "no", "no", "no") == "unchanged"
     for invalid in ("bad", "20260901T000000Z-ABCDEF123456", "20260901T000000Z-1234"):
         try:
             validate_run_id(invalid)
@@ -3918,7 +3953,7 @@ def build_parser() -> argparse.ArgumentParser:
         add_host_common(command)
         command.add_argument("--run-id")
         command.add_argument("--label", default=start_defaults["label"])
-        command.add_argument("--mode", choices=("s2idle", "deep", "policy"), default="s2idle")
+        command.add_argument("--mode", choices=("s2idle", "policy"), default="s2idle")
         command.add_argument("--sleep-seconds", type=int, default=45)
         command.add_argument("--poll-seconds", type=int, default=5)
         command.add_argument("--wifi-state", choices=("preserve", "off", "on"), default="preserve")
@@ -3970,7 +4005,7 @@ def build_parser() -> argparse.ArgumentParser:
     add_device_common(start)
     start.add_argument("--run-id", required=True)
     start.add_argument("--label", required=True)
-    start.add_argument("--mode", choices=("s2idle", "deep", "policy"), required=True)
+    start.add_argument("--mode", choices=("s2idle", "policy"), required=True)
     start.add_argument("--sleep-seconds", type=int, required=True)
     start.add_argument("--wifi-state", choices=("preserve", "off", "on"), required=True)
     start.add_argument("--bluetooth-state", choices=("preserve", "off", "on"), required=True)

@@ -7,6 +7,81 @@ host output directory `/Users/kurt/Developer/sm8550-suspend-lab-runs/`; the
 paths below are intentionally exact so an observation can be audited back to
 the device archive.
 
+## 2026-09-17 current-image refresh
+
+The lab branch was rebased on current `upstream/main` (`b3ee817`) before these
+checks. A live read-only inventory found the Retroid Pocket Nova on Armada
+`20260915.feca679`, kernel `7.2.3`, with `/etc/armada/sleep.conf` selecting
+`s2idle` and `/sys/power/mem_sleep` showing `[s2idle] deep`. The merged
+SM8550 IRQ routing change is active (`ARMADA_IRQ_CORES=3-7`), CPU0's deep idle
+state is enabled, and the USB controller is runtime-suspended. Bluetooth was
+powered off at the end of the checks; the original sleep policy was preserved.
+
+Two timer-woken current-image runs are archived under
+`../sm8550-suspend-lab-runs/`:
+
+- `20260917T192057Z-0bdd5ed7bb62` used Armada's configured `policy`, observed
+  kernel mode `s2idle`, and completed with the expected RTC IRQ/source and
+  unchanged boot ID. Qualcomm ADSP count advanced by 188; AOSD, CXSD, and
+  scalar DDR counts stayed at zero.
+- `20260917T192358Z-291ec26457c5` requested `deep`, but the kernel recorded
+  `s2idle`. The test-only `deep` value was ignored when `device-env` loaded its
+  defaults and parsed a mode outside its supported `fake`/`s2idle` values.
+  `suspend-dispatch` also guards against unsupported modes. This archive is a
+  second s2idle observation, not evidence from deep. Its RTC source
+  advanced, but `pm_wakeup_irq` was unchanged. ADSP count advanced by 211;
+  AOSD, CXSD, and scalar DDR counts stayed at zero.
+- The second run's RPMh/AOSS trace captured RPMh messages and interconnect
+  votes but no `qcom_aoss` events. Existing tracepoints therefore did not
+  resolve whether firmware accepted a deeper low-power request. No reset,
+  kernel change, or image deployment was made.
+
+The old harness incorrectly called the second run successful despite the
+requested/observed mode mismatch. The updated runner rejects `deep` for now
+and includes a requested/observed mode match in its success gate; historical
+run archives remain unchanged. The same run exposed a Bluetooth cleanup bug:
+restoring an unblocked rfkill state powered BlueZ back on after it had been
+off. The adapter was manually returned to `Powered: no`, verified live, and
+the runner now checks/restores BlueZ power after rfkill cleanup. The host-only
+self-test covers both cases.
+
+### Current sleep reports and low-cost next steps
+
+- [#264](https://github.com/armada-os/armada/issues/264) reports Odin 2 drain
+  with Bluetooth still powered in both s2idle and deep. This Nova baseline
+  had Bluetooth powered off already, so it does not validate that report.
+  [#235](https://github.com/armada-os/armada/pull/235) only gates radios in
+  fake suspend, is conflicting, and has a request to shorten comments. It
+  does not address native s2idle.
+- [#265](https://github.com/armada-os/armada/issues/265) reports localized
+  warmth even after the Bluetooth workaround, with a similar Odin 3 report.
+  The least work is a longer matched sleep-debug/current/wakeup-source capture
+  on an affected device; the Nova's 45-second cycle is too short to identify
+  an intermittent wake source or local hot rail.
+- [#403](https://github.com/armada-os/armada/issues/403) has no logs for a
+  Pocket FIT Elite wake failure. Ask for `armada-sleep-debug prepare/collect`,
+  boot ID, and post-reboot journal/pstore before changing the kernel.
+- [#428](https://github.com/armada-os/armada/issues/428) is empty. The Nova
+  already had a persistent journal (124.7 MB across three listed boots), so
+  first ask what log is missing instead of adding a global always-on logger.
+- [#438](https://github.com/armada-os/armada/issues/438) has Pocket ACE
+  Synaptics I2C failures and a concrete source-level resume/polling failure
+  path. A deliberate touch check plus a controlled `pm_async=0` comparison
+  can test it before spending time on a kernel build.
+- Open [#442](https://github.com/armada-os/armada/pull/442) removes blanket
+  USB autosuspend rules to prevent downstream hub input re-enumeration; its
+  image check passes and it is clean to merge. [#234](https://github.com/armada-os/armada/pull/234)
+  addresses fake-suspend audio unmute, while [#273](https://github.com/armada-os/armada/pull/273)
+  is charge-aware sleep for Pocket EVO and conflicting. Neither explains the
+  Nova's zero AOSD/CXSD/DDR counters.
+
+The next diagnostic with the most information per unit of effort is a proper
+deep-mode test only after the supported Armada userspace path can request it.
+For current native s2idle concerns, repeat the same policy run with a longer
+idle window and retain `armada-sleep-debug` plus wakeup-source/current
+deltas. Kernel work is premature until a specific PM callback, missing state,
+or failing resume device is isolated.
+
 ## 2026-09-01 correction addendum
 
 The device image used for all historical entries through the supported update

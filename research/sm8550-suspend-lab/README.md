@@ -11,28 +11,36 @@ The repository fingerprints and the source comparison used to start this lab
 are recorded in [upstream-state.md](upstream-state.md). The important current
 state is:
 
-- Armada's Nova profile is SM8550, inherits the global fake-suspend default,
-  and its real path is Armada's shipped
-  `/usr/libexec/armada/suspend-dispatch`, which selects `mem_sleep` and then
-  invokes `systemd-sleep`.
-- The current Armada kernel package is Linux 7.2 with Armada's PCIe
-  suspend-OPP floor patches. Userspace already has the SM8550 CPU0
-  suspend-window hook and USB autosuspend rule.
+- Armada main now defaults Nova to native `s2idle` (merged PR #370). The
+  current Nova image also selects `s2idle`; its shipped
+  `/usr/libexec/armada/device-env` and `suspend-dispatch` accept `fake` and
+  `s2idle`, not `deep`, even though the kernel lists both modes in
+  `/sys/power/mem_sleep`.
+- A live refresh on 2026-09-17 found Armada `20260915.feca679`, kernel
+  `7.2.3`, and the SM8550 IRQ routing / CPU0 cpuidle fix from `e2d9802`.
+- Two short current-image timer-wake cycles completed in `s2idle`. Qualcomm
+  AOSD, CXSD, and scalar DDR counters remained at zero while ADSP counters
+  advanced. A request for `deep` fell back to `s2idle`; it is retained as a
+  fallback observation, not a deep-mode result. The harness now rejects
+  `deep` and marks any requested/observed mode mismatch as a failed run.
 - Thorch carries a separate RPMh regulator suspend-state pair and a matching
   regulator-core s2idle mapping. These are not silently treated as safe for
   Nova; they remain later A/B candidates.
+
+The latest live observations, temporary test cleanup, and next low-cost steps
+are recorded at the top of [lab-notebook.md](lab-notebook.md). No kernel build
+or image deployment was needed for this refresh.
 
 The chronological device observations are maintained in
 [lab-notebook.md](lab-notebook.md). It records every attempted run, including
 harness failures and interpretation corrections, with exact run IDs and raw
 evidence paths.
 
-The post-update A/B read-only analysis is recorded in
+The larger post-update A/B read-only analysis is recorded in
 [current-image-forensic-differential.md](current-image-forensic-differential.md).
-It is the current evidence boundary for choosing the next single-variable
-experiment; the ten-cycle objective is exceeded by 11 clean current-image
-cycles, and remaining blind repetitions are deferred pending the read-only
-root-cause/instrumentation review.
+It documents the earlier ten-cycle comparison; the short September 17 cycles
+are a separate current-image refresh and do not replace that historical
+analysis.
 
 The first functional kernel opportunity A/B is recorded in
 [dwc3-skip-phy-ab.md](dwc3-skip-phy-ab.md). The reviewed Qualcomm DWC3
@@ -42,11 +50,10 @@ deep run, so it was rolled back. Its device-local recipe is preserved in
 `device-kernel-layer-dwc3.Containerfile`; the unresolved RPMh/AOP question is
 independent of this negative result.
 
-After the workload validation, the Nova was restored through Armada's
-supported `main` selector/update path. It is currently on
-`ghcr.io/armada-os/armada:testing`, version `20260830.71e45aa`; temporary lab
-images, staging files, and the lab sudo rule were removed. Host-side raw
-archives and verified artifacts remain preserved.
+The earlier workload validation used a diagnostic image and was rolled back
+through Armada's supported update path. The live refresh now reports a newer
+testing image (`20260915.feca679`); historical image and cleanup receipts are
+kept in the notebook and run archives.
 
 The pre-update image used for the historical control runs was older than this
 checkout. Run a fresh read-only preflight before any future update, then use
@@ -130,9 +137,10 @@ On the device, one detached systemd unit performs this sequence:
    detached run, if they are not `preserve`, and records/restores their prior
    state after resume. This is why SSH can disappear during the Wi-Fi-off
    baseline without turning radio state into an untracked manual variable.
-6. For `s2idle` or `deep`, uses a run-local `suspend_mode` file and child
-   environment for `suspend-dispatch` so `/etc/armada/sleep.conf` is not
-   edited.
+6. For explicit `s2idle`, uses a run-local `suspend_mode` file and child
+   environment so `/etc/armada/sleep.conf` is not edited. `policy` leaves the
+   configured mode alone. `deep` is not offered because the current shipped
+   `device-env` and dispatcher do not support it.
 7. Records `CLOCK_BOOTTIME`, `CLOCK_MONOTONIC`, and `CLOCK_REALTIME`, then the
    autonomous root-owned agent invokes Armada's shipped
    `/usr/libexec/armada/suspend-dispatch` directly. The agent remains on the
@@ -214,8 +222,9 @@ remain explicit validation gates after short idle cycles are reliable.
   established reliability. Do not flash ABL or modify AOP, TZ, or vendor
   firmware as part of this lab.
 - `--mode policy` measures Armada's current user-facing policy. Explicit
-  `s2idle`/`deep` modes are transient experiment requests, not persisted policy
-  changes.
+  `s2idle` is a transient experiment request, not a persisted policy change.
+  The harness rejects `deep` until Armada's supported suspend path can select
+  it, and fails a run if the observed kernel mode differs from the request.
 - The harness does not claim a power improvement from capacity alone. It uses
   charge/energy counters when available and labels gauge-derived values as
   indicative.
