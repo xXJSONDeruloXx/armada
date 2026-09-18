@@ -1,0 +1,36 @@
+date_before=Fri Sep 18 19:10:33 EDT 2026
+7998
+89
+3da0000.kgsl-smmu
+-16
+freeze
+Count = 9845
+Last Entered At = 195440277990
+Last Exited At = 195442866070
+Accumulated Duration = 103587353718
+Count = 154349
+Last Entered At = 195442342112
+Last Exited At = 195442465760
+Accumulated Duration = 98785169504
+Count = 10849
+Last Entered At = 195440297570
+Last Exited At = 195442478346
+Accumulated Duration = 99652320949
+Count = 10856
+Last Entered At = 195440293919
+Last Exited At = 195442490791
+Accumulated Duration = 99823558730
+LPM 1:	Name:0xd4	count:10856	Duration (ticks):99840374845 (~51%)
+LPM 2:	Name:0xd3	count:0	Duration (ticks):0 (~0%)
+LPM 3:	Name:0x11	count:0	Duration (ticks):0 (~0%)
+LPM 4:	Name:0xd0	count:10856	Duration (ticks):95602115200 (~48%)
+Freq 200Mhz:	CP IDX:1	Duration (ticks):3184723456 (~3%)
+Freq 547Mhz:	CP IDX:2	Duration (ticks):57110794752 (~59%)
+Freq 768Mhz:	CP IDX:3	Duration (ticks):647762432 (~0%)
+Freq 1555Mhz:	CP IDX:4	Duration (ticks):12671980032 (~13%)
+Freq 1708Mhz:	CP IDX:5	Duration (ticks):67471872 (~0%)
+Freq 2092Mhz:	CP IDX:6	Duration (ticks):22125056 (~0%)
+Freq 2736Mhz:	CP IDX:7	Duration (ticks):18486874624 (~19%)
+Freq 3187Mhz:	CP IDX:8	Duration (ticks):3637248 (~0%)
+Freq 3686Mhz:	CP IDX:9	Duration (ticks):3406880768 (~3%)
+Freq 4224Mhz:	CP IDX:10	Duration (ticks):0 (~0%)

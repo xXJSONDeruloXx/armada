@@ -105,9 +105,9 @@ snapshot_charge_state() {
     ((found)) || rm -f "$state_dir/charge.before"
 }
 
-# qcom_stats names are opaque: aosd = chip-wide AOSS deep sleep, cxsd = CX
-# rail collapse, ddr = DDR self-refresh. cpuidle s2idle counters only tick
-# inside suspend-to-idle, so no window bracketing is needed for them.
+# qcom_stats labels identify firmware records, but their physical-state meaning
+# is platform/firmware-specific. cpuidle s2idle counters only tick inside
+# suspend-to-idle, so no window bracketing is needed for them.
 snapshot_sleep_depth() {
     local stats_dir="$sys_root/kernel/debug/qcom_stats" stat_file count duration
     local cpu state name
@@ -677,7 +677,7 @@ sleep_depth_report() {
         done
         ((found)) || echo "qcom_stats=empty"
         if ((found)); then
-            echo "reading=aosd/cxsd/ddr deltas of 0 across a real suspend mean the SoC rails never powered down"
+            echo "reading=AOSD/CXSD/DDR are AOP/RPM firmware sleep stats; zero deltas mean no entry was recorded for those named modes, not a direct rail-voltage measurement"
             [[ -r $baseline ]] || echo "qcom_stats_baseline=unavailable (deltas need a same-boot prepare)"
         fi
     fi

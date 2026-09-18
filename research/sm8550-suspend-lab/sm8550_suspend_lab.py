@@ -34,7 +34,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 6
 DEFAULT_DEVICE_ROOT = "/var/lib/sm8550-suspend-lab"
 RUN_ID_RE = re.compile(r"^[0-9]{8}T[0-9]{6}Z-[0-9a-f]{12}$")
 SAFE_NAME_RE = re.compile(r"[^A-Za-z0-9_.-]+")
@@ -101,7 +101,7 @@ TRACEFS_DIRS = (
     "/sys/kernel/tracing",
     "/sys/kernel/debug/tracing",
 )
-TRACE_PROFILE_CHOICES = ("none", "ufs-irq", "rpmh-aoss", "rsc-success")
+TRACE_PROFILE_CHOICES = ("none", "ufs-irq", "rpmh-aoss", "rsc-success", "psci-kretprobe")
 TRACE_REQUIRED_EVENTS = (
     "irq:irq_handler_entry",
     "irq:irq_handler_exit",
@@ -115,13 +115,26 @@ TRACE_RPMH_REQUIRED_EVENTS = (
 TRACE_RPMH_SUCCESS_REQUIRED_EVENTS = TRACE_RPMH_REQUIRED_EVENTS + (
     "rpmh:rpmh_rsc_snapshot",
 )
+TRACE_PSCI_KRETPROBE_REQUIRED_EVENTS = (
+    "power:psci_domain_idle_enter",
+    "power:psci_domain_idle_exit",
+)
+TRACE_UFS_PM_EVENTS = (
+    "ufs:ufshcd_system_suspend",
+    "ufs:ufshcd_system_resume",
+    "ufs:ufshcd_wl_suspend",
+    "ufs:ufshcd_wl_resume",
+)
 TRACE_RPMH_OPTIONAL_EVENTS = (
     "interconnect:icc_set_bw",
     "interconnect:icc_set_bw_end",
+    "power:psci_domain_idle_enter",
+    "power:psci_domain_idle_exit",
 )
 TRACE_PM_EVENTS = (
     "power:device_pm_callback_start",
     "power:device_pm_callback_end",
+    "power:suspend_resume",
 )
 
 
@@ -537,6 +550,33 @@ def parse_qcom_stat(text: str) -> Dict[str, Any]:
     return parsed
 
 
+def parse_ddr_stats(text: str) -> Dict[str, Dict[str, Dict[str, int]]]:
+    rows: Dict[str, Dict[str, Dict[str, int]]] = {"lpm": {}, "frequency": {}}
+    for line in text.splitlines():
+        lpm = re.match(
+            r"^DDR LPM Stat Name:(0x[0-9a-fA-F]+)\s+count:(\d+)\s+Duration \(ticks\):(\d+)$",
+            line.strip(),
+        )
+        if lpm:
+            rows["lpm"][lpm.group(1).lower()] = {
+                "count": int(lpm.group(2)),
+                "duration_ticks": int(lpm.group(3)),
+            }
+            continue
+        frequency = re.match(
+            r"^DDR Freq (\d+)Mhz:\s+CP IDX:(\d+)\s+count:(\d+)\s+Duration \(ticks\):(\d+)$",
+            line.strip(),
+            re.IGNORECASE,
+        )
+        if frequency:
+            key = "%sMHz/cp%s" % (frequency.group(1), frequency.group(2))
+            rows["frequency"][key] = {
+                "count": int(frequency.group(3)),
+                "duration_ticks": int(frequency.group(4)),
+            }
+    return rows
+
+
 def parse_trace_events(text: str) -> List[str]:
     events: List[str] = []
     for line in text.splitlines():
@@ -582,6 +622,105 @@ def parse_rpmh_rsc_snapshots(text: str) -> Dict[str, Any]:
         "group_counts": groups,
         "events": events,
     }
+
+
+def parse_psci_idle_trace(text: str) -> Dict[str, Any]:
+    domain_events: Dict[Tuple[str, str, str], Dict[str, Any]] = {}
+    suspend_returns: Dict[Tuple[str, int], Dict[str, Any]] = {}
+    system_suspend_returns: Dict[int, Dict[str, Any]] = {}
+
+    def state_hex(value: str) -> str:
+        return "0x%08x" % int(value, 0 if value.lower().startswith("0x") else 10)
+
+    for line in text.splitlines():
+        match = re.search(
+            r"\bpsci_domain_idle_(enter|exit):\s+cpu_id=(\d+)\s+state=(\S+)\s+is_s2idle=(\S+)",
+            line,
+        )
+        if match:
+            phase, cpu, state, is_s2idle = match.groups()
+            key = (phase, state_hex(state), is_s2idle)
+            row = domain_events.setdefault(
+                key,
+                {"event": phase, "state": key[1], "is_s2idle": is_s2idle == "yes", "count": 0, "cpus": []},
+            )
+            row["count"] += 1
+            if int(cpu) not in row["cpus"]:
+                row["cpus"].append(int(cpu))
+            continue
+
+        match = re.search(
+            r"\bcluster_ret:\s+.*?psci_cpu_suspend_enter\).*?\bstate=(\S+)\s+retval=(-?\d+)",
+            line,
+        )
+        if match:
+            state, retval_text = match.groups()
+            cpu_match = re.search(r"\[(\d+)\]", line)
+            key = (state_hex(state), int(retval_text))
+            row = suspend_returns.setdefault(
+                key, {"state": key[0], "retval": key[1], "count": 0, "cpus": []}
+            )
+            row["count"] += 1
+            if cpu_match and int(cpu_match.group(1)) not in row["cpus"]:
+                row["cpus"].append(int(cpu_match.group(1)))
+            continue
+
+        match = re.search(r"\bsystem_ret:\s+.*?\bretval=(-?\d+)", line)
+        if match:
+            retval = int(match.group(1))
+            cpu_match = re.search(r"\[(\d+)\]", line)
+            row = system_suspend_returns.setdefault(retval, {"retval": retval, "count": 0, "cpus": []})
+            row["count"] += 1
+            if cpu_match and int(cpu_match.group(1)) not in row["cpus"]:
+                row["cpus"].append(int(cpu_match.group(1)))
+
+    return {
+        "available": bool(domain_events or suspend_returns or system_suspend_returns),
+        "domain_idle_events": sorted(
+            domain_events.values(), key=lambda row: (row["state"], row["event"], row["is_s2idle"])
+        ),
+        "cpu_suspend_returns": sorted(
+            suspend_returns.values(), key=lambda row: (row["state"], row["retval"])
+        ),
+        "system_suspend_returns": sorted(system_suspend_returns.values(), key=lambda row: row["retval"]),
+        "semantics": "PSCI events report requested CPU/domain states and system-suspend return codes; they do not prove physical rail or SoC residency",
+    }
+
+
+def psci_idle_trace_text(psci: Dict[str, Any]) -> str:
+    if not psci.get("available"):
+        return "unavailable"
+    parts = [
+        "%s %s s2idle=%s x%d" % (
+            row["event"], row["state"], "yes" if row["is_s2idle"] else "no", row["count"]
+        )
+        for row in psci.get("domain_idle_events", [])
+    ]
+    parts.extend(
+        "return %s retval=%+d x%d" % (row["state"], row["retval"], row["count"])
+        for row in psci.get("cpu_suspend_returns", [])
+    )
+    parts.extend(
+        "system-suspend return retval=%+d x%d" % (row["retval"], row["count"])
+        for row in psci.get("system_suspend_returns", [])
+    )
+    return ", ".join(parts) or "no matching PSCI events"
+
+
+def psci_state_map_text(state_map: Dict[str, Any]) -> str:
+    if not state_map.get("available"):
+        return "unavailable"
+    params: Dict[str, List[str]] = {}
+    for key, scope in (("cpu_idle_states", "cpu"), ("domain_idle_states", "domain")):
+        for row in state_map.get(key, []):
+            for param in row.get("psci_suspend_params", []):
+                name = row.get("idle_state_name") or []
+                label = name[0] if name else "name unspecified"
+                params.setdefault(param, []).append("%s/%s (%s)" % (scope, row.get("node"), label))
+    return "; ".join(
+        "%s: %s" % (param, ", ".join(sorted(set(nodes))))
+        for param, nodes in sorted(params.items())
+    ) or "no decoded PSCI state parameters"
 
 
 def trace_event_parts(event: str) -> Tuple[str, str]:
@@ -878,16 +1017,163 @@ def trace_configure_event(
     return event_info
 
 
-def trace_irq_number_for_ufs() -> Optional[int]:
-    """Resolve the live UFS host IRQ instead of assuming a board IRQ number."""
+def kprobe_definition_matches(line: str, definition: str) -> bool:
+    return re.sub(r"^r[0-9]*:", "r:", line, count=1) == definition
+
+
+def trace_prepare_psci_kretprobe(run: DeviceRun, info: Dict[str, Any]) -> Dict[str, Any]:
+    root = Path(str(info.get("root", "")))
+    registry = root / "kprobe_events"
+    deep_suspend = run.load_config().get("mode") == "deep"
+    function = "psci_system_suspend_enter" if deep_suspend else "psci_cpu_suspend_enter"
+    group = "s2lab_%s" % safe_name(run.run_id).replace("-", "_")
+    name = "system_ret" if deep_suspend else "cluster_ret"
+    event = "%s:%s" % (group, name)
+    definition = (
+        "r:%s/%s %s retval=$retval:s32" % (group, name, function)
+        if deep_suspend
+        else "r:%s/%s %s state=$arg1:u32 retval=$retval:s32" % (group, name, function)
+    )
+    event_filter = None if deep_suspend else "state == %d" % int("4100c344", 16)
+    available = read_text(root / "available_filter_functions") or ""
+    if not re.search(r"(^|\s)%s(\s|$)" % re.escape(function), available, re.MULTILINE):
+        raise LabError("kretprobe function is not available: %s" % function)
+    blacklist = read_text(Path("/sys/kernel/debug/kprobes/blacklist"))
+    if blacklist is None:
+        raise LabError("kprobe blacklist is unreadable")
+    if any(line.split() and line.split()[0] == function for line in blacklist.splitlines()):
+        raise LabError("kretprobe function is blacklisted: %s" % function)
+    if (read_text(Path("/sys/kernel/debug/kprobes/enabled")) or "").strip() != "1":
+        raise LabError("kernel kprobes are not enabled")
+    registry_before = read_text(registry)
+    if registry_before is None:
+        raise LabError("tracefs kprobe_events is unreadable")
+    trace_capture_file(run, "kprobe_events.before.txt", registry)
+    identity = r"^[pr][0-9]*:%s/%s\s" % (re.escape(group), re.escape(name))
+    if any(re.match(identity, line) for line in registry_before.splitlines()):
+        raise LabError("run-unique kretprobe event name is already registered")
+
+    info["dynamic_kprobe"] = {
+        "function": function,
+        "group": group,
+        "name": name,
+        "event": event,
+        "definition": definition,
+        "filter": event_filter,
+        "registry": str(registry),
+        "blacklist_checked": True,
+        "kprobes_enabled": True,
+        "owned": True,
+        "registered": False,
+        "state": "registration-requested",
+    }
+    write_json(run.run_dir / "meta" / "trace.json", info)
+    write_kernel_control(registry, definition + "\n")
+    registry_after = read_text(registry) or ""
+    trace_capture_file(run, "kprobe_events.registered.txt", registry)
+    registered_lines = [line for line in registry_after.splitlines() if re.match(identity, line)]
+    if len(registered_lines) != 1 or not kprobe_definition_matches(registered_lines[0], definition):
+        raise LabError("kernel did not retain the PSCI kretprobe definition")
+    info["dynamic_kprobe"]["registered"] = True
+    info["dynamic_kprobe"]["registered_line"] = registered_lines[0]
+    info["dynamic_kprobe"]["state"] = "registered"
+
+    event_format = read_text(trace_event_file(Path(str(info["instance"])), event, "format"))
+    if event_format is None or not re.search(r"\bretval\s*;", event_format):
+        raise LabError("PSCI kretprobe format does not expose retval")
+    if not deep_suspend and not re.search(r"\bstate\s*;", event_format):
+        raise LabError("PSCI CPU kretprobe format does not expose state")
+    configured = trace_configure_event(run, info, event, event_filter=event_filter)
+    configured["purpose"] = (
+        "record the PSCI SYSTEM_SUSPEND wrapper return code"
+        if deep_suspend
+        else "record state 0x4100c344 return values, successful and rejected"
+    )
+    info["selected_events"].append(configured)
+    info["dynamic_kprobe"]["state"] = "enabled-in-private-instance"
+    write_json(run.run_dir / "meta" / "trace.json", info)
+    return configured
+
+
+def trace_remove_psci_kretprobe(run: DeviceRun, info: Dict[str, Any]) -> Dict[str, Any]:
+    probe = info.get("dynamic_kprobe")
+    if not isinstance(probe, dict) or not probe.get("owned"):
+        return {"result": "not-owned"}
+    group = probe.get("group")
+    name = probe.get("name")
+    definition = probe.get("definition")
+    registry_value = probe.get("registry")
+    if not all(isinstance(value, str) for value in (group, name, definition, registry_value)):
+        return {"result": "refused-invalid-metadata"}
+    if not re.fullmatch(r"s2lab_[A-Za-z0-9_]+", group) or name not in ("cluster_ret", "system_ret"):
+        return {"result": "refused-unexpected-name", "group": group, "name": name}
+    expected = {
+        "cluster_ret": (
+            "psci_cpu_suspend_enter",
+            "r:%s/%s psci_cpu_suspend_enter state=$arg1:u32 retval=$retval:s32" % (group, name),
+        ),
+        "system_ret": (
+            "psci_system_suspend_enter",
+            "r:%s/%s psci_system_suspend_enter retval=$retval:s32" % (group, name),
+        ),
+    }[name]
+    if probe.get("function") != expected[0] or definition != expected[1]:
+        return {"result": "refused-definition-changed"}
+    registry = Path(registry_value)
+    if registry not in (Path("/sys/kernel/tracing/kprobe_events"), Path("/sys/kernel/debug/tracing/kprobe_events")):
+        return {"result": "refused-unexpected-registry", "registry": registry_value}
+    current = read_text(registry)
+    if current is None:
+        return {"result": "unreadable-registry", "registry": registry_value}
+    identity = r"^[pr][0-9]*:%s/%s\s" % (re.escape(group), re.escape(name))
+    matching = [line for line in current.splitlines() if re.match(identity, line)]
+    registered_line = probe.get("registered_line")
+    if not matching:
+        result = {"result": "already-absent"}
+        probe["state"] = result["result"]
+        write_json(run.run_dir / "meta" / "trace.json", info)
+        return result
+    if len(matching) != 1 or not kprobe_definition_matches(matching[0], definition) or (registered_line and matching[0] != registered_line):
+        result = {"result": "refused-definition-changed", "matching": matching}
+        probe["state"] = result["result"]
+        write_json(run.run_dir / "meta" / "trace.json", info)
+        return result
+    try:
+        write_kernel_control(registry, "-:%s/%s\n" % (group, name))
+    except OSError as exc:
+        result = {"result": "remove-failed", "error": str(exc)}
+        probe["state"] = result["result"]
+        write_json(run.run_dir / "meta" / "trace.json", info)
+        return result
+    after = read_text(registry) or ""
+    trace_capture_file(run, "kprobe_events.after-cleanup.txt", registry)
+    still_present = [line for line in after.splitlines() if re.match(identity, line)]
+    result = {"result": "removed"} if not still_present else {"result": "remove-failed", "matching": still_present}
+    probe["registered"] = bool(still_present)
+    probe["state"] = result["result"]
+    write_json(run.run_dir / "meta" / "trace.json", info)
+    return result
+
+
+def trace_irq_number_for(name: str) -> Optional[int]:
+    """Resolve a named live IRQ instead of assuming a board IRQ number."""
     interrupts = read_text(Path("/proc/interrupts"))
     if interrupts is None:
         return None
     for line in interrupts.splitlines():
-        match = re.match(r"^\s*(\d+):\s+.*\bufshcd\b", line, re.IGNORECASE)
+        match = re.match(r"^\s*(\d+):\s+.*\b%s\b" % re.escape(name), line, re.IGNORECASE)
         if match:
             return int(match.group(1))
     return None
+
+
+def trace_irq_snapshot() -> Dict[str, int]:
+    interrupts = parse_interrupts(read_text(Path("/proc/interrupts")) or "")
+    return {
+        irq: row["total"]
+        for irq, row in interrupts.items()
+        if re.search(r"\b(?:ufshcd|apps_rsc|arch_timer)\b", row["details"], re.IGNORECASE)
+    }
 
 
 def trace_prepare(run: DeviceRun, profile: str) -> Dict[str, Any]:
@@ -917,6 +1203,8 @@ def trace_prepare(run: DeviceRun, profile: str) -> Dict[str, Any]:
         if profile == "ufs-irq"
         else TRACE_RPMH_SUCCESS_REQUIRED_EVENTS
         if profile == "rsc-success"
+        else TRACE_PSCI_KRETPROBE_REQUIRED_EVENTS
+        if profile == "psci-kretprobe"
         else TRACE_RPMH_REQUIRED_EVENTS
         if profile == "rpmh-aoss"
         else ()
@@ -939,12 +1227,22 @@ def trace_prepare(run: DeviceRun, profile: str) -> Dict[str, Any]:
     }
     trace_irq_number = None
     if profile == "ufs-irq":
-        trace_irq_number = trace_irq_number_for_ufs()
+        trace_irq_number = trace_irq_number_for("ufshcd")
         info["trace_irq_number"] = trace_irq_number
         if trace_irq_number is None:
             info["state"] = "missing-ufs-irq"
             write_json(run.run_dir / "meta" / "trace.json", info)
             raise LabError("/proc/interrupts has no ufshcd IRQ row")
+        trace_irq_numbers = {"ufshcd": trace_irq_number}
+        apps_rsc_irq = trace_irq_number_for("apps_rsc")
+        if apps_rsc_irq is not None:
+            trace_irq_numbers["apps_rsc"] = apps_rsc_irq
+        arch_timer_irq = trace_irq_number_for("arch_timer")
+        if arch_timer_irq is not None:
+            trace_irq_numbers["arch_timer"] = arch_timer_irq
+        info["trace_irq_numbers"] = trace_irq_numbers
+        irq_filter = " || ".join("irq == %d" % irq for irq in trace_irq_numbers.values())
+        info["trace_irq_filter"] = irq_filter
     write_json(run.run_dir / "meta" / "trace.json", info)
     if instance.exists():
         info["state"] = "refused-existing-instance"
@@ -953,11 +1251,25 @@ def trace_prepare(run: DeviceRun, profile: str) -> Dict[str, Any]:
     if missing:
         info["state"] = "missing-required-events"
         write_json(run.run_dir / "meta" / "trace.json", info)
-        raise LabError("tracefs is missing required IRQ handler events: %s" % ", ".join(missing))
+        raise LabError("tracefs is missing required profile events: %s" % ", ".join(missing))
     try:
         instance.mkdir()
         info["state"] = "created"
         trace_control_snapshot(run, info, "before")
+        trace_clock_path = instance / "trace_clock"
+        trace_clock_before = read_text(trace_clock_path) or ""
+        available_clocks = trace_clock_before.replace("[", "").replace("]", "").split()
+        if "boot" not in available_clocks:
+            raise LabError("tracefs lacks the suspend-inclusive boot trace clock")
+        write_kernel_control(trace_clock_path, "boot\n")
+        trace_clock_after = read_text(trace_clock_path) or ""
+        if "[boot]" not in trace_clock_after:
+            raise LabError("trace instance did not select the boot trace clock")
+        info["suspend_trace_clock"] = {
+            "before": trace_clock_before.strip(),
+            "selected": "boot",
+            "after": trace_clock_after.strip(),
+        }
         write_kernel_control(instance / "tracing_on", "0\n")
         if (read_text(instance / "tracing_on") or "").strip() != "0":
             raise LabError("new trace instance could not be held stopped during setup")
@@ -968,13 +1280,13 @@ def trace_prepare(run: DeviceRun, profile: str) -> Dict[str, Any]:
                 run,
                 info,
                 "irq:irq_handler_entry",
-                event_filter="irq == %d" % trace_irq_number,
+                event_filter=irq_filter,
             )
             irq_exit = trace_configure_event(
                 run,
                 info,
                 "irq:irq_handler_exit",
-                event_filter="irq == %d" % trace_irq_number,
+                event_filter=irq_filter,
             )
             info["selected_events"].extend([irq_entry, irq_exit])
 
@@ -998,7 +1310,10 @@ def trace_prepare(run: DeviceRun, profile: str) -> Dict[str, Any]:
                 event
                 for event in available
                 if re.match(r"(?i)^(?:ufs|ufshcd):", event)
-                and re.search(r"(?i)(command|request|runtime|pm|hibern|exception|error|uic|clock)", event)
+                and (
+                    re.search(r"(?i)(command|request|runtime|pm|hibern|exception|error|uic|clock)", event)
+                    or event in TRACE_UFS_PM_EVENTS
+                )
             ]
             if not ufs_events:
                 ufs_events = [
@@ -1019,6 +1334,10 @@ def trace_prepare(run: DeviceRun, profile: str) -> Dict[str, Any]:
                     trace_optional_event_error(info, event, exc)
                     with contextlib.suppress(OSError):
                         write_kernel_control(trace_event_file(instance, event, "enable"), "0\n")
+        elif profile == "psci-kretprobe":
+            for event in required_events:
+                info["selected_events"].append(trace_configure_event(run, info, event))
+            trace_prepare_psci_kretprobe(run, info)
         else:
             profile_events = list(required_events) + list(TRACE_RPMH_OPTIONAL_EVENTS)
             info["candidate_rpmh_events"] = profile_events
@@ -1042,7 +1361,12 @@ def trace_prepare(run: DeviceRun, profile: str) -> Dict[str, Any]:
         info["error_type"] = type(exc).__name__
         info["error"] = str(exc)
         write_json(run.run_dir / "meta" / "trace.json", info)
-        trace_remove_instance(run, info)
+        remove_actions = trace_remove_instance(run, info)
+        if any(action.get("result") in ("instance-removed", "already-absent") for action in remove_actions):
+            info["prepare_kprobe_cleanup"] = trace_remove_psci_kretprobe(run, info)
+        elif info.get("dynamic_kprobe"):
+            info["prepare_kprobe_cleanup"] = {"result": "refused-instance-not-removed", "actions": remove_actions}
+        write_json(run.run_dir / "meta" / "trace.json", info)
         raise
 
 
@@ -1056,6 +1380,7 @@ def trace_start(run: DeviceRun) -> Dict[str, Any]:
     if instance is None or not instance.is_dir():
         raise LabError("trace instance disappeared before suspend")
     tracing_on = instance / "tracing_on"
+    info["irq_counts_before_trace"] = trace_irq_snapshot()
     write_kernel_control(tracing_on, "1\n")
     if (read_text(tracing_on) or "").strip() != "1":
         raise LabError("trace instance did not start")
@@ -1085,11 +1410,13 @@ def trace_stop(run: DeviceRun) -> Dict[str, Any]:
         write_json(run.run_dir / "meta" / "trace.json", info)
         return info
     actions: List[Dict[str, Any]] = []
+    info["irq_counts_before_trace_stop"] = trace_irq_snapshot()
     try:
         write_kernel_control(instance / "tracing_on", "0\n")
         actions.append({"path": str(instance / "tracing_on"), "result": "disabled"})
     except OSError as exc:
         actions.append({"path": str(instance / "tracing_on"), "result": "failed", "error": str(exc)})
+    info["irq_counts_after_trace_stop"] = trace_irq_snapshot()
     trace_control_snapshot(run, info, "stopped")
     trace_files: Dict[str, Any] = {}
     for name in ("trace", "trace_stat", "buffer_total_size_kb", "buffer_size_kb"):
@@ -1104,6 +1431,12 @@ def trace_stop(run: DeviceRun) -> Dict[str, Any]:
                 "per_cpu/%s.stats" % cpu.name,
                 cpu / "stats",
             )
+    if info.get("dynamic_kprobe"):
+        trace_files["kprobe_profile"] = trace_capture_file(
+            run,
+            "kprobe_profile.txt",
+            Path(str(info.get("root", "/sys/kernel/tracing"))) / "kprobe_profile",
+        )
     info["trace_files"] = trace_files
     info["stop_actions"] = actions
     info["tracing_on_after_stop"] = read_text(instance / "tracing_on")
@@ -1126,9 +1459,21 @@ def trace_remove_instance(run: DeviceRun, info: Dict[str, Any]) -> List[Dict[str
         return actions
     with contextlib.suppress(OSError):
         write_kernel_control(instance / "tracing_on", "0\n")
+    probe = info.get("dynamic_kprobe")
+    dynamic_event = probe.get("event") if isinstance(probe, dict) else None
+    if isinstance(dynamic_event, str):
+        enable_path = trace_event_file(instance, dynamic_event, "enable")
+        if enable_path.exists():
+            try:
+                write_kernel_control(enable_path, "0\n")
+                actions.append({"event": dynamic_event, "result": "disabled"})
+            except OSError as exc:
+                actions.append({"event": dynamic_event, "result": "disable-failed", "error": str(exc)})
     for selected in info.get("selected_events", []):
         event = selected.get("event") if isinstance(selected, dict) else None
         if not event:
+            continue
+        if event == dynamic_event:
             continue
         try:
             write_kernel_control(trace_event_file(instance, event, "enable"), "0\n")
@@ -1149,6 +1494,11 @@ def trace_cleanup(run: DeviceRun) -> Dict[str, Any]:
         result = {"changed": False, "profile": "none"}
         write_json(run.run_dir / "cleanup" / "trace.json", result)
         return result
+    probe = info.get("dynamic_kprobe")
+    if isinstance(probe, dict) and probe.get("state") == "removed":
+        previous = read_phase_json(run, "cleanup", "trace.json", {})
+        if previous.get("kprobe_cleanup", {}).get("result") == "removed":
+            return previous
     if info.get("state") not in ("stopped", "cleaned", "instance-missing"):
         info = trace_stop(run)
     actions = trace_remove_instance(run, info)
@@ -1161,6 +1511,11 @@ def trace_cleanup(run: DeviceRun) -> Dict[str, Any]:
         "state": info.get("state"),
         "actions": actions,
     }
+    if info.get("dynamic_kprobe"):
+        if any(action.get("result") in ("instance-removed", "already-absent") for action in actions):
+            result["kprobe_cleanup"] = trace_remove_psci_kretprobe(run, info)
+        else:
+            result["kprobe_cleanup"] = {"result": "refused-instance-not-removed"}
     write_json(run.run_dir / "cleanup" / "trace.json", result)
     return result
 
@@ -1430,6 +1785,50 @@ def capture_cpuidle(run: DeviceRun, phase: str) -> List[Dict[str, Any]]:
     return entries
 
 
+def capture_psci_state_map(run: DeviceRun, phase: str) -> Dict[str, Any]:
+    root = Path("/sys/firmware/devicetree/base/cpus")
+    groups: Dict[str, List[Dict[str, Any]]] = {"cpu_idle_states": [], "domain_idle_states": []}
+    for scope, dirname in (("cpu_idle_states", "idle-states"), ("domain_idle_states", "domain-idle-states")):
+        directory = root / dirname
+        if not directory.is_dir():
+            continue
+        for node in sorted(item for item in directory.iterdir() if item.is_dir()):
+            param_path = node / "arm,psci-suspend-param"
+            raw_param = read_bytes(param_path)
+            if raw_param is None or not raw_param or len(raw_param) % 4:
+                continue
+            entry: Dict[str, Any] = {
+                "node": node.name,
+                "psci_suspend_params": [
+                    "0x%08x" % int.from_bytes(raw_param[offset:offset + 4], "big")
+                    for offset in range(0, len(raw_param), 4)
+                ],
+                "idle_state_name": binary_strings(node / "idle-state-name"),
+                "compatible": binary_strings(node / "compatible"),
+            }
+            snapshot_file(run, phase, param_path)
+            for prop in ("idle-state-name", "compatible"):
+                source = node / prop
+                if source.is_file():
+                    snapshot_file(run, phase, source)
+            for prop in ("entry-latency-us", "exit-latency-us", "min-residency-us"):
+                source = node / prop
+                value = read_bytes(source)
+                entry[prop.replace("-", "_")] = (
+                    int.from_bytes(value, "big") if value is not None and len(value) == 4 else None
+                )
+                if source.is_file():
+                    snapshot_file(run, phase, source)
+            groups[scope].append(entry)
+    result = {
+        "available": any(groups.values()),
+        **groups,
+        "semantics": "maps PSCI arguments to live device-tree state nodes and labels; it does not report firmware acceptance or physical residency",
+    }
+    write_json(run.run_dir / phase / "psci-state-map.json", result)
+    return result
+
+
 def capture_interrupts(run: DeviceRun, phase: str) -> Dict[str, Dict[str, Any]]:
     source = Path("/proc/interrupts")
     text = read_text(source) or ""
@@ -1641,6 +2040,24 @@ def capture_regulator_and_clock_summaries(run: DeviceRun, phase: str) -> Dict[st
             entry["parsed"] = parse_pm_genpd_summary(value)
         result[key] = entry
         snapshot_file(run, phase, source)
+    genpd_states: Dict[str, Dict[str, str]] = {}
+    genpd_root = Path("/sys/kernel/debug/pm_genpd")
+    if genpd_root.is_dir():
+        for domain in sorted(genpd_root.iterdir()):
+            if not domain.is_dir():
+                continue
+            for name in ("idle_states", "idle_states_desc"):
+                source = domain / name
+                value = read_text(source)
+                if value is None:
+                    continue
+                genpd_states.setdefault(domain.name, {})[name] = value
+                snapshot_file(run, phase, source)
+    result["pm_genpd_idle_states"] = {
+        "available": bool(genpd_states),
+        "domain_count": len(genpd_states),
+        "domains": genpd_states,
+    }
     for key in (
         "regulator_summary",
         "clk_summary",
@@ -1943,6 +2360,7 @@ def capture_phase(run: DeviceRun, phase: str, since: str) -> Dict[str, Any]:
     suspend_stats = capture_suspend_stats(run, phase)
     qcom_stats = capture_qcom_stats(run, phase)
     cpuidle = capture_cpuidle(run, phase)
+    psci_state_map = capture_psci_state_map(run, phase)
     interrupts = capture_interrupts(run, phase)
     wakeup_sources = capture_wakeup_sources(run, phase)
     runtime_pm = capture_runtime_pm(run, phase)
@@ -1961,6 +2379,7 @@ def capture_phase(run: DeviceRun, phase: str, since: str) -> Dict[str, Any]:
         "suspend_stats": suspend_stats,
         "qcom_stats": qcom_stats,
         "cpuidle_count": len(cpuidle),
+        "psci_state_count": sum(len(rows) for rows in psci_state_map.values() if isinstance(rows, list)),
         "interrupt_count": len(interrupts),
         "wakeup_source_count": len(wakeup_sources),
         "runtime_pm_count": len(runtime_pm["devices"]),
@@ -1977,19 +2396,56 @@ def capture_phase(run: DeviceRun, phase: str, since: str) -> Dict[str, Any]:
     return snapshot
 
 
-def capture_clock(run: DeviceRun, label: str) -> Optional[Dict[str, Any]]:
+def clock_reading() -> Optional[Dict[str, Any]]:
     try:
-        values = {
+        return {
             "captured_at": utc_now(),
             "clock_realtime_ns": time.clock_gettime_ns(time.CLOCK_REALTIME),
             "clock_boottime_ns": time.clock_gettime_ns(time.CLOCK_BOOTTIME),
             "clock_monotonic_ns": time.clock_gettime_ns(time.CLOCK_MONOTONIC),
         }
     except (AttributeError, OSError):
-        values = None
+        return None
+
+
+def capture_clock(run: DeviceRun, label: str) -> Optional[Dict[str, Any]]:
+    values = clock_reading()
     if values is not None:
         write_json(run.run_dir / "meta" / (safe_name(label) + ".clock.json"), values)
     return values
+
+
+def capture_qcom_sleep_boundary(run: DeviceRun, label: str) -> Dict[str, Any]:
+    stats_dir = Path("/sys/kernel/debug/qcom_stats")
+    result: Dict[str, Any] = {"label": label, "reads": {}, "genpd": {}}
+    sources = sorted(source for source in stats_dir.iterdir() if source.is_file()) if stats_dir.is_dir() else []
+    for source in sources:
+        name = source.name
+        started = clock_reading()
+        raw = read_text(source) if source.is_file() else None
+        finished = clock_reading()
+        result["reads"][name] = {
+            "available": raw is not None,
+            "started": started,
+            "finished": finished,
+            "raw": raw,
+        }
+    cluster_dir = Path("/sys/kernel/debug/pm_genpd/power-domain-cluster")
+    if cluster_dir.is_dir():
+        result["genpd"][cluster_dir.name] = {"reads": {}}
+        for name in ("idle_states", "idle_states_desc"):
+            source = cluster_dir / name
+            started = clock_reading()
+            raw = read_text(source) if source.is_file() else None
+            finished = clock_reading()
+            result["genpd"][cluster_dir.name]["reads"][name] = {
+                "available": raw is not None,
+                "started": started,
+                "finished": finished,
+                "raw": raw,
+            }
+    write_json(run.run_dir / "meta" / ("qcom-sleep-%s.json" % safe_name(label)), result)
+    return result
 
 
 def capture_mutation_baseline(run: DeviceRun) -> Dict[str, Any]:
@@ -2115,6 +2571,14 @@ def requested_mode_matches(requested: str, observed: Optional[str]) -> bool:
 def configure_transient_mode(run: DeviceRun, mode: str) -> Dict[str, Any]:
     if mode == "policy":
         return {"mode": "policy", "changed": False}
+    if mode == "deep":
+        info = {
+            "mode": mode,
+            "changed": False,
+            "method": "direct kernel mem_sleep selection; bypass Armada dispatcher",
+        }
+        write_json(run.run_dir / "meta" / "transient-mode.json", info)
+        return info
     override = run.run_dir / "meta" / "sleep.conf.override"
     atomic_write_text(override, "suspend_mode=%s\n" % mode)
     info = {
@@ -2128,6 +2592,29 @@ def configure_transient_mode(run: DeviceRun, mode: str) -> Dict[str, Any]:
     }
     write_json(run.run_dir / "meta" / "transient-mode.json", info)
     return info
+
+
+def select_kernel_mem_sleep(
+    run: DeviceRun, mode: str, source: Path = Path("/sys/power/mem_sleep")
+) -> Dict[str, Any]:
+    before = read_text(source)
+    if before is None or mode not in before.replace("[", "").replace("]", "").split():
+        raise LabError("kernel does not expose requested mem_sleep mode %s" % mode)
+    selected_before = selected_mem_sleep(before)
+    if selected_before != mode:
+        write_kernel_control(source, mode + "\n")
+    after = read_text(source)
+    if selected_mem_sleep(after) != mode:
+        raise LabError("kernel did not select requested mem_sleep mode %s" % mode)
+    result = {
+        "path": str(source),
+        "before": before,
+        "after": after,
+        "selected_before": selected_before,
+        "selected_after": selected_mem_sleep(after),
+    }
+    write_json(run.run_dir / "meta" / "kernel-mem-sleep-select.json", result)
+    return result
 
 
 def restore_transient_mode(run: DeviceRun) -> Dict[str, Any]:
@@ -2346,6 +2833,155 @@ def qcom_delta(before: Dict[str, Any], after: Dict[str, Any], key: str) -> Dict[
     }
 
 
+def qcom_sleep_boundary_delta(before: Dict[str, Any], after: Dict[str, Any]) -> Dict[str, Any]:
+    def raw_read(snapshot: Dict[str, Any], name: str) -> Optional[str]:
+        return ((snapshot.get("reads") or {}).get(name) or {}).get("raw")
+
+    scalar: Dict[str, Any] = {}
+    for name in ("aosd", "cxsd", "ddr"):
+        old = parse_qcom_stat(raw_read(before, name) or "")
+        new = parse_qcom_stat(raw_read(after, name) or "")
+        scalar[name] = {
+            "available": bool(old and new),
+            "count_delta": difference(new.get("count"), old.get("count")),
+            "duration_delta": difference(new.get("accumulated_duration"), old.get("accumulated_duration")),
+            "last_entered_at_changed": old.get("last_entered_at") != new.get("last_entered_at"),
+            "last_exited_at_changed": old.get("last_exited_at") != new.get("last_exited_at"),
+        }
+
+    subsystem_names = (
+        set(before.get("reads") or {}) | set(after.get("reads") or {})
+    ) - {"aosd", "cxsd", "ddr", "ddr_stats"}
+    subsystem_smem: Dict[str, Dict[str, Any]] = {}
+    for name in sorted(subsystem_names):
+        old = parse_qcom_stat(raw_read(before, name) or "")
+        new = parse_qcom_stat(raw_read(after, name) or "")
+        subsystem_smem[name] = {
+            "available": old.get("count") is not None and new.get("count") is not None,
+            "count_delta": difference(new.get("count"), old.get("count")),
+            "duration_delta": difference(new.get("accumulated_duration"), old.get("accumulated_duration")),
+            "last_entered_at_changed": old.get("last_entered_at") != new.get("last_entered_at"),
+            "last_exited_at_changed": old.get("last_exited_at") != new.get("last_exited_at"),
+        }
+
+    old_ddr = parse_ddr_stats(raw_read(before, "ddr_stats") or "")
+    new_ddr = parse_ddr_stats(raw_read(after, "ddr_stats") or "")
+    ddr_rows: Dict[str, Dict[str, Dict[str, Optional[float]]]] = {}
+    for group in ("lpm", "frequency"):
+        deltas: Dict[str, Dict[str, Optional[float]]] = {}
+        for key in sorted(set(old_ddr[group]) | set(new_ddr[group])):
+            old = old_ddr[group].get(key, {})
+            new = new_ddr[group].get(key, {})
+            deltas[key] = {
+                "count_delta": difference(new.get("count"), old.get("count")),
+                "duration_ticks_delta": difference(new.get("duration_ticks"), old.get("duration_ticks")),
+            }
+        ddr_rows[group] = deltas
+
+    frequency_deltas = [row["duration_ticks_delta"] for row in ddr_rows["frequency"].values()]
+    mode_0xd0 = ddr_rows["lpm"].get("0xd0", {}).get("duration_ticks_delta")
+    d0_minus_frequency_sum = None
+    if mode_0xd0 is not None and frequency_deltas and all(value is not None for value in frequency_deltas):
+        d0_minus_frequency_sum = mode_0xd0 - sum(frequency_deltas)
+
+    before_reads = before.get("reads") or {}
+    after_reads = after.get("reads") or {}
+    before_starts = [
+        row.get("started", {}).get("clock_boottime_ns")
+        for row in before_reads.values() if row.get("started", {}).get("clock_boottime_ns") is not None
+    ]
+    after_finishes = [
+        row.get("finished", {}).get("clock_boottime_ns")
+        for row in after_reads.values() if row.get("finished", {}).get("clock_boottime_ns") is not None
+    ]
+    before_start = min(before_starts) if before_starts else None
+    after_end = max(after_finishes) if after_finishes else None
+    return {
+        "available": bool(old_ddr["lpm"] and new_ddr["lpm"]),
+        "read_window_boottime_seconds": (
+            round((after_end - before_start) / 1_000_000_000, 6)
+            if before_start is not None and after_end is not None else None
+        ),
+        "scalar_records": scalar,
+        "subsystem_smem_records": subsystem_smem,
+        "ddr_rows": ddr_rows,
+        "d0_minus_frequency_sum_ticks": d0_minus_frequency_sum,
+        "semantics": "scalar records are AOP/RPM firmware stats; zero count deltas mean no firmware-recorded entry into that named mode; other named subsystem records are separate SMEM stats; raw records are not direct voltage measurements; DDR LPM IDs and tick units remain opaque",
+    }
+
+
+def parse_genpd_idle_states(table: str, descriptions: str = "") -> Dict[str, Any]:
+    """Parse genpd callback counters without treating them as hardware residency."""
+    headers: List[str] = []
+    states: Dict[str, Dict[str, Any]] = {}
+    for line in table.splitlines():
+        fields = line.split()
+        if not fields:
+            continue
+        if fields[0] == "State":
+            headers = fields
+            continue
+        if not headers or not re.fullmatch(r"S\d+", fields[0]) or len(fields) != len(headers):
+            continue
+        row: Dict[str, Any] = {}
+        for name, value in zip(headers[1:], fields[1:]):
+            try:
+                row[name] = int(value)
+            except ValueError:
+                row[name] = None
+        states[fields[0]] = row
+
+    for line in descriptions.splitlines():
+        fields = line.split(maxsplit=3)
+        if len(fields) == 4 and fields[0] in states:
+            states[fields[0]]["description"] = {
+                "latency_us": int(fields[1]) if fields[1].isdigit() else None,
+                "residency_us": int(fields[2]) if fields[2].isdigit() else None,
+                "name": fields[3],
+            }
+    required = {"Usage", "Rejected", "S2idle"}
+    return {
+        "available": bool(states) and required.issubset(set(headers)),
+        "columns": headers,
+        "states": states,
+    }
+
+
+def genpd_idle_state_boundary_delta(before: Dict[str, Any], after: Dict[str, Any]) -> Dict[str, Any]:
+    domains: Dict[str, Any] = {}
+    old_domains = before.get("genpd") or {}
+    new_domains = after.get("genpd") or {}
+    for domain in sorted(set(old_domains) | set(new_domains)):
+        def parse_domain(snapshot: Dict[str, Any]) -> Dict[str, Any]:
+            reads = ((snapshot.get("genpd") or {}).get(domain) or {}).get("reads") or {}
+            return parse_genpd_idle_states(
+                ((reads.get("idle_states") or {}).get("raw") or ""),
+                ((reads.get("idle_states_desc") or {}).get("raw") or ""),
+            )
+
+        old = parse_domain(before)
+        new = parse_domain(after)
+        states: Dict[str, Any] = {}
+        for state in sorted(set(old["states"]) | set(new["states"])):
+            old_row = old["states"].get(state, {})
+            new_row = new["states"].get(state, {})
+            states[state] = {
+                "description": new_row.get("description") or old_row.get("description"),
+                "usage_delta": difference(new_row.get("Usage"), old_row.get("Usage")),
+                "rejected_delta": difference(new_row.get("Rejected"), old_row.get("Rejected")),
+                "s2idle_delta": difference(new_row.get("S2idle"), old_row.get("S2idle")),
+            }
+        domains[domain] = {
+            "available": old["available"] and new["available"],
+            "states": states,
+        }
+    return {
+        "available": any(row["available"] for row in domains.values()),
+        "domains": domains,
+        "semantics": "genpd Usage records successful Linux power-off callbacks; Rejected records callback failures; S2idle is callback-tagged accounting and does not classify the selected sleep mode or prove physical residency",
+    }
+
+
 def cpuidle_deltas(before: List[Dict[str, Any]], after: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     old = {(item.get("cpu"), item.get("state")): item for item in before}
     result: List[Dict[str, Any]] = []
@@ -2518,8 +3154,11 @@ def derive_summary(run: DeviceRun, *, command_returncode: Optional[int]) -> Dict
     post_stats = read_phase_json(run, "post", "suspend_stats.json", {})
     pre_qcom = read_phase_json(run, "pre", "qcom_stats.json", {})
     post_qcom = read_phase_json(run, "post", "qcom_stats.json", {})
+    qcom_window_before = read_phase_json(run, "meta", "qcom-sleep-before-suspend.json", {})
+    qcom_window_after = read_phase_json(run, "meta", "qcom-sleep-after-resume.json", {})
     pre_cpuidle = read_phase_json(run, "pre", "cpuidle.json", [])
     post_cpuidle = read_phase_json(run, "post", "cpuidle.json", [])
+    psci_state_map = read_phase_json(run, "pre", "psci-state-map.json", {"available": False})
     pre_interrupts = read_phase_json(run, "pre", "interrupts.json", {})
     post_interrupts = read_phase_json(run, "post", "interrupts.json", {})
     pre_wakeup = read_phase_json(run, "pre", "wakeup_sources.json", {})
@@ -2529,6 +3168,7 @@ def derive_summary(run: DeviceRun, *, command_returncode: Optional[int]) -> Dict
     trace_info = read_phase_json(run, "meta", "trace.json", {})
     trace_text = read_text(run.run_dir / "raw" / "trace" / "trace.txt") or ""
     rsc_snapshots = parse_rpmh_rsc_snapshots(trace_text)
+    psci_idle_trace = parse_psci_idle_trace(trace_text)
     write_json(run.run_dir / "derived" / "rpmh-rsc-snapshots.json", rsc_snapshots)
     status = run.load_status()
     config = run.load_config()
@@ -2680,6 +3320,8 @@ def derive_summary(run: DeviceRun, *, command_returncode: Optional[int]) -> Dict
         "trace_selected_event_count": len(trace_info.get("selected_events", [])),
         "trace_bytes": ((trace_info.get("trace_files") or {}).get("trace") or {}).get("bytes"),
         "rpmh_rsc_snapshots": rsc_snapshots,
+        "psci_idle_trace": psci_idle_trace,
+        "psci_state_map": psci_state_map,
         "suspend_attempted": suspend_attempted,
         "kernel_suspend_success": kernel_suspend_success,
         "clock_proven_sleep_threshold_seconds": MIN_CLOCK_PROVEN_SUSPEND_SECONDS,
@@ -2688,6 +3330,8 @@ def derive_summary(run: DeviceRun, *, command_returncode: Optional[int]) -> Dict
         "suspend_failure": bool(suspend_attempted and not suspend_success),
         "expected_vs_actual_wake": actual_wake,
         "qcom_sleep_deltas": qcom,
+        "qcom_sleep_boundary_deltas": qcom_sleep_boundary_delta(qcom_window_before, qcom_window_after),
+        "genpd_idle_state_boundary_deltas": genpd_idle_state_boundary_delta(qcom_window_before, qcom_window_after),
         "cpuidle_residency_deltas": cpuidle_deltas(pre_cpuidle, post_cpuidle),
         "top_interrupt_deltas": interrupt_rows[:40],
         "wakeup_source_deltas": actual_wake["wakeup_sources"],
@@ -2740,9 +3384,68 @@ def derive_summary(run: DeviceRun, *, command_returncode: Optional[int]) -> Dict
     return summary
 
 
+def qcom_subsystem_smem_text(qcom_boundary: Dict[str, Any]) -> str:
+    records = qcom_boundary.get("subsystem_smem_records", {})
+    changed = []
+    available = 0
+    for name, row in sorted(records.items()):
+        if not row.get("available"):
+            continue
+        available += 1
+        count_delta = row.get("count_delta")
+        duration_delta = row.get("duration_delta")
+        if count_delta not in (None, 0) or duration_delta not in (None, 0):
+            changed.append("%s count_delta=%s duration_delta=%s" % (name, count_delta, duration_delta))
+    if changed:
+        return "; ".join(changed)
+    return "none across %d available records" % available if available else "unavailable"
+
+
+def genpd_idle_state_boundary_text(boundary: Dict[str, Any]) -> str:
+    changed: List[str] = []
+    available = 0
+    for domain, row in sorted((boundary.get("domains") or {}).items()):
+        if not row.get("available"):
+            continue
+        for state, counters in sorted((row.get("states") or {}).items()):
+            if counters.get("usage_delta") is None:
+                continue
+            available += 1
+            values = [counters.get(key) for key in ("usage_delta", "rejected_delta", "s2idle_delta")]
+            if any(value not in (None, 0) for value in values):
+                changed.append(
+                    "%s/%s Usage=%+g Rejected=%+g S2idle=%+g" % (
+                        domain, state,
+                        counters.get("usage_delta") or 0,
+                        counters.get("rejected_delta") or 0,
+                        counters.get("s2idle_delta") or 0,
+                    )
+                )
+    if changed:
+        return "; ".join(changed)
+    return "no counter changes across %d readable states" % available if available else "unavailable"
+
+
 def write_device_result(run: DeviceRun, summary: Dict[str, Any]) -> None:
     config = summary.get("config", {})
     metrics = summary.get("metrics", {})
+    qcom_boundary = metrics.get("qcom_sleep_boundary_deltas", {})
+    scalar_stats = qcom_boundary.get("scalar_records", {})
+    ddr_lpm = qcom_boundary.get("ddr_rows", {}).get("lpm", {})
+    ddr_lpm_text = ", ".join(
+        "%s=%s" % (name, row.get("duration_ticks_delta"))
+        for name, row in sorted(ddr_lpm.items())
+    ) or "unavailable"
+    scalar_stats_text = ", ".join(
+        "%s count=%s duration=%s" % (
+            name.upper(), row.get("count_delta"), row.get("duration_delta")
+        )
+        for name, row in sorted(scalar_stats.items())
+    ) or "unavailable"
+    subsystem_smem_text = qcom_subsystem_smem_text(qcom_boundary)
+    psci_trace_text = psci_idle_trace_text(metrics.get("psci_idle_trace", {}))
+    psci_map_text = psci_state_map_text(metrics.get("psci_state_map", {}))
+    genpd_text = genpd_idle_state_boundary_text(metrics.get("genpd_idle_state_boundary_deltas", {}))
     lines = [
         "# SM8550 suspend lab run %s" % run.run_id,
         "",
@@ -2752,7 +3455,7 @@ def write_device_result(run: DeviceRun, summary: Dict[str, Any]) -> None:
             summary.get("provenance", {}).get("kernel_release_before", "unavailable"),
             summary.get("provenance", {}).get("armada_version_file", "unavailable"),
         ),
-        "- Exact commands: raw command receipts are under `raw/commands/`; the autonomous root-owned agent invoked `/usr/libexec/armada/suspend-dispatch` directly and wrote the post-resume snapshot after it returned.",
+        "- Exact commands: raw command receipts are under `raw/commands/`; suspend path is in `meta/suspend-dispatch.json`, and direct kernel-mode selection (when used) is in `meta/kernel-mem-sleep-select.json`.",
         "- Trace profile: `%s`; scoped trace metadata is in `meta/trace.json` and raw trace/configuration files are under `raw/trace/`." % metrics.get("trace_profile", "none"),
         "- Raw evidence path: `raw/`, with before/after snapshots in `pre/` and `post/`.",
         "- Derived metrics: `derived/summary.json`; requested/observed mode = `%s`/`%s`; waited job seconds = `%s`; suspend-clock separation = `%s` seconds (`%s`); sleep observed = `%s`; AOSD delta = `%s`; CXSD delta = `%s`." % (
@@ -2765,12 +3468,20 @@ def write_device_result(run: DeviceRun, summary: Dict[str, Any]) -> None:
             metrics.get("qcom_sleep_deltas", {}).get("aosd", {}).get("count_delta"),
             metrics.get("qcom_sleep_deltas", {}).get("cxsd", {}).get("count_delta"),
         ),
+        "- Boundary AOP/RPM firmware sleep-stat deltas: %s. Zero count deltas mean the firmware stats block recorded no entry for that named mode in this window; these records are not direct rail-voltage measurements." % scalar_stats_text,
+        "- Boundary subsystem SMEM deltas: %s; these are separate from the AOP/RPM SoC sleep-stat records above." % subsystem_smem_text,
+        "- PSCI CPU/domain trace: %s; requested states and return codes do not prove physical rail or SoC residency." % psci_trace_text,
+        "- Live device-tree PSCI state map: %s; this maps arguments to declared nodes, not firmware acceptance or physical residency." % psci_map_text,
+        "- Boundary Linux genpd idle-state counters: %s; Usage/Rejected/S2idle are callback accounting, not a physical residency measurement." % genpd_text,
+        "- Boundary DDR LPM raw tick deltas: %s; the numeric firmware IDs and tick units are not decoded." % ddr_lpm_text,
         "- Conclusion: success also requires the observed kernel mode to match the request; this receipt does not by itself establish causality or a safe optimization.",
         "- Requested mode matched observed mode: `%s`." % metrics.get("suspend_mode_matches_request"),
         "- Confidence: %s" % config.get("confidence", "single-cycle evidence; repeat identical clean cycles before drawing a platform conclusion"),
         "- Recommended next experiment: %s" % config.get("recommendation", "Repeat the exact same mode and physical-cable state for an independent clean cycle."),
         "",
     ]
+    if "kprobe_cleanup_success" in metrics:
+        lines.insert(-2, "- Run-specific kretprobe cleanup succeeded: `%s`." % metrics["kprobe_cleanup_success"])
     atomic_write_text(run.run_dir / "result.md", "\n".join(lines))
 
 
@@ -2822,6 +3533,10 @@ def device_execute(args: argparse.Namespace) -> int:
         config["wake_epoch"] = rtc_info["target_epoch"]
         write_json(run.config_file, config)
         trace_prepare(run, str(config.get("trace_profile", "none")))
+        requested_mode = str(config.get("mode", "policy"))
+        direct_deep = requested_mode == "deep"
+        if direct_deep:
+            select_kernel_mem_sleep(run, "deep")
         run.update_status(
             state="armed",
             expected_wake_source=rtc_info["rtc"],
@@ -2840,55 +3555,84 @@ def device_execute(args: argparse.Namespace) -> int:
         capture_clock(run, "suspend-start")
         run.update_status(state="suspending")
         suspend_env = os.environ.copy()
-        requested_mode = str(config.get("mode", "policy"))
-        if requested_mode == "policy":
+        if requested_mode in ("policy", "deep"):
             suspend_env.pop("ARMADA_SUSPEND_MODE", None)
             suspend_env.pop("ARMADA_SLEEP_CONFIG", None)
         else:
             mode_info = read_phase_json(run, "meta", "transient-mode.json", {})
             suspend_env.update(mode_info.get("environment", {}))
-        dispatch = Path("/usr/libexec/armada/suspend-dispatch")
-        if not os.access(dispatch, os.X_OK):
-            raise LabError("Armada suspend-dispatch is not executable; no suspend was started")
+        if direct_deep:
+            systemd_sleep = next(
+                (
+                    str(path)
+                    for path in (
+                        Path("/usr/lib/systemd/systemd-sleep"),
+                        Path("/lib/systemd/systemd-sleep"),
+                    )
+                    if os.access(path, os.X_OK)
+                ),
+                None,
+            )
+            if systemd_sleep is None:
+                raise LabError("systemd-sleep is unavailable; no suspend was started")
+            suspend_command = [systemd_sleep, "suspend"]
+            invoked_by = "direct systemd-sleep with kernel mem_sleep=deep; Armada dispatcher bypassed"
+        else:
+            dispatch = Path("/usr/libexec/armada/suspend-dispatch")
+            if not os.access(dispatch, os.X_OK):
+                raise LabError("Armada suspend-dispatch is not executable; no suspend was started")
+            suspend_command = [str(dispatch)]
+            invoked_by = "autonomous root-owned sm8550-suspend-lab systemd unit"
         write_json(
             run.run_dir / "meta" / "suspend-dispatch.json",
             {
-                "command": [str(dispatch)],
+                "command": suspend_command,
+                "kernel_mem_sleep": "deep" if direct_deep else None,
                 "environment_overrides": {
                     key: suspend_env[key]
                     for key in ("ARMADA_SUSPEND_MODE", "ARMADA_SLEEP_CONFIG")
                     if key in suspend_env
                 },
-                "invoked_by": "autonomous root-owned sm8550-suspend-lab systemd unit",
+                "invoked_by": invoked_by,
             },
         )
+        capture_qcom_sleep_boundary(run, "before-suspend")
         try:
             suspend_result = capture_command(
                 run,
                 "suspend-command",
-                [str(dispatch)],
+                suspend_command,
                 env=suspend_env,
                 timeout=None,
             )
         finally:
             trace_stop(run)
+            if config.get("trace_profile") == "psci-kretprobe":
+                trace_cleanup(run)
         command_returncode = suspend_result.returncode
         capture_clock(run, "resume-return")
+        capture_qcom_sleep_boundary(run, "after-resume")
         run.update_status(state="resumed", suspend_command=suspend_result.as_json())
         post_snapshot = capture_phase(run, "post", started_at)
         sleep_debug_collect(run)
         health = capture_health(run, pre_snapshot, post_snapshot)
         write_json(run.run_dir / "derived/post-resume-health.json", health)
-        cleanup_run(run)
+        cleanup = cleanup_run(run)
         summary = derive_summary(run, command_returncode=command_returncode)
+        if config.get("trace_profile") == "psci-kretprobe":
+            cleanup_result = cleanup.get("trace", {}).get("kprobe_cleanup", {})
+            cleanup_ok = cleanup_result.get("result") in ("removed", "already-absent")
+            summary["metrics"]["kprobe_cleanup_success"] = cleanup_ok
+            summary["metrics"]["run_success"] = bool(summary["metrics"].get("suspend_success") and cleanup_ok)
+            write_json(run.run_dir / "derived/summary.json", summary)
         write_device_result(run, summary)
         run.update_status(
-            state="complete" if summary["metrics"]["suspend_success"] else "failed",
+            state="complete" if summary["metrics"].get("run_success", summary["metrics"]["suspend_success"]) else "failed",
             boot_id_after=post_snapshot.get("system", {}).get("boot_id"),
             metrics=summary["metrics"],
         )
         write_checksums(run)
-        return 0 if summary["metrics"]["suspend_success"] else 1
+        return 0 if summary["metrics"].get("run_success", summary["metrics"]["suspend_success"]) else 1
     except BaseException as exc:
         run.log("device execution exception: %s" % exc)
         run.update_status(state="failed", error=str(exc), error_type=type(exc).__name__)
@@ -3095,6 +3839,15 @@ def device_preflight(args: argparse.Namespace) -> int:
         ),
         ("findmnt-root", ["findmnt", "-no", "SOURCE,TARGET,FSTYPE,OPTIONS", "/"], 15),
         ("lsblk", ["lsblk", "-o", "NAME,PATH,FSTYPE,LABEL,PARTLABEL,MOUNTPOINTS,UUID"], 30),
+        (
+            "aop-partition-identities",
+            [
+                "bash",
+                "-c",
+                "for label in aop_a aop_b; do path=/dev/disk/by-partlabel/$label; printf '%s\\n' \"--- $label ---\"; if [ -b \"$path\" ]; then lsblk -n -o PATH,PARTLABEL,SIZE \"$path\"; blockdev --getsize64 \"$path\"; sha256sum \"$path\"; file -s \"$path\"; od -An -N64 -tx1 \"$path\"; else printf '%s\\n' 'partition label unavailable'; fi; done",
+            ],
+            60,
+        ),
         ("systemd-suspend-unit", ["systemctl", "cat", "systemd-suspend.service"], 15),
         ("suspend-dispatch", ["sed", "-n", "1,140p", "/usr/libexec/armada/suspend-dispatch"], 15),
         ("radio-wifi", ["nmcli", "-t", "-f", "WIFI", "radio"], 15),
@@ -3105,6 +3858,25 @@ def device_preflight(args: argparse.Namespace) -> int:
         ("debugfs-root-diagnostic-files", ["find", "/sys/kernel/debug", "-maxdepth", "2", "-type", "f", "-print"], 30),
         ("debugfs-root-diagnostic-directories", ["find", "/sys/kernel/debug", "-maxdepth", "2", "-type", "d", "-print"], 30),
         ("trace-event-inventory", ["cat", "/sys/kernel/tracing/available_events"], 60),
+        (
+            "psci-kretprobe-preflight",
+            [
+                "bash",
+                "-c",
+                "printf '%s\\n' '-- symbol --'; grep -E '(^| )psci_cpu_suspend_enter( |$)' /sys/kernel/tracing/available_filter_functions || true; printf '%s\\n' '-- blacklist --'; grep -F psci_cpu_suspend_enter /sys/kernel/debug/kprobes/blacklist || true; printf '%s\\n' '-- registered probes --'; grep -F psci_cpu_suspend_enter /sys/kernel/debug/kprobes/list || true; printf '%s\\n' '-- existing matching event --'; grep -F psci_cpu_suspend_enter /sys/kernel/tracing/kprobe_events || true; printf '%s\\n' '-- kprobe profile --'; grep -F psci_cpu_suspend_enter /sys/kernel/debug/tracing/kprobe_profile || true; printf '%s\\n' '-- tracers --'; cat /sys/kernel/tracing/available_tracers; printf '%s\\n' '-- enabled --'; cat /sys/kernel/debug/kprobes/enabled",
+            ],
+            30,
+        ),
+        ("psci-firmware-features", ["cat", "/sys/kernel/debug/psci"], 15),
+        (
+            "psci-system-suspend-preflight",
+            [
+                "bash",
+                "-c",
+                "for symbol in psci_system_suspend_enter psci_system_suspend; do printf '%s\\n' \"--- $symbol available ---\"; grep -E \"(^| )$symbol( |$)\" /sys/kernel/tracing/available_filter_functions || true; printf '%s\\n' \"--- $symbol blacklist ---\"; grep -E \"^$symbol([[:space:]]|$)\" /sys/kernel/debug/kprobes/blacklist || true; done",
+            ],
+            30,
+        ),
         ("firmware-diagnostic-files", ["find", "/sys/firmware", "-maxdepth", "3", "-type", "f", "-print"], 30),
         (
             "rsc-sysfs-metadata",
@@ -3739,6 +4511,23 @@ def write_host_result(local_run: Path, summary: Dict[str, Any]) -> None:
     metrics = summary.get("metrics", {})
     config = summary.get("config", {})
     checkout = host_data.get("checkout", {})
+    qcom_boundary = metrics.get("qcom_sleep_boundary_deltas", {})
+    scalar_stats = qcom_boundary.get("scalar_records", {})
+    ddr_lpm = qcom_boundary.get("ddr_rows", {}).get("lpm", {})
+    ddr_lpm_text = ", ".join(
+        "%s=%s" % (name, row.get("duration_ticks_delta"))
+        for name, row in sorted(ddr_lpm.items())
+    ) or "unavailable"
+    scalar_stats_text = ", ".join(
+        "%s count=%s duration=%s" % (
+            name.upper(), row.get("count_delta"), row.get("duration_delta")
+        )
+        for name, row in sorted(scalar_stats.items())
+    ) or "unavailable"
+    subsystem_smem_text = qcom_subsystem_smem_text(qcom_boundary)
+    psci_trace_text = psci_idle_trace_text(metrics.get("psci_idle_trace", {}))
+    psci_map_text = psci_state_map_text(metrics.get("psci_state_map", {}))
+    genpd_text = genpd_idle_state_boundary_text(metrics.get("genpd_idle_state_boundary_deltas", {}))
     lines = [
         "# SM8550 suspend lab run %s" % summary.get("run_id"),
         "",
@@ -3760,6 +4549,12 @@ def write_host_result(local_run: Path, summary: Dict[str, Any]) -> None:
             metrics.get("qcom_sleep_deltas", {}).get("aosd", {}).get("count_delta"),
             metrics.get("qcom_sleep_deltas", {}).get("cxsd", {}).get("count_delta"),
         ),
+        "- Boundary AOP/RPM firmware sleep-stat deltas: %s. Zero count deltas mean the firmware stats block recorded no entry for that named mode in this window; these records are not direct rail-voltage measurements." % scalar_stats_text,
+        "- Boundary subsystem SMEM deltas: %s; these are separate from the AOP/RPM SoC sleep-stat records above." % subsystem_smem_text,
+        "- PSCI CPU/domain trace: %s; requested states and return codes do not prove physical rail or SoC residency." % psci_trace_text,
+        "- Live device-tree PSCI state map: %s; this maps arguments to declared nodes, not firmware acceptance or physical residency." % psci_map_text,
+        "- Boundary Linux genpd idle-state counters: %s; Usage/Rejected/S2idle are callback accounting, not a physical residency measurement." % genpd_text,
+        "- Boundary DDR LPM raw tick deltas: %s; the numeric firmware IDs and tick units are not decoded." % ddr_lpm_text,
         "- Conclusion: this run is an observation receipt; it does not by itself establish causality or a safe optimization.",
         "- Confidence: %s" % config.get("confidence", "single-cycle evidence; repeat identical clean cycles before drawing a platform conclusion"),
         "- Recommended next experiment: %s" % config.get("recommendation", "Repeat the exact same mode and physical-cable state for an independent clean cycle."),
@@ -3819,6 +4614,14 @@ def host_wait_and_retrieve(args: argparse.Namespace, run_id: str) -> int:
 def self_test() -> int:
     valid = new_run_id()
     assert RUN_ID_RE.fullmatch(valid)
+    assert kprobe_definition_matches(
+        "r16:s2lab_test/cluster_ret psci_cpu_suspend_enter state=$arg1:u32 retval=$retval:s32",
+        "r:s2lab_test/cluster_ret psci_cpu_suspend_enter state=$arg1:u32 retval=$retval:s32",
+    )
+    assert not kprobe_definition_matches(
+        "r16:s2lab_test/cluster_ret other_function state=$arg1:u32 retval=$retval:s32",
+        "r:s2lab_test/cluster_ret psci_cpu_suspend_enter state=$arg1:u32 retval=$retval:s32",
+    )
     assert requested_mode_matches("policy", "s2idle")
     assert not requested_mode_matches("deep", "s2idle")
     assert bluetooth_power_restore_decision("no", "yes", "no", "no") == "restore"
@@ -3836,6 +4639,82 @@ def self_test() -> int:
     assert interrupts["171"]["details"] == "rtc0"
     stats = parse_qcom_stat("Count: 3\nAccumulated Duration: 42\n")
     assert stats["count"] == 3 and stats["accumulated_duration"] == 42
+    ddr_stats = parse_ddr_stats(
+        "DDR LPM Stat Name:0xd4\tcount:0\tDuration (ticks):0\n"
+        "DDR LPM Stat Name:0xd0\tcount:1\tDuration (ticks):300\n"
+        "DDR Freq 200Mhz:\tCP IDX:1\tcount:1\tDuration (ticks):250\n"
+    )
+    assert ddr_stats["lpm"]["0xd0"]["duration_ticks"] == 300
+    assert ddr_stats["frequency"]["200MHz/cp1"]["duration_ticks"] == 250
+    boundary = qcom_sleep_boundary_delta(
+        {"reads": {"aosd": {"raw": "Count: 0\nLast Entered At: 0\nLast Exited At: 0\nAccumulated Duration: 0"}, "adsp": {"raw": "Count: 10\nLast Entered At: 80\nLast Exited At: 79\nAccumulated Duration: 100"}, "apss": {"raw": "Count: 20\nLast Entered At: 80\nLast Exited At: 79\nAccumulated Duration: 200"}, "ddr_stats": {"raw": "DDR LPM Stat Name:0xd0\tcount:1\tDuration (ticks):100\nDDR Freq 200Mhz:\tCP IDX:1\tcount:1\tDuration (ticks):100", "started": {"clock_boottime_ns": 1}}}},
+        {"reads": {"aosd": {"raw": "Count: 0\nLast Entered At: 0\nLast Exited At: 0\nAccumulated Duration: 0"}, "adsp": {"raw": "Count: 12\nLast Entered At: 120\nLast Exited At: 119\nAccumulated Duration: 180"}, "apss": {"raw": "Count: 21\nLast Entered At: 120\nLast Exited At: 119\nAccumulated Duration: 260"}, "ddr_stats": {"raw": "DDR LPM Stat Name:0xd0\tcount:1\tDuration (ticks):300\nDDR Freq 200Mhz:\tCP IDX:1\tcount:1\tDuration (ticks):250", "finished": {"clock_boottime_ns": 1_000_000_001}}}},
+    )
+    assert boundary["ddr_rows"]["lpm"]["0xd0"]["duration_ticks_delta"] == 200
+    assert boundary["d0_minus_frequency_sum_ticks"] == 50
+    assert boundary["scalar_records"]["aosd"]["count_delta"] == 0
+    assert boundary["subsystem_smem_records"]["adsp"]["count_delta"] == 2
+    assert boundary["subsystem_smem_records"]["adsp"]["duration_delta"] == 80
+    assert boundary["subsystem_smem_records"]["apss"]["count_delta"] == 1
+    assert "apss count_delta=1" in qcom_subsystem_smem_text(boundary)
+    assert not boundary["scalar_records"]["aosd"]["last_entered_at_changed"]
+    assert "firmware-recorded entry" in boundary["semantics"]
+    assert boundary["read_window_boottime_seconds"] == 1.0
+    genpd_before = {
+        "genpd": {
+            "power-domain-cluster": {
+                "reads": {
+                    "idle_states": {"raw": "State Time(ms) Usage Rejected Above Below S2idle\nS1 7 63 50 2 0 111\n"},
+                    "idle_states_desc": {"raw": "State Latency(us) Residency(us) Name\nS1 7200 10150 silver-rail-power-collapse\n"},
+                }
+            }
+        }
+    }
+    genpd_after = {
+        "genpd": {
+            "power-domain-cluster": {
+                "reads": {
+                    "idle_states": {"raw": "State Time(ms) Usage Rejected Above Below S2idle\nS1 7 64 50 2 0 112\n"},
+                    "idle_states_desc": {"raw": "State Latency(us) Residency(us) Name\nS1 7200 10150 silver-rail-power-collapse\n"},
+                }
+            }
+        }
+    }
+    genpd_delta = genpd_idle_state_boundary_delta(genpd_before, genpd_after)
+    assert genpd_delta["available"]
+    assert genpd_delta["domains"]["power-domain-cluster"]["states"]["S1"]["usage_delta"] == 1
+    assert genpd_delta["domains"]["power-domain-cluster"]["states"]["S1"]["rejected_delta"] == 0
+    assert genpd_delta["domains"]["power-domain-cluster"]["states"]["S1"]["s2idle_delta"] == 1
+    assert "Usage=+1 Rejected=+0 S2idle=+1" in genpd_idle_state_boundary_text(genpd_delta)
+    malformed_genpd = parse_genpd_idle_states("State Cycles\nS1 4\n")
+    assert not malformed_genpd["available"]
+    missing_genpd = genpd_idle_state_boundary_delta(genpd_before, {})
+    assert not missing_genpd["available"]
+    assert missing_genpd["domains"]["power-domain-cluster"]["states"]["S1"]["usage_delta"] is None
+    assert genpd_idle_state_boundary_text(missing_genpd) == "unavailable"
+    psci_trace = parse_psci_idle_trace(
+        "  <idle>-0 [000] d..1. 100.0: psci_domain_idle_enter: cpu_id=0 state=0x4100c344 is_s2idle=yes\n"
+        "  <idle>-0 [000] d..2. 145.0: cluster_ret: (__psci_enter_domain_idle_state+0x90/0x358 <- psci_cpu_suspend_enter) state=1090569028 retval=0\n"
+        "  suspend-1 [000] d..2. 155.0: system_ret: (psci_system_suspend_enter+0x34/0x70 <- psci_system_suspend_enter) retval=0\n"
+    )
+    assert psci_trace["available"]
+    assert psci_trace["domain_idle_events"][0]["state"] == "0x4100c344"
+    assert psci_trace["cpu_suspend_returns"][0]["retval"] == 0
+    assert psci_trace["system_suspend_returns"][0]["retval"] == 0
+    assert psci_idle_trace_text(psci_trace).startswith("enter 0x4100c344")
+    assert "system-suspend return retval=+0 x1" in psci_idle_trace_text(psci_trace)
+    state_map = {
+        "available": True,
+        "cpu_idle_states": [
+            {"node": "cpu-sleep-0-0", "psci_suspend_params": ["0x40000004"], "idle_state_name": ["silver-rail-power-collapse"]}
+        ],
+        "domain_idle_states": [
+            {"node": "cluster-sleep-1", "psci_suspend_params": ["0x4100c344"], "idle_state_name": []}
+        ],
+    }
+    map_text = psci_state_map_text(state_map)
+    assert "0x4100c344: domain/cluster-sleep-1 (name unspecified)" in map_text
+    assert "silver-rail-power-collapse" in map_text
     events = parse_trace_events("irq:irq_handler_entry\npower:device_pm_callback_start\nnot-an-event\n")
     assert events == ["irq:irq_handler_entry", "power:device_pm_callback_start"]
     rsc_snapshots = parse_rpmh_rsc_snapshots(
@@ -3920,6 +4799,10 @@ def self_test() -> int:
         assert read_text(fake_pm_times) == "0"
         assert read_text(fake_mem_sleep) == "deep"
         assert len(actions) == 3
+        atomic_write_text(fake_mem_sleep, "[deep] s2idle\n")
+        selection = select_kernel_mem_sleep(run, "deep", fake_mem_sleep)
+        assert selection["selected_before"] == "deep"
+        assert selected_mem_sleep(read_text(fake_mem_sleep)) == "deep"
         write_json(run.run_dir / "meta/suspend-start.clock.json", {"clock_boottime_ns": 30_000_000_000, "clock_monotonic_ns": 10_000_000_000})
         write_json(run.run_dir / "meta/resume-return.clock.json", {"clock_boottime_ns": 50_000_000_000, "clock_monotonic_ns": 11_000_000_000})
     print("sm8550 suspend lab self-test passed")
@@ -3953,7 +4836,7 @@ def build_parser() -> argparse.ArgumentParser:
         add_host_common(command)
         command.add_argument("--run-id")
         command.add_argument("--label", default=start_defaults["label"])
-        command.add_argument("--mode", choices=("s2idle", "policy"), default="s2idle")
+        command.add_argument("--mode", choices=("s2idle", "policy", "deep"), default="s2idle")
         command.add_argument("--sleep-seconds", type=int, default=45)
         command.add_argument("--poll-seconds", type=int, default=5)
         command.add_argument("--wifi-state", choices=("preserve", "off", "on"), default="preserve")
@@ -4005,7 +4888,7 @@ def build_parser() -> argparse.ArgumentParser:
     add_device_common(start)
     start.add_argument("--run-id", required=True)
     start.add_argument("--label", required=True)
-    start.add_argument("--mode", choices=("s2idle", "policy"), required=True)
+    start.add_argument("--mode", choices=("s2idle", "policy", "deep"), required=True)
     start.add_argument("--sleep-seconds", type=int, required=True)
     start.add_argument("--wifi-state", choices=("preserve", "off", "on"), required=True)
     start.add_argument("--bluetooth-state", choices=("preserve", "off", "on"), required=True)

@@ -1,0 +1,149 @@
+# tracer: nop
+#
+# entries-in-buffer/entries-written: 137/137   #P:8
+#
+#                                _-----=> irqs-off
+#                               / _----=> need-resched
+#                              | / _---=> hardirq/softirq
+#                              || / _--=> preempt-depth
+#                              ||| / _-=> migrate-disable
+#                              |||| /     delay
+#           TASK-PID     CPU#  |||||  TIMESTAMP  FUNCTION
+#              | |         |   |||||     |         |
+          <idle>-0       [002] d..1. 10177.901171: lpm_gov_select: state:0 qos-us:44 sleep-us:1931979 reason:0x20
+          <idle>-0       [004] d..1. 10177.901405: lpm_gov_select: state:0 qos-us:2000000000 sleep-us:130398001043 reason:0x20
+          <idle>-0       [005] d..1. 10177.901406: lpm_gov_select: state:0 qos-us:2000000000 sleep-us:59804181302 reason:0x20
+          <idle>-0       [003] d..1. 10177.901576: lpm_gov_select: state:0 qos-us:2000000000 sleep-us:1321212402 reason:0x20
+          <idle>-0       [005] d..1. 10177.901577: lpm_gov_select: state:0 qos-us:2000000000 sleep-us:59804007604 reason:0x20
+          <idle>-0       [005] d..1. 10177.901607: lpm_gov_select: state:0 qos-us:2000000000 sleep-us:59803977708 reason:0x20
+          <idle>-0       [005] d..1. 10177.901617: lpm_gov_select: state:0 qos-us:2000000000 sleep-us:59803967500 reason:0x20
+          <idle>-0       [004] d..1. 10177.901652: lpm_gov_select: state:0 qos-us:2000000000 sleep-us:130397753387 reason:0x20
+          <idle>-0       [003] d..1. 10177.901654: lpm_gov_select: state:0 qos-us:2000000000 sleep-us:1321132245 reason:0x20
+          <idle>-0       [003] d..1. 10177.901679: lpm_gov_select: state:0 qos-us:2000000000 sleep-us:1321107714 reason:0x20
+          <idle>-0       [005] d..1. 10177.901690: lpm_gov_select: state:0 qos-us:2000000000 sleep-us:59803895729 reason:0x20
+          <idle>-0       [002] d..1. 10177.901713: lpm_gov_select: state:0 qos-us:44 sleep-us:1388437 reason:0x20
+          <idle>-0       [003] d..1. 10177.901762: lpm_gov_select: state:0 qos-us:2000000000 sleep-us:1321024954 reason:0x20
+          <idle>-0       [004] d..1. 10177.901762: lpm_gov_select: state:0 qos-us:2000000000 sleep-us:130397642501 reason:0x20
+          <idle>-0       [003] d..1. 10177.901826: lpm_gov_select: state:0 qos-us:2000000000 sleep-us:1320960527 reason:0x20
+          <idle>-0       [004] d..1. 10177.901853: lpm_gov_select: state:0 qos-us:2000000000 sleep-us:130397551512 reason:0x20
+          <idle>-0       [004] d..1. 10177.901970: lpm_gov_select: state:0 qos-us:2000000000 sleep-us:130397434585 reason:0x20
+          <idle>-0       [005] d..1. 10177.902089: lpm_gov_select: state:0 qos-us:2000000000 sleep-us:59803498490 reason:0x20
+          <idle>-0       [004] d..1. 10177.902173: lpm_gov_select: state:0 qos-us:2000000000 sleep-us:130397231772 reason:0x20
+          <idle>-0       [001] d..1. 10177.902222: lpm_gov_select: state:0 qos-us:44 sleep-us:20474056 reason:0x20
+          <idle>-0       [005] d..1. 10177.902242: lpm_gov_select: state:0 qos-us:2000000000 sleep-us:59803343177 reason:0x20
+          <idle>-0       [005] d..1. 10177.902272: lpm_gov_select: state:0 qos-us:2000000000 sleep-us:59803313125 reason:0x20
+          <idle>-0       [001] d..1. 10177.902314: lpm_gov_select: state:0 qos-us:44 sleep-us:8396667 reason:0x20
+          <idle>-0       [001] d..1. 10177.902782: lpm_gov_select: state:0 qos-us:44 sleep-us:3909889 reason:0x20
+          <idle>-0       [001] d..1. 10177.903010: lpm_gov_select: state:0 qos-us:44 sleep-us:3682493 reason:0x20
+          <idle>-0       [001] d..1. 10177.906889: lpm_gov_select: state:0 qos-us:44 sleep-us:3803222 reason:0x20
+          <idle>-0       [006] d..1. 10177.907225: lpm_gov_select: state:1 qos-us:2000000000 sleep-us:9223367280038240 reason:0x0
+          <idle>-0       [001] d..1. 10177.909138: lpm_gov_select: state:0 qos-us:44 sleep-us:3803222 reason:0x20
+          <idle>-0       [000] d..1. 10177.909258: lpm_gov_select: state:0 qos-us:44 sleep-us:13438483 reason:0x20
+          <idle>-0       [003] d..1. 10177.910334: lpm_gov_select: state:0 qos-us:2000000000 sleep-us:1312453 reason:0x800
+          <idle>-0       [003] d..1. 10177.910464: lpm_gov_select: state:1 qos-us:2000000000 sleep-us:1312324 reason:0x0
+          <idle>-0       [001] d..1. 10177.910593: lpm_gov_select: state:0 qos-us:44 sleep-us:101764 reason:0x20
+          <idle>-0       [004] d..1. 10177.910685: lpm_gov_select: state:0 qos-us:2000000000 sleep-us:130388720 reason:0x800
+          <idle>-0       [001] d..1. 10177.910746: lpm_gov_select: state:0 qos-us:44 sleep-us:3945983 reason:0x20
+          <idle>-0       [004] d..1. 10177.910876: lpm_gov_select: state:1 qos-us:2000000000 sleep-us:130388530 reason:0x0
+          <idle>-0       [000] d..1. 10177.911674: lpm_gov_select: state:0 qos-us:44 sleep-us:11019472 reason:0x20
+          <idle>-0       [001] d..1. 10177.912601: lpm_gov_select: state:0 qos-us:44 sleep-us:2091243 reason:0x20
+          <idle>-0       [001] d..1. 10177.913158: lpm_gov_select: state:0 qos-us:44 sleep-us:1532754 reason:0x20
+          <idle>-0       [000] d..1. 10177.913233: lpm_gov_select: state:0 qos-us:44 sleep-us:9460149 reason:0x20
+          <idle>-0       [000] d..1. 10177.913528: lpm_gov_select: state:0 qos-us:44 sleep-us:9162441 reason:0x20
+          <idle>-0       [000] d..1. 10177.913571: lpm_gov_select: state:0 qos-us:44 sleep-us:9120097 reason:0x20
+          <idle>-0       [001] d..1. 10177.913713: lpm_gov_select: state:0 qos-us:44 sleep-us:979993 reason:0x20
+          <idle>-0       [000] d..1. 10177.914591: lpm_gov_select: state:0 qos-us:44 sleep-us:8099889 reason:0x20
+     kworker/2:2-25976   [002] d..1. 10177.914864: rpmh_send_msg: apps_rsc-drv-2: send-msg: tcs(m): 0 cmd(n): 0 msgid: 0x10108 addr: 0x50000 data: 0x61cf8824 complete: 1
+     kworker/2:2-25976   [002] d..1. 10177.914870: rpmh_send_msg: apps_rsc-drv-2: send-msg: tcs(m): 0 cmd(n): 1 msgid: 0x10108 addr: 0x50008 data: 0x20000001 complete: 0
+     kworker/2:2-25976   [002] d..1. 10177.914873: rpmh_send_msg: apps_rsc-drv-2: send-msg: tcs(m): 0 cmd(n): 2 msgid: 0x10108 addr: 0x50004 data: 0x6251d1db complete: 1
+     kworker/2:2-25976   [002] d..1. 10177.914879: rpmh_send_msg: apps_rsc-drv-2: send-msg: tcs(m): 0 cmd(n): 3 msgid: 0x10108 addr: 0x5001c data: 0x201dc096 complete: 0
+     kworker/2:2-25976   [002] d..1. 10177.914883: rpmh_send_msg: apps_rsc-drv-2: send-msg: tcs(m): 0 cmd(n): 4 msgid: 0x10108 addr: 0x50010 data: 0x6afd012d complete: 1
+     kworker/2:2-25976   [002] d..1. 10177.914887: rpmh_send_msg: apps_rsc-drv-2: send-msg: tcs(m): 0 cmd(n): 5 msgid: 0x10108 addr: 0x50068 data: 0x60000008 complete: 1
+    binder:940_4-8272    [002] d.h1. 10177.914928: rpmh_tx_done: apps_rsc-drv-2: ack: tcs-m: 0 addr: 0x50000 data: 0x61cf8824
+          <idle>-0       [000] d..1. 10177.914934: lpm_gov_select: state:0 qos-us:44 sleep-us:3756660 reason:0x20
+     kworker/2:2-25976   [002] d..1. 10177.914982: rpmh_send_msg: apps_rsc-drv-2: send-msg: tcs(m): 0 cmd(n): 0 msgid: 0x10108 addr: 0x50008 data: 0x60000001 complete: 1
+     kworker/2:2-25976   [002] d..1. 10177.914986: rpmh_send_msg: apps_rsc-drv-2: send-msg: tcs(m): 0 cmd(n): 1 msgid: 0x10108 addr: 0x50038 data: 0x60000001 complete: 1
+    binder:940_4-8272    [002] d.h1. 10177.915009: rpmh_tx_done: apps_rsc-drv-2: ack: tcs-m: 0 addr: 0x50008 data: 0x60000001
+     kworker/2:2-25976   [002] d..1. 10177.915059: rpmh_send_msg: apps_rsc-drv-2: send-msg: tcs(m): 0 cmd(n): 0 msgid: 0x10108 addr: 0x50000 data: 0x61cf8824 complete: 1
+     kworker/2:2-25976   [002] d..1. 10177.915063: rpmh_send_msg: apps_rsc-drv-2: send-msg: tcs(m): 0 cmd(n): 1 msgid: 0x10108 addr: 0x50008 data: 0x20000001 complete: 0
+     kworker/2:2-25976   [002] d..1. 10177.915067: rpmh_send_msg: apps_rsc-drv-2: send-msg: tcs(m): 0 cmd(n): 2 msgid: 0x10108 addr: 0x50004 data: 0x625211db complete: 1
+     kworker/2:2-25976   [002] d..1. 10177.915070: rpmh_send_msg: apps_rsc-drv-2: send-msg: tcs(m): 0 cmd(n): 3 msgid: 0x10108 addr: 0x5001c data: 0x201e0096 complete: 0
+     kworker/2:2-25976   [002] d..1. 10177.915074: rpmh_send_msg: apps_rsc-drv-2: send-msg: tcs(m): 0 cmd(n): 4 msgid: 0x10108 addr: 0x50010 data: 0x6afd812d complete: 1
+     kworker/2:2-25976   [002] d..1. 10177.915077: rpmh_send_msg: apps_rsc-drv-2: send-msg: tcs(m): 0 cmd(n): 5 msgid: 0x10108 addr: 0x50068 data: 0x60000008 complete: 1
+    binder:940_4-8272    [002] d.h.. 10177.915102: rpmh_tx_done: apps_rsc-drv-2: ack: tcs-m: 0 addr: 0x50000 data: 0x61cf8824
+     kworker/2:2-25976   [002] d..1. 10177.915143: rpmh_send_msg: apps_rsc-drv-2: send-msg: tcs(m): 0 cmd(n): 0 msgid: 0x10108 addr: 0x50008 data: 0x60000001 complete: 1
+     kworker/2:2-25976   [002] d..1. 10177.915147: rpmh_send_msg: apps_rsc-drv-2: send-msg: tcs(m): 0 cmd(n): 1 msgid: 0x10108 addr: 0x50038 data: 0x60000001 complete: 1
+    binder:940_4-8272    [002] d.h1. 10177.915168: rpmh_tx_done: apps_rsc-drv-2: ack: tcs-m: 0 addr: 0x50008 data: 0x60000001
+          <idle>-0       [002] d..1. 10177.916282: lpm_gov_select: state:0 qos-us:44 sleep-us:11471094 reason:0x20
+          <idle>-0       [002] d..1. 10177.916831: lpm_gov_select: state:0 qos-us:44 sleep-us:10918698 reason:0x20
+          <idle>-0       [000] d..1. 10177.917143: lpm_gov_select: state:0 qos-us:44 sleep-us:1547806 reason:0x20
+          <idle>-0       [005] d..1. 10177.917274: lpm_gov_select: state:0 qos-us:2000000000 sleep-us:59788314011 reason:0x20
+          <idle>-0       [003] d..1. 10177.917395: lpm_gov_select: state:0 qos-us:2000000000 sleep-us:1305395266 reason:0x20
+          <idle>-0       [000] d..1. 10177.918212: lpm_gov_select: state:0 qos-us:44 sleep-us:481035 reason:0x20
+          <idle>-0       [005] d..1. 10177.918506: lpm_gov_select: state:0 qos-us:2000000000 sleep-us:59787081771 reason:0x20
+          <idle>-0       [005] d..1. 10177.918839: lpm_gov_select: state:0 qos-us:2000000000 sleep-us:59786746511 reason:0x20
+     kworker/0:1-26486   [000] d..1. 10177.918899: rpmh_send_msg: apps_rsc-drv-2: send-msg: tcs(m): 0 cmd(n): 0 msgid: 0x10108 addr: 0x5002c data: 0x60014bca complete: 1
+       cnss_diag-1746    [002] d.h.. 10177.918920: rpmh_tx_done: apps_rsc-drv-2: ack: tcs-m: 0 addr: 0x5002c data: 0x60014bca
+     kworker/0:1-26486   [000] d..1. 10177.919017: rpmh_send_msg: apps_rsc-drv-2: send-msg: tcs(m): 0 cmd(n): 0 msgid: 0x10108 addr: 0x50000 data: 0x61cdc824 complete: 1
+     kworker/0:1-26486   [000] d..1. 10177.919021: rpmh_send_msg: apps_rsc-drv-2: send-msg: tcs(m): 0 cmd(n): 1 msgid: 0x10108 addr: 0x50008 data: 0x20000001 complete: 0
+     kworker/0:1-26486   [000] d..1. 10177.919025: rpmh_send_msg: apps_rsc-drv-2: send-msg: tcs(m): 0 cmd(n): 2 msgid: 0x10108 addr: 0x50004 data: 0x625051db complete: 1
+     kworker/0:1-26486   [000] d..1. 10177.919028: rpmh_send_msg: apps_rsc-drv-2: send-msg: tcs(m): 0 cmd(n): 3 msgid: 0x10108 addr: 0x50068 data: 0x60000008 complete: 1
+       cnss_diag-1746    [002] d.h.. 10177.919051: rpmh_tx_done: apps_rsc-drv-2: ack: tcs-m: 0 addr: 0x50000 data: 0x61cdc824
+          <idle>-0       [000] d..1. 10177.919348: lpm_gov_select: state:0 qos-us:44 sleep-us:3346347 reason:0x20
+          <idle>-0       [001] d..1. 10177.919513: lpm_gov_select: state:0 qos-us:44 sleep-us:9888073 reason:0x20
+          <idle>-0       [000] d..1. 10177.919537: lpm_gov_select: state:0 qos-us:44 sleep-us:3154472 reason:0x20
+          <idle>-0       [001] d..1. 10177.919611: lpm_gov_select: state:0 qos-us:44 sleep-us:9787760 reason:0x20
+          <idle>-0       [000] d..1. 10177.919611: lpm_gov_select: state:0 qos-us:44 sleep-us:3078483 reason:0x20
+          <idle>-0       [000] d..1. 10177.921189: lpm_gov_select: state:0 qos-us:44 sleep-us:1504733 reason:0x20
+          <idle>-0       [000] d..1. 10177.921352: lpm_gov_select: state:0 qos-us:44 sleep-us:1339264 reason:0x20
+          <idle>-0       [000] d..1. 10177.921470: lpm_gov_select: state:0 qos-us:44 sleep-us:1222545 reason:0x20
+          <idle>-0       [002] d..1. 10177.921729: lpm_gov_select: state:0 qos-us:44 sleep-us:6025052 reason:0x20
+          <idle>-0       [000] d..1. 10177.921813: lpm_gov_select: state:0 qos-us:44 sleep-us:878691 reason:0x20
+          <idle>-0       [001] d..1. 10177.921850: lpm_gov_select: state:0 qos-us:44 sleep-us:7549791 reason:0x20
+          <idle>-0       [002] d..1. 10177.921855: lpm_gov_select: state:0 qos-us:44 sleep-us:5892812 reason:0x20
+          <idle>-0       [005] d..1. 10177.922062: lpm_gov_select: state:0 qos-us:2000000000 sleep-us:59783525833 reason:0x20
+          <idle>-0       [001] d..1. 10177.924304: lpm_gov_select: state:0 qos-us:44 sleep-us:2390410 reason:0x20
+          <idle>-0       [005] d..1. 10177.925138: lpm_gov_select: state:0 qos-us:2000000000 sleep-us:59780450052 reason:0x20
+          <idle>-0       [005] d..1. 10177.925541: lpm_gov_select: state:0 qos-us:2000000000 sleep-us:505149056 reason:0x20
+      android.fg-2142    [002] d.h3. 10177.925696: wakeup_source_activate: [timerfd] state=0x19df0002
+           <...>-2389    [000] d..1. 10177.925831: wakeup_source_activate: eventpoll state=0x19df0003
+           <...>-2389    [000] d..1. 10177.925835: wakeup_source_deactivate: [timerfd] state=0x19e00002
+           <...>-2389    [000] d..1. 10177.925837: wakeup_source_activate: [timerfd] state=0x19e00003
+           <...>-2389    [000] d..2. 10177.925838: wakeup_source_deactivate: eventpoll state=0x19e10002
+          <idle>-0       [003] d..1. 10177.925897: lpm_gov_select: state:0 qos-us:2000000000 sleep-us:1296890 reason:0x800
+          <idle>-0       [005] d..1. 10177.925970: lpm_gov_select: state:0 qos-us:2000000000 sleep-us:504717649 reason:0x20
+          <idle>-0       [003] d..1. 10177.926035: lpm_gov_select: state:1 qos-us:2000000000 sleep-us:1296753 reason:0x0
+          <idle>-0       [003] d..1. 10177.926885: lpm_gov_select: state:1 qos-us:2000000000 sleep-us:1295906 reason:0x0
+           <...>-2389    [000] d..1. 10177.927123: wakeup_source_activate: eventpoll state=0x19e10003
+           <...>-2389    [000] d..1. 10177.927126: wakeup_source_deactivate: [timerfd] state=0x19e20002
+           <...>-2389    [000] d..1. 10177.927128: wakeup_source_activate: [timerfd] state=0x19e20003
+           <...>-2389    [000] d..2. 10177.927129: wakeup_source_deactivate: eventpoll state=0x19e30002
+           <...>-2389    [000] d..1. 10177.927170: wakeup_source_activate: eventpoll state=0x19e30003
+           <...>-2389    [000] d..1. 10177.927171: wakeup_source_deactivate: [timerfd] state=0x19e40002
+           <...>-2389    [000] d..2. 10177.927173: wakeup_source_deactivate: eventpoll state=0x19e50001
+          <idle>-0       [002] d..1. 10177.927593: lpm_gov_select: state:0 qos-us:44 sleep-us:565886 reason:0x20
+          <idle>-0       [005] d..1. 10177.927750: lpm_gov_select: state:0 qos-us:2000000000 sleep-us:59777836667 reason:0x20
+          <idle>-0       [002] d..1. 10177.927855: lpm_gov_select: state:0 qos-us:44 sleep-us:300261 reason:0x20
+          <idle>-0       [005] d..1. 10177.927877: lpm_gov_select: state:0 qos-us:2000000000 sleep-us:59777708542 reason:0x20
+          <idle>-0       [005] d..1. 10177.927933: lpm_gov_select: state:0 qos-us:2000000000 sleep-us:59777652396 reason:0x20
+          <idle>-0       [005] d..1. 10177.928127: lpm_gov_select: state:0 qos-us:2000000000 sleep-us:59777458073 reason:0x20
+          <idle>-0       [005] d..1. 10177.928441: lpm_gov_select: state:0 qos-us:2000000000 sleep-us:59777144167 reason:0x20
+          <idle>-0       [005] d..1. 10177.928630: lpm_gov_select: state:0 qos-us:2000000000 sleep-us:59776954896 reason:0x20
+          <idle>-0       [002] d..1. 10177.929157: lpm_gov_select: state:0 qos-us:44 sleep-us:490312 reason:0x20
+          <idle>-0       [005] d..1. 10177.929176: lpm_gov_select: state:0 qos-us:2000000000 sleep-us:59776409167 reason:0x20
+          <idle>-0       [005] d..1. 10177.929268: lpm_gov_select: state:0 qos-us:2000000000 sleep-us:400048281 reason:0x20
+          <idle>-0       [002] d..1. 10177.929300: lpm_gov_select: state:0 qos-us:44 sleep-us:347604 reason:0x20
+          <idle>-0       [002] d..1. 10177.929613: lpm_gov_select: state:0 qos-us:44 sleep-us:34896 reason:0x20
+          <idle>-0       [002] d..1. 10177.929860: lpm_gov_select: state:0 qos-us:44 sleep-us:1175990 reason:0x20
+          <idle>-0       [002] d..1. 10177.931906: lpm_gov_select: state:0 qos-us:44 sleep-us:7748646 reason:0x20
+          <idle>-0       [002] d..1. 10177.932268: lpm_gov_select: state:0 qos-us:44 sleep-us:7385365 reason:0x20
+          <idle>-0       [002] d..1. 10177.932718: lpm_gov_select: state:0 qos-us:44 sleep-us:6933854 reason:0x20
+          <idle>-0       [000] dn.1. 10177.933022: lpm_gov_select: state:0 qos-us:44 sleep-us:791677 reason:0x20
+          <idle>-0       [000] d..1. 10177.933061: lpm_gov_select: state:0 qos-us:44 sleep-us:748240 reason:0x20
+          <idle>-0       [000] d..1. 10177.933771: lpm_gov_select: state:0 qos-us:44 sleep-us:38031 reason:0x20
+         rtcwake-27469   [005] ..... 10177.934083: suspend_resume: suspend_enter[1] begin
+          <idle>-0       [003] d..1. 10177.934443: lpm_gov_select: state:0 qos-us:2000000000 sleep-us:1008247754 reason:0x20
+          <idle>-0       [005] d..1. 10177.934568: lpm_gov_select: state:0 qos-us:2000000000 sleep-us:394750833 reason:0x20
+  kworker/u16:15-8476    [002] d..1. 10177.934933: rpmh_send_msg: apps_rsc-drv-2: send-msg: tcs(m): 0 cmd(n): 0 msgid: 0x10108 addr: 0x50008 data: 0x20000001 complete: 0
+  kworker/u16:15-8476    [002] d..1. 10177.934940: rpmh_send_msg: apps_rsc-drv-2: send-msg: tcs(m): 0 cmd(n): 1 msgid: 0x10108 addr: 0x50004 data: 0x625c1bbc complete: 1
+   binder:2249_2-2252    [002] d.h1. 10177.934976: rpmh_tx_done: apps_rsc-drv-2: ack: tcs-m: 0 addr: 0x50008 data: 0x20000001

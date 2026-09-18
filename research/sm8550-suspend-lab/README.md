@@ -21,8 +21,11 @@ state is:
 - Two short current-image timer-wake cycles completed in `s2idle`. Qualcomm
   AOSD, CXSD, and scalar DDR counters remained at zero while ADSP counters
   advanced. A request for `deep` fell back to `s2idle`; it is retained as a
-  fallback observation, not a deep-mode result. The harness now rejects
-  `deep` and marks any requested/observed mode mismatch as a failed run.
+  fallback observation, not a deep-mode result. A later direct-kernel run
+  selected `deep` through `/sys/power/mem_sleep` and entered a real suspend
+  interval, but the same named-state counters stayed at zero. The harness now
+  supports `deep` as a test-only mode that bypasses Armada's dispatcher, and
+  marks any requested/observed mode mismatch as a failed run.
 - Thorch carries a separate RPMh regulator suspend-state pair and a matching
   regulator-core s2idle mapping. These are not silently treated as safe for
   Nova; they remain later A/B candidates.
@@ -49,6 +52,82 @@ USB/PHY or relevant power/residency improvement in the matched cable-free
 deep run, so it was rolled back. Its device-local recipe is preserved in
 `device-kernel-layer-dwc3.Containerfile`; the unresolved RPMh/AOP question is
 independent of this negative result.
+
+## Current sleep-depth evidence boundary
+
+For the Nova, `/sys/kernel/debug/qcom_stats/{aosd,cxsd,ddr}` are records
+maintained by AOP/RPM firmware. An unchanged zero `count` means firmware
+recorded no entry into that named SoC low-power mode in the capture window;
+these counters report firmware state, not direct rail voltage. The detailed
+`ddr_stats` table is separate from scalar `ddr`. Its `0xd0` row advances while
+the device is awake and nearly matches the sum of DDR frequency-duration rows,
+so it is not independent proof of self-refresh or collapse. The other DDR LPM
+IDs remain undocumented in public source.
+
+The `adsp` file shares the debugfs directory but is a different data source:
+Linux reads that subsystem counter from SMEM item 606 / host 2, while AOSD,
+CXSD, and DDR are read from the mapped SoC stats SRAM. The runner now samples
+all named subsystem SMEM files at the same suspend boundaries and reports
+their deltas separately. This can show which subsystem records change across
+the suspend window; it cannot validate the separate SoC stats block or prove
+physical residency.
+
+The live Nova FDT maps PSCI argument `0x4100c344` to
+`cpus/domain-idle-states/cluster-sleep-1`; that node has no `idle-state-name`,
+which explains why genpd prints `N/A`. CPU-local states map `0x40000004` to
+the separately named silver, gold, and goldplus rail-collapse nodes. The
+runner now captures this live mapping and reports it beside PSCI events. A
+requested DT node and a successful PSCI return do not prove the physical
+domain or SoC rails reached their target. Qualcomm's downstream Kalama DTS
+maps this argument to an `llcc-off` entry, but the live Nova FDT name is only
+`cluster-sleep-1`.
+The same before/after boundary now includes the cluster genpd idle-state table,
+so Usage/Rejected/S2idle callback counters can be correlated to each firmware
+snapshot rather than inferred from broad run snapshots. The `S2idle` column is
+not a selected-mode detector: Linux increments it when a genpd system-power-
+down callback exists, and the callback path itself does not check whether the
+run selected `deep` or `s2idle` ([genpd accounting](https://github.com/gregkh/linux/blob/v7.2.3/drivers/pmdomain/core.c#L1391-L1445)).
+These counters remain Linux callback evidence, not physical residency.
+
+A current-image direct `deep` run also reached `psci_system_suspend_enter` and
+its run-scoped return probe recorded `retval=0` after the RTC wake, while the
+exact AOSD/CXSD/scalar-DDR firmware records again remained zero. Thus the
+platform SYSTEM_SUSPEND callback is reached and returns successfully; merely
+adding a Linux system genpd is not enough to explain these zero records. The
+RPMh trace resolves suspend-set addresses to BCM names (MC0, SH0, SN0, CN0,
+QUP0, QUP1), but the writes are staged asynchronously and do not prove firmware
+triggered them. No AOSS QMP messages were emitted in that window.
+
+Paired exact-boundary s2idle and direct-`deep` runs each recorded one APSS
+SMEM sleep entry whose duration closely matched the ~29-second
+suspend-clock interval. Both had genpd cluster S1 Usage +1 / Rejected +0 /
+S2idle +1; Linux source shows the `S2idle` column is callback-tagged accounting
+and can also increment during direct `deep`, so it cannot distinguish modes.
+S2idle traced one `0x4100c344` `cluster-sleep-1` enter/exit pair returning 0;
+direct `deep` traced one successful PSCI SYSTEM_SUSPEND callback return. In
+both runs AOSD, CXSD, scalar DDR, and the recognized detailed DDR LPM IDs
+`0xd4`, `0xd3`, and `0x11` recorded no entry. ADSP/CDSP subsystem counters also
+advanced, but they are separate SMEM records. This proves the kernel and
+firmware subsystem paths recorded suspend activity; it does not identify the
+APSS rail state or prove DDR self-refresh/collapse. Linux's v7.2.3 reader
+confirms subsystem entries use SMEM and adjusts duration for a subsystem
+currently asleep, while SoC-mode records are read from mapped stats SRAM
+([qcom_stats.c](https://github.com/gregkh/linux/blob/v7.2.3/drivers/soc/qcom/qcom_stats.c#L1123-L1267)).
+
+The running kernel exposes no read-only AOP acknowledgement query. Its
+`qcom_aoss` debugfs nodes are write-only controls, the DTBO slots have no
+Nova-specific CXPC sink mapping, and the live QMP resource does not validate
+the public decoder's buffer address. Do not read that guessed buffer or send
+the experimental monitor QMP message without a Nova-validated resource/layout.
+The live PSCI feature list also omits `STAT_RESIDENCY`, `STAT_COUNT`, and
+`NODE_HW_STATE`, so firmware does not expose the standard PSCI residency query
+through its debugfs interface.
+Static disassembly of the exact AOP image found `0x0c320000` among unlabeled
+address constants but no sink bounds or CXPC record schema; this is not enough
+to make a read safe. The remaining gap is an authoritative Nova AOP buffer
+mapping plus documented residency fields, matching firmware source/release
+documentation, or a PMIC/hardware state trace. A CXPC blocker report alone
+would explain why collapse may be prevented, not prove which state was entered.
 
 The earlier workload validation used a diagnostic image and was rolled back
 through Armada's supported update path. The live refresh now reports a newer
@@ -139,22 +218,30 @@ On the device, one detached systemd unit performs this sequence:
    baseline without turning radio state into an untracked manual variable.
 6. For explicit `s2idle`, uses a run-local `suspend_mode` file and child
    environment so `/etc/armada/sleep.conf` is not edited. `policy` leaves the
-   configured mode alone. `deep` is not offered because the current shipped
-   `device-env` and dispatcher do not support it.
+   configured mode alone. Explicit `deep` temporarily selects the kernel mode
+   directly and bypasses the dispatcher in step 7.
 7. Records `CLOCK_BOOTTIME`, `CLOCK_MONOTONIC`, and `CLOCK_REALTIME`, then the
    autonomous root-owned agent invokes Armada's shipped
-   `/usr/libexec/armada/suspend-dispatch` directly. The agent remains on the
-   device and writes the post snapshot only after that dispatcher returns, so
-   SSH timing is not the suspend boundary and no direct
+   `/usr/libexec/armada/suspend-dispatch` for `policy` and `s2idle`, or invokes
+   `systemd-sleep suspend` directly for test-only `deep`. The agent remains on
+   the device and writes the post snapshot only after suspend returns, so SSH
+   timing is not the suspend boundary and no direct
    `systemd-suspend.service` start is needed. This is not `rtcwake -m freeze`.
 8. For short diagnostic reproductions, `--trace-profile ufs-irq`,
-   `--trace-profile rpmh-aoss`, or `--trace-profile rsc-success` creates a
+   `--trace-profile rpmh-aoss`, `--trace-profile rsc-success`, or
+   `--trace-profile psci-kretprobe` creates a
    private tracefs instance, records its exact event inventory/configuration,
-   enables only the requested existing tracepoints, archives the bounded buffer
-   after the dispatcher returns, and removes the instance. `rsc-success` also
+   selects the suspend-inclusive `boot` clock, enables only the requested
+   existing tracepoints, archives the bounded buffer after the dispatcher
+   returns, and removes the instance. `rsc-success` also
    requires the isolated observation-only kernel package's successful-path
-   `rpmh_rsc_snapshot` tracepoint. The profiles never send firmware commands or
-   change runtime-PM, regulator, interconnect, or device power controls.
+   `rpmh_rsc_snapshot` tracepoint. `psci-kretprobe` temporarily registers a
+   run-unique return probe for `psci_cpu_suspend_enter` on s2idle, or
+   `psci_system_suspend_enter` on direct deep suspend. It enables the probe
+   only in its private trace instance and removes only that registration
+   immediately after trace capture, before post-resume collection.
+   The profiles never send firmware commands or change runtime-PM, regulator,
+   interconnect, or device power controls.
 9. After resume, captures the matching post snapshot, Armada's exact
    `armada-sleep-debug collect` output, bounded logs, and read-only health
    observations.
@@ -223,8 +310,11 @@ remain explicit validation gates after short idle cycles are reliable.
   firmware as part of this lab.
 - `--mode policy` measures Armada's current user-facing policy. Explicit
   `s2idle` is a transient experiment request, not a persisted policy change.
-  The harness rejects `deep` until Armada's supported suspend path can select
-  it, and fails a run if the observed kernel mode differs from the request.
+  `deep` is an explicit kernel-only experiment: the harness temporarily selects
+  `deep` in `/sys/power/mem_sleep`, invokes `systemd-sleep` directly, bypasses
+  Armada's dispatcher, and restores the original kernel selection after resume.
+  It does not change `/etc/armada/sleep.conf` or the installed image. The run
+  fails if the observed kernel mode differs from the request.
 - The harness does not claim a power improvement from capacity alone. It uses
   charge/energy counters when available and labels gauge-derived values as
   indicative.
@@ -243,8 +333,7 @@ does not weaken the production signed update boundary.
 The DWC3 candidate used the same fast path with the candidate-specific
 `device-kernel-layer-dwc3.Containerfile`; it was not retained after the A/B.
 
-The `ufs-irq` trace profile resolves the live `ufshcd` IRQ from
-`/proc/interrupts` at run time. It never assumes a board IRQ number, which is
-important because the Nova's current mapping uses UFS IRQ 170 and `mmc0` IRQ
-169. The resolved number and the exact trace controls are retained in each
-run's `meta/trace.json` and `raw/trace/` archive.
+The `ufs-irq` trace profile resolves the live `ufshcd`, `apps_rsc`, and
+`arch_timer` IRQs from `/proc/interrupts` at run time. It never assumes board
+IRQ numbers. The resolved numbers and exact trace controls are retained in
+each run's `meta/trace.json` and `raw/trace/` archive.

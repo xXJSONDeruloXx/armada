@@ -105,3 +105,38 @@ around the transition, not inside the deep-sleep interval; the earlier IRQ-169
 receipt is retained as a filter-correction failure. This rules out the
 historical SDHCI storm as the next fix target but does not distinguish AOP
 policy/acceptance from residency-counter semantics.
+
+## Live refresh — 2026-09-18
+
+The 2026-09-01 table above is retained as historical provenance. The fetched
+Armada `main` is now `c97ecf609781b6e093ae4a147e08b9be724f2f78`; research branch
+`feat/sm8550-suspend-lab` was merged with it at local commit `15c9842` (not
+pushed). The relevant intervening changes are:
+
+- PR #442 removes only the blanket USB-leaf `power/control=auto` rule and keeps
+the DWC3 platform autosuspend rule. The Nova's 30-minute baseline entered with
+DWC3 already runtime-suspended; its system-suspend `genpd_suspend_noirq`
+callback returned 0. The capture has no USB leaf entries, but a literal live
+`/sys/bus/usb/devices` listing is still needed to close that check.
+- PR #465 updates the kernel package image digest to
+  `9987eead115330b3ad8c0b5b73dbdbe8319e86a1c3200ae2636c5835a7a5e673`. The
+  package-side ath12k change sends the computed scan priority to WCN7850
+  firmware to prevent scan refusal/reconnect delays after rfkill changes; it
+  does not modify suspend power states.
+
+The tested Nova reports Armada `20260915.feca679`, kernel release `7.2.3`,
+`[s2idle] deep`, and `ARMADA_SUSPEND_MODE=s2idle`. Its source tree pins the
+previous kernel package digest, though the captured runtime receipt does not
+record the actual booted package digest. A no-trace 30-minute unplugged s2idle
+window lost 150,201 uAh (about 4.58% of `charge_full` per hour) and woke once
+from the armed RTC. Bluetooth and connected Wi-Fi were on at entry. APSS stats
+advanced, while named AOSD/CXSD/DDR counters remained zero. The raw DDR LPM ID
+`0xd0` is still unnamed; it is not evidence of DDR self-refresh or collapse.
+
+The central unresolved issue remains AOP/platform-state acceptance versus
+counter coverage: existing safe observations show successful Linux device
+suspend and PSCI CPU-cluster calls, but not which AOP sleep level or physical
+DDR/rail state was accepted. Nova's FDT does not declare the vendor
+`sys-pm-vx`/CXPC monitor resource, so no MMIO/QMP monitor access or unsafe
+resource mapping has been attempted. Avoid kernel builds or firmware changes
+until a safe, documented observation path is available.

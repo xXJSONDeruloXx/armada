@@ -3,9 +3,10 @@
 This is the running observation log for the Retroid Pocket Nova at
 `192.168.0.20` (`node=fedora`, user `armada`). Every device experiment gets a
 dated entry here before the next experiment starts. Raw receipts remain in the
-host output directory `/Users/kurt/Developer/sm8550-suspend-lab-runs/`; the
-paths below are intentionally exact so an observation can be audited back to
-the device archive.
+host output directory
+`/Users/danhimebauch/Developer/.external-research/armada-suspend-lab-runs/`;
+the paths below are intentionally exact so an observation can be audited back
+to the device archive.
 
 ## 2026-09-17 current-image refresh
 
@@ -37,22 +38,642 @@ Two timer-woken current-image runs are archived under
   kernel change, or image deployment was made.
 
 The old harness incorrectly called the second run successful despite the
-requested/observed mode mismatch. The updated runner rejects `deep` for now
-and includes a requested/observed mode match in its success gate; historical
-run archives remain unchanged. The same run exposed a Bluetooth cleanup bug:
+requested/observed mode mismatch. The first correction rejected `deep` until
+the separate direct-kernel test path described below was added; the runner
+still requires a requested/observed mode match. Historical run archives
+remain unchanged. The same run exposed a Bluetooth cleanup bug:
 restoring an unblocked rfkill state powered BlueZ back on after it had been
 off. The adapter was manually returned to `Powered: no`, verified live, and
 the runner now checks/restores BlueZ power after rfkill cleanup. The host-only
 self-test covers both cases.
 
+### Direct kernel `deep` result, 2026-09-17
+
+- After fixing a harness lookup for `systemd-sleep`, one 60-second direct
+  kernel-mode run completed on image `20260915.feca679`, kernel `7.2.3`. The
+  earlier attempt failed before suspend and cleanup restored the RTC alarm,
+  trace instance, debug setting, and selected sleep mode. The successful run
+  selected `/sys/power/mem_sleep=deep`, invoked
+  `/usr/lib/systemd/systemd-sleep suspend` (bypassing Armada's dispatcher),
+  woke from the armed RTC alarm, returned status 0, and retained the same boot
+  ID. Clock deltas show 59.217 seconds of suspend separation within 61.547
+  seconds of elapsed boottime.
+- This establishes that the kernel's `deep`/PSCI system-suspend path can enter
+  a real suspend interval and resume on this image. It does **not** establish
+  that firmware entered the desired AOSD, CXSD, or DDR low-power states:
+  Qualcomm APSS count advanced once and duration by 1,136,914,131 ticks, while
+  the labeled AOSD, CXSD, and scalar DDR counters all remained zero. The
+  separate DDR IDs remain opaque, so they do not resolve those named states.
+- The gauge reported 13.1 mAh used during this 61.55-second deep interval
+  (about 767 mA average), versus 9.8 mAh/about 573 mA in the adjacent
+  61.83-second s2idle interval. These one-minute readings are too noisy to
+  establish a real drain-rate difference or explain the reported 5%/hour.
+- Sleep TCS 3 staged valid MC0/SH0 values `0x600001dc` in `deep` versus
+  `0x60000001` in the prior s2idle run. These are materially different BCM
+  votes, but RPMh's send trace records the non-waiting buffer writes; it does
+  not show that firmware triggered or accepted the sleep set. Linux v7.2's
+  [RPMh RSC implementation](https://github.com/torvalds/linux/blob/v7.2/drivers/soc/qcom/rpmh-rsc.c)
+  treats these sleep/wake TCS writes as staging for firmware to trigger at the
+  low-power boundary.
+- The separate DDR LPM record `0xd0` kept `count=1` but its duration rose from
+  `512820586959` to `514108441334` ticks (+`1287854375`) across the run. The
+  scalar `/sys/kernel/debug/qcom_stats/ddr` record stayed zero. Upstream
+  documents `0xd4`, `0xd3`, `0x11`, and `0xd0` only as numeric DDR LPM IDs, so
+  this is evidence of a changing firmware counter, not a safe semantic label
+  for a specific DDR state.
+- The current image has no `rpmh:rpmh_rsc_snapshot` trace event in
+  `available_events`. Its captured debugfs tree has `qcom_stats` and `cmd-db`,
+  but no RSC TCS register/status dump. Therefore the existing `rsc-success`
+  harness profile cannot run on this kernel and there is no useful no-build
+  readback of RSC command-enable/status/response or IRQ state.
+- This successful-path instrumentation was already built and exercised once
+  on the previous Nova image/kernel (`7.2.0`) on September 2. Sleep/wake TCS
+  records had `cmd_enable=0x3f`, `tcs_status=1`, `tcs_in_use=0`,
+  `irq_status=0`, `cmd_status=0`, and zero response data, with the programmed
+  commands still visible. That rules out an obvious Linux-side active-TCS or
+  reported command-status failure in that run; it still cannot report whether
+  AOP triggered the sleep set or selected AOSD/CXSD/DDR residency.
+- A source-only compare of upstream stable `v7.2` to `v7.2.3` found no changes
+  in `rpmh-rsc.c`, `rpmh.c`, `rpmh-internal.h`, `cmd-db.c`, or `qcom_stats.c`.
+  The current `armada-packages` checkout uses `VERSION=7.2.3`; its active
+  kernel patch series has no non-diagnostic patch changing those five files.
+  A read-only scan of the current runtime device-tree firmware-name properties
+  and boot kernel log also found no AOP firmware version. This makes a repeat
+  diagnostic build less likely to answer the central question: it would likely
+  reproduce the already-recorded TCS status, not expose AOP acceptance.
+- The successful run and checksum-verified raw archive are
+  `20260917T202121Z-68c0c9fe55a3` and
+  `/Users/danhimebauch/Developer/.external-research/armada-suspend-lab-runs/nova-deep-20260917.tar.gz`
+  (SHA-256 `0400a559e8a3d2c44e3b7d60c8a2f4528d4b961ae5d334b682d1364dfc6215b7`).
+  The mode-selection change is test-harness-only; no image, sleep policy,
+  kernel, or firmware was changed by this run. The selected kernel mode was
+  restored to `[s2idle] deep`.
+
+### 2026-09-17 — five-minute s2idle control and interrupted radio-off run
+
+- `20260917T211339Z-432d8588b823` completed a full 299.657-second s2idle
+  separation under Armada policy. Wi-Fi was enabled and associated; Bluetooth
+  was already powered off. The battery charge counter fell by 66,902 uAh over
+  the 301.9-second measurement window (gauge-derived average 798 mA, capacity
+  -1%). This is a high short-window reading, not a stable hourly drain rate.
+  The `battery` wakeup source's active/event counts each rose by one, as did
+  RTC's. Battery `total_time` rose by 4 ms, but its `wakeup_count` stayed zero;
+  kernel logs say IRQ 199 (`pm8xxx_rtc_alarm`) triggered resume, with no battery
+  event in the captured logs. The brief battery-source activation is unexplained
+  and was not a system wake; snapshots also bracket awake setup/cleanup. It is
+  not evidence for the unusually large charge delta. Labeled AOSD, CXSD, and
+  DDR counters stayed at zero; APSS count increased by two. The DDR `0xd0`
+  counter changed, but its state meaning remains unknown.
+- IRQ totals over the same run rose by 17,191 `arch_timer`, 9,929 `ufshcd`,
+  8,775 `apps_rsc`, 668 fan, 665 display, and 629 GPU interrupts. These are
+  counters across the capture interval, not proof that each IRQ resumed the
+  system. Before the run, Wi-Fi PCIe `0000:01:00.0` had `power/control=on`,
+  `runtime_status=active`, and zero runtime-suspended time. The radio-off
+  follow-up was intended to test whether that activity mattered.
+- `20260917T212320Z-8a52983d8c18` requested another 300-second s2idle window
+  with Wi-Fi and Bluetooth off. The user plugged in the charger and woke the
+  device early. The run observed only 69.813 seconds of suspend separation;
+  qcom-battmgr USB and UCSI wakeup sources changed, and the RTC target had not
+  fired. The battery counter included the charger transition, so its reported
+  19,677 uAh decrease / 985 mA average is not a drain measurement and cannot
+  be compared to the Wi-Fi-on run. The paired test is inconclusive.
+- The second run restored Wi-Fi to enabled and cleared its RTC alarm. Bluetooth
+  was off before the run and showed `Powered: no` after the harness restored
+  rfkill; a later live check showed it had become powered on, so it was manually
+  returned to `Powered: no`. Current post-check: Wi-Fi enabled, Bluetooth
+  `Powered: no`, RTC wakealarm empty, battery charging, and kernel selection
+  `[s2idle] deep`. No persistent policy, kernel, firmware, or image setting was
+  changed.
+- A source inspection of upstream Linux `sm8550.dtsi` confirms it provides CPU
+  and cluster idle domains but no `system_pd` or `domain_ss3`. The Nova's
+  `qcs8550-ayn-common.dtsi` adds regulator children under `&apps_rsc` but no
+  system power-domain connection. Upstream `sm8750.dtsi` has a `system_pd`
+  linked to `domain_ss3` ([SM8550 source](https://github.com/torvalds/linux/blob/master/arch/arm64/boot/dts/qcom/sm8550.dtsi), [SM8750 source](https://github.com/torvalds/linux/blob/master/arch/arm64/boot/dts/qcom/sm8750.dtsi)). This is a concrete DT-level reason Linux cannot
+  request that PSCI system-domain idle state on the current SM8550 description.
+  It does not prove that AOP cannot independently select deeper residency from
+  RPMh sleep votes, so it is not yet a complete explanation for the zero AOSD
+  counters.
+- Live-kernel evidence now confirms `PSCIv1.1`, `PSCI OSI mode supported`, and
+  `CPUidle PSCI: Initialized CPU PM domain topology using OSI mode`. The running
+  DT has CPU and cluster PSCI domains but no `system_pd`/`domain_ss3`; this
+  narrows the live s2idle path to the described CPU/cluster hierarchy, while
+  leaving AOP's independent handling of RPMh sleep votes unresolved. Do not
+  infer that the missing system node alone causes the observed battery drain.
+- Linux genpd has a more specific read-only diagnostic than
+  `pm_genpd_summary`: each domain's `idle_states` reports per-state usage and
+  rejection counts, and `idle_states_desc` maps indexes to state names and
+  residency definitions. A `Usage` delta indicates a successful kernel genpd
+  transition, not verified physical rail collapse; `Time(ms)` is kernel
+  accounting, and the `S2idle` column is not a generic count of cpuidle entries.
+  Correlate any deltas with QMP AOSD/CXSD/DDR residency counters. The first
+  unprivileged SSH check hit root-only `/sys/kernel/debug` (`0700`), so its
+  `test -d /sys/kernel/debug/pm_genpd` result was inconclusive, not evidence
+  those files are missing. Follow-up confirmed debugfs is already mounted
+  `rw`; the installed suspend-lab helper has a scoped passwordless-sudo rule.
+  The helper now stores read-only pre/post snapshots of these files; no mount
+  or power controls were changed. Linux v7.2 sources:
+  [genpd idle-state files](https://raw.githubusercontent.com/torvalds/linux/v7.2/drivers/pmdomain/core.c#L3707-L3905),
+  [PSCI OSI-domain construction](https://raw.githubusercontent.com/torvalds/linux/v7.2/drivers/cpuidle/cpuidle-psci-domain.c#L641-L834).
+- The existing `rpmh-aoss` trace profile also attempts optional
+  `power:psci_domain_idle_enter/exit` events. Linux v7.2 records CPU ID, the
+  exact PSCI `state` value, and whether it is s2idle; the enter event is just
+  before `psci_cpu_suspend_enter(state)` and exit is emitted after it returns.
+  This identifies the requested PSCI parameter and can be correlated with
+  genpd rejection counts, but does not by itself prove physical firmware
+  residency:
+  [power tracepoint definition](https://raw.githubusercontent.com/torvalds/linux/v7.2/include/trace/events/power.h#L61-L96),
+  [PSCI suspend call site](https://raw.githubusercontent.com/torvalds/linux/v7.2/drivers/cpuidle/cpuidle-psci.c#L59-L99).
+- `20260917T235546Z-abddde5f1710` completed 44.048 seconds of unplugged
+  s2idle with the `rpmh-aoss` profile. The trace instance exposed and selected
+  both PSCI events; all eight CPUs emitted one `is_s2idle=yes` enter/exit pair.
+  Seven CPUs passed `0x40000004`; cpu4 passed `0x4100c344`, matching the
+  upstream SM8550 `cluster-sleep-1` parameter and the one
+  `power-domain-cluster` S1 Usage increment (132 to 133; Rejected stayed 271).
+  Its runtime descriptor's 7,200 us latency and 10,150 us residency match the
+  DTS entry/exit and minimum-residency values.
+  The cpu4 trace call remained inside PSCI across the 44-second suspend and
+  returned at the RTC wake, so Linux did not see an immediate PSCI rejection
+  of that cluster request. No `0x41000044` request appeared in this sample.
+  These values establish which CPU/cluster states Linux submitted, not why the
+  SoC did not record deeper named states. The same run had zero AOSD, CXSD, and
+  scalar DDR deltas, ADSP +185, 1,248 RPMh sends and 605 completions, but no
+  `qcom_aoss:aoss_send` events. Every trace CPU reported zero dropped events.
+  Upstream mapping:
+  [SM8550 DTS cluster states](https://github.com/torvalds/linux/blob/v7.2/arch/arm64/boot/dts/qcom/sm8550.dtsi).
+  Charge_now fell 5,248 uAh over 46.513 seconds (406 mA derived average), with
+  capacity unchanged; this short-window reading remains too noisy for an
+  hourly drain estimate. Exact archive:
+  `../sm8550-suspend-lab-runs/20260917T235546Z-abddde5f1710`.
+- Follow-up source review confirms that `0x4100c344` is Qualcomm's SM8550
+  cluster E3 `llcc-off` state, not a system-level sleep state. Qualcomm's
+  downstream Kalama DTS labels `0x41000044` as cluster D4 `l3-off` and gives
+  E3 the same 2.8 ms entry, 4.4 ms exit, and 10.15 ms minimum-residency values
+  observed in the live genpd descriptor. The public SM8550/QCS8550 hierarchies
+  reviewed contain CPU and cluster domains but no `system_pd`/SS3 mapping.
+  Sources: [Qualcomm Kalama DTS](https://android.googlesource.com/kernel/msm-extra/devicetree/+/refs/heads/android-msm-eos-android13-wear-kr3-pixel-watch/qcom/kalama.dtsi#L283-L333),
+  [SM8550 DTS](https://github.com/torvalds/linux/blob/v7.2/arch/arm64/boot/dts/qcom/sm8550.dtsi#L341-L384),
+  [PSCI domain topology](https://android.googlesource.com/kernel/msm-extra/devicetree/+/refs/heads/android-msm-eos-android13-wear-kr3-pixel-watch/qcom/kalama.dtsi#L713-L760).
+  PSCI's lower state-ID bits are platform-defined, so this mapping comes from
+  the SoC DT description rather than a generic PSCI level encoded in the hex
+  value. Linux's trace shows a request and return across RTC wake, not a
+  firmware residency confirmation; the unchanged genpd rejection count also
+  cannot prove physical rail collapse.
+- Do not copy SM8750's `domain_ss3` value `0x0200c354` to SM8550 by analogy.
+  No exact-SoC public source found here validates it. Review of the analogous
+  X1E80100 change notes that its timings were copied from SM8750 and tuned for
+  a phone; a separate Glymur/X2 report describes hard resets on first SS3 entry
+  after heavy load. These are different SoCs, but demonstrate that the tuple
+  is not portable evidence. Sources: [X1E80100 review](https://lkml.rescloud.iu.edu/hypermail/linux/kernel/2510.1/04745.html),
+  [Glymur SS3 failure report](https://lists.openwall.net/linux-kernel/2026/09/14/1222),
+  [SM8750 DTS](https://github.com/torvalds/linux/blob/v7.2/arch/arm64/boot/dts/qcom/sm8750.dtsi#L2535-L2545).
+  Current evidence supports a missing public system-state mapping as a
+  hypothesis for the absent named system residency, not yet a proven cause of
+  the measured drain.
+- The read-only pre-suspend snapshots also identify the radio topology for
+  the matched radio test: Bluetooth `hci0` is attached through the
+  `898000.serial` GENI UART (`/sys/class/rfkill/rfkill0`, `RFKILL_STATE=1`),
+  while Wi-Fi is the `wcn7850` PCIe device at `1c00000.pcie`. Thus the paired
+  run can power off the Bluetooth HCI while preserving Wi-Fi, separating it
+  from the already-tested Wi-Fi variable. Source is the captured
+  `runtime_pm.json` and sysfs uevent in run
+  `20260917T235546Z-abddde5f1710`. In that capture, `hci0` and `rfkill0` both
+  report runtime PM as `unsupported`; those snapshots cannot tell us whether
+  the UART/controller enters a hardware low-power state while Bluetooth stays
+  powered, which is one reason the controlled rfkill-off comparison is useful.
+- `20260918T000616Z-9d84ab5a1824` is the first five-minute Bluetooth-on,
+  Wi-Fi-preserved s2idle run. Clock separation showed 298.385 seconds in
+  s2idle; the charge-counter measurement interval was 301.016 seconds. The
+  device retained its boot ID, returned on the RTC, and reported USB unplugged.
+  Bluetooth was preserved powered on. `charge_now` fell 32,795 uAh (392.2 mA
+  derived average); integer capacity did not change. This first on-run was
+  about 1.8–2.0x the earlier five-minute Bluetooth-off runs, but that charge
+  difference did not reproduce in the reverse-order repeat below. The
+  `battery` wakeup source advanced once and
+  the RTC IRQ remained the observed wake source; that battery event is not
+  evidence that it woke the system. The `qcom_geni_serial_uart1` IRQ advanced
+  by eight, but it advanced by 14 and 15 in the earlier Bluetooth-off runs, so
+  it is not discriminating evidence for Bluetooth activity. AOSD, CXSD, and
+  scalar DDR residency again remained zero, as in the Bluetooth-off controls;
+  the charge-counter evidence alone does not yet establish a repeatable
+  Bluetooth-related drain increase.
+- `20260918T001242Z-f2a7ef9e103e` completed that adjacent Bluetooth-off,
+  Wi-Fi-preserved counterpart. Clock separation showed 299.059 seconds in
+  s2idle; the charge-counter measurement interval was 301.555 seconds. The
+  boot ID stayed stable, and the RTC was the expected wake source. `charge_now`
+  fell 20,989 uAh (250.6 mA derived average) and integer capacity fell by one
+  point. Compared with the immediately prior Bluetooth-on run, that is 11,806
+  uAh less over a similar interval (about 36% lower charge use). This supports
+  Bluetooth as a possible contributor, but not the whole explanation: the off
+  result is still above the earlier five-minute Bluetooth-off values of
+  16,397 and 18,365 uAh. The harness restored Bluetooth to powered on
+  afterward. The reverse-order repeat below did not preserve most of this
+  charge-counter difference.
+- `20260918T002025Z-34af6d3a1820` repeated the Bluetooth-on condition after the
+  off run. Clock separation showed 298.963 seconds in s2idle, the charge
+  measurement interval was 301.548 seconds, the boot ID stayed stable, and the
+  RTC was the expected wake source. `charge_now` fell 22,956 uAh (274.1 mA
+  derived average); integer capacity did not change. This was only 1,967 uAh
+  (9.4%) above the immediately preceding Bluetooth-off result, rather than the
+  11,806 uAh gap in the first pair. The initial 392.2 mA Bluetooth-on result
+  is therefore an outlier so far; charge data shows only a small, noisy
+  on/off difference. Bluetooth was restored and remains powered on.
+- The cluster-genpd counter difference has a source-defined meaning. In the
+  first Bluetooth-on run, S1 changed by Usage +15, Rejected +16, and S2idle
+  +31; the Bluetooth-off run changed by +1, +0, and +1; and the Bluetooth-on
+  repeat `20260918T002025Z-34af6d3a1820` changed by +13, +13, and +26.
+  Its AOSD/CXSD/DDR counters were also zero, while ADSP advanced by 334. The
+  PSCI cpuidle path stages the
+  cluster state and calls
+  `psci_cpu_suspend_enter()`; when that call returns an error, Linux calls
+  `pm_genpd_inc_rejected()`, which increments Rejected and subtracts Usage.
+  Thus Bluetooth-on coincides twice with many more candidate cluster-state
+  handoffs and PSCI error returns (16/31 and 13/26), while Bluetooth-off had
+  one handoff and no recorded error. The exact PSCI error code and reason are
+  not recorded. This is a repeatable association in the counters, not yet
+  proof that Bluetooth caused the failures. A non-error return also does not
+  prove named AOSD/CXSD/DDR residency; all three counters stayed zero in all
+  three runs. Sources: [PSCI domain-state staging](https://github.com/gregkh/linux/blob/v7.2.3/drivers/cpuidle/cpuidle-psci-domain.c#L32-L44),
+  [PSCI suspend entry and rejected accounting](https://github.com/gregkh/linux/blob/v7.2.3/drivers/cpuidle/cpuidle-psci.c#L64-L105),
+  [genpd rejected counter](https://github.com/gregkh/linux/blob/v7.2.3/drivers/pmdomain/core.c#L802-L824),
+  [S2idle state accounting](https://github.com/gregkh/linux/blob/v7.2.3/drivers/pmdomain/core.c#L1404-L1443),
+  [PSCI firmware error mapping](https://github.com/gregkh/linux/blob/v7.2.3/drivers/firmware/psci/psci.c#L127-L183).
+- Before that reverse-order repeat, live state at 2026-09-18 00:20:18 UTC was
+  unplugged/discharging at 94% (`charge_now=6212684`), Bluetooth powered on,
+  Wi-Fi enabled with `wlp1s0` up, `[s2idle] deep`, and no RTC wake alarm. Run
+  `20260918T002025Z-34af6d3a1820` completed the reverse-order five-minute
+  s2idle interval with both radios preserved, as recorded above. A live
+  post-run check at 00:28:45 UTC confirmed the device awake at 94%, unplugged,
+  with Bluetooth powered on, Wi-Fi enabled and up, `[s2idle] deep`, and no RTC
+  alarm; the test restored the original radio state.
+- `20260918T002946Z-d404cb093fb9` captured one minute of the Bluetooth-on
+  condition with the `rpmh-aoss` trace profile. The 58.481-second kernel
+  s2idle interval had a single `is_s2idle=yes` cluster request on CPU2 for
+  `0x4100c344`; its PSCI enter/exit pair spans the interval and returns at the
+  expected RTC wake. The cluster S1 genpd counters changed by Usage +1,
+  Rejected +0, S2idle +1. This is a clean Linux-visible return, unlike the
+  13–16 rejected cluster requests in the two five-minute Bluetooth-on samples.
+  Therefore the rejected-return pattern is intermittent; Bluetooth-on does
+  not make every cluster PSCI request fail. All eight CPUs also submitted
+  their CPU-local `0x40000004` state during the s2idle window. The trace had
+  1,030,364 bytes, eight selected events, and zero per-CPU overruns or dropped
+  events. It does not show named AOSD/CXSD/DDR residency; those counters again
+  stayed at zero. The charge counter fell 7,215 uAh over 60.904 seconds
+  (426.5 mA derived average), but the interval is too short/noisy and was
+  traced, so it is not usable as a battery-rate result. The exact PSCI Linux
+  return code remains unknown because the current tracepoint records state and
+  timing, not retval. Full evidence is in
+  `../sm8550-suspend-lab-runs/20260918T002946Z-d404cb093fb9`.
+- Next diagnostic: first perform a read-only preflight for the running kernel's
+  `psci_cpu_suspend_enter` symbol, kprobe blacklist, and tracefs kprobe-event
+  support. If available, the smallest targeted capture is a temporary
+  kretprobe recording that function's Linux return value and PSCI state, scoped
+  to the private trace instance and filtered to state `0x4100c344` with
+  nonzero retval. This can identify the errno behind `Rejected` without a
+  kernel rebuild. It must be added without clearing the global kprobe list and
+  removed in harness cleanup. Even an identified errno would explain Linux's
+  rejected count, not prove why AOSD/CXSD/DDR remain inactive or establish the
+  battery drain rate.
+- The first live preflight was attempted as the regular SSH user. It confirmed
+  kernel `7.2.3`, but reads of `available_filter_functions`, `kprobe_events`,
+  `available_tracers`, `debug/kprobes/blacklist/list`, and
+  `options/funcgraph-retval` all failed with permission denied. This is an
+  access boundary, not evidence that kprobes or those files are unavailable.
+  Next, collect only the symbol match and small kprobe/blacklist/tracer
+  metadata through the already-installed narrow root lab helper; do not grant
+  new sudo commands or modify tracefs during this inventory.
+- Root-only preflight `preflight-20260918T003757Z-629cdc39011b` now confirms
+  that `psci_cpu_suspend_enter` is present in `available_filter_functions`,
+  `/sys/kernel/tracing/kprobe_events` is readable, and the kernel lists
+  `function_graph`, `function`, and `nop` tracers. My first blacklist path was
+  wrong: this kernel exposes `/sys/kernel/debug/kprobes/blacklist` as a file,
+  not `blacklist/list`; `options/funcgraph-retval` is also absent. The
+  corrected read-only preflight `preflight-20260918T003940Z-a489835d85bd`
+  found no blacklist entry for the target function, no currently registered
+  probe on that function, and `/sys/kernel/debug/kprobes/enabled=1`. The
+  preflight's matching-event grep still used the old fixed event name, so it
+  is not evidence about run-unique definitions; the active-probe list and the
+  harness's exact unique-name collision check are the relevant guards. The
+  target is not blocked by the live blacklist and kprobes are enabled. Both
+  inventories were read-only; no trace event or kernel control was written.
+- Linux v7.2.3 source review confirms that a return probe can preserve the
+  entry argument: use the saved first argument rather than reading ARM64 `x0`
+  after return, and record the signed Linux result. The run profile will use a
+  run-unique event group with definition
+  `r:<group>/cluster_ret psci_cpu_suspend_enter state=$arg1:u32
+  retval=$retval:s32` and private-instance filter
+  `state == 1090569028` (`0x4100c344`). The registration itself is still
+  gated on a one-run registration/format/filter check and guaranteed cleanup.
+  Sources: [kprobe trace documentation](https://github.com/gregkh/linux/blob/v7.2.3/Documentation/trace/kprobetrace.rst#L203-L249),
+  [saved return-probe arguments](https://github.com/gregkh/linux/blob/v7.2.3/kernel/trace/trace_kprobe.c#L1515-L1535),
+  [ARM64 function arguments](https://github.com/gregkh/linux/blob/v7.2.3/arch/arm64/include/asm/ptrace.h#L314-L333).
+- Before the first probe run, use a run-unique event group to avoid collision
+  with another trace client, and filter only on state `0x4100c344` so the
+  return stream includes both zero and nonzero results. That preserves the
+  denominator and can distinguish an intermittent failure from a clean
+  return. Enable the event only in the run's private trace instance; cleanup
+  must unregister only this run's exact definition after disabling and
+  removing the instance. This is a temporary diagnostic profile in the
+  existing suspend harness, with the same RTC orchestration, raw capture, and
+  checksums. It removes the run probe immediately after saving the trace,
+  before post-resume collection; no product code or kernel build is involved.
+- Live pre-run check at 2026-09-18 00:47:30 UTC: device awake at 92%,
+  discharging with USB online `0`, Bluetooth `Powered: yes`, Wi-Fi enabled and
+  `wlp1s0` linked, `[s2idle] deep`, and RTC wakealarm empty. This is the
+  intended unplugged/preserve-radio baseline for the temporary return-value
+  capture; no suspend or kprobe event has been run yet.
+- Repeated root preflight `preflight-20260918T005245Z-cc0e4da61b1b` immediately
+  before the probe test: the target function remains available, the blacklist
+  and active-probe matches are empty, no registered kprobe event targets the
+  function, and global kprobes remain enabled. Bluetooth is powered and Wi-Fi
+  remains enabled. No probe has been registered yet; USB state is checked
+  again immediately before the run.
+- Direct live check at 2026-09-18 00:53:16 UTC confirms USB online `0`,
+  battery 91%/discharging (`charge_now=6004764`), `[s2idle] deep`, empty RTC
+  wakealarm, Bluetooth powered on, and Wi-Fi `wlp1s0` linked. The remote Nova
+  lacks `rg`; a follow-up `grep` verified Bluetooth state. This is the
+  confirmed pre-run unplugged baseline.
+- Probe setup run `20260918T005407Z-6cc202559cec` failed before starting
+  suspend. The kernel accepted and normalized the dynamic event name from the
+  requested `r:<group>/cluster_ret` to `r16:<group>/cluster_ret` (default
+  `maxactive=16`); the runner's exact-string verification expected the former
+  and stopped safely before trace start/RTC suspend. Raw evidence is
+  `device/raw/trace/kprobe_events.registered.txt`. More seriously, my cleanup
+  matcher accepted only `r:`/`p:` and misreported the normalized registration
+  as already absent; cleanup therefore did not remove it. This run did not
+  sleep and does not count as a suspend observation. The run-unique event must
+  be removed now with the corrected `r16:`-aware exact-name cleanup before any
+  further probe test. This is a harness bug, not evidence of a kernel failure.
+- Root preflight `preflight-20260918T005631Z-49cad7565992` verified the
+  leftover registration is exactly
+  `r16:s2lab_20260918T005407Z_6cc202559cec/cluster_ret` and that
+  `kprobes/list` shows the target as `[DISABLED]`. This confirms the probe
+  definition remained registered but its event was not active; no suspend or
+  trace capture occurred. The fixed cleanup now canonicalizes the kernel's
+  `r16:` spelling and will remove only this archived run's unique group/event.
+- Recovery of `20260918T005407Z-6cc202559cec` ran with the corrected helper.
+  The post-recovery root preflight `preflight-20260918T005724Z-6c0a0898d97c`
+  now shows no `psci_cpu_suspend_enter` line in `kprobe_events`, `kprobes/list`,
+  or `kprobe_profile`; this independently confirms the run-unique definition
+  is gone. The device remained on the same boot ID, awake in `[s2idle] deep`,
+  unplugged (`usb_online=0`), Bluetooth on, Wi-Fi linked, and with no RTC
+  wakealarm. No product, kernel, firmware, or persistent sleep setting changed.
+- Retry pre-run check at 2026-09-18 00:59:22 UTC: USB online `0`, battery
+  90%/discharging, Bluetooth powered on, Wi-Fi linked, `[s2idle] deep`, RTC
+  wakealarm empty. Local `py_compile`, host self-test (including the `r16:`
+  normalization regression check), and `git diff --check` all pass. The retry
+  will use the same five-minute Bluetooth-on, Wi-Fi-preserved condition.
+- The corrected five-minute kretprobe run
+  `20260918T005938Z-f9ed9257d8db` completed successfully in observed `s2idle`
+  with 301.210504 seconds of suspend-clock separation, unchanged boot ID, and
+  the expected RTC wake. The runner reports `trace_state=cleaned` and status
+  `complete`; its buffered trace is 229,513 bytes with three selected events.
+  `charge_now` fell 55,096 uAh over a 301.210504-second measurement window
+  (658.5 mA gauge-derived), with capacity down one point. Because this was a
+  five-minute trace-instrumented interval, that figure remains unsuitable as
+  an hourly drain estimate.
+- Analysis of the full kretprobe trace now resolves the PSCI return-code
+  question. It contains 34 calls for state `0x4100c344`; all 34 matching
+  `psci_domain_idle_enter` and `...exit` tracepoints are marked
+  `is_s2idle=yes`, and all per-CPU trace buffers report zero drops/overruns.
+  There are 22 `-95` (`-EOPNOTSUPP`, PSCI `NOT_SUPPORTED`) returns on CPU0 and
+  9 `-1` (`-EPERM`, PSCI `DENIED`) returns on CPU7, all rapid retries within
+  about 7 ms around 71 seconds into the sleep. Three calls return zero. The
+  cluster genpd counters move from Usage 163 / Rejected 300 / S2idle 460 to
+  Usage 166 / Rejected 331 / S2idle 494, exactly matching 3 successful,
+  31 rejected, and 34 s2idle calls respectively. This is a tight accounting
+  correlation between the return probe and genpd statistics. Two successful
+  calls on CPU1 and CPU6 span most of the suspend interval and return at wake;
+  the third is an immediate CPU0 return. A zero PSCI return establishes that
+  the firmware call succeeded, but it does not prove entry into a named
+  top-level system or DDR state. Separately, `qcom_stats/ddr_stats` LPM code
+  `0xd0` kept `count=1` while its duration advanced from `833342380742` to
+  `839242071539` ticks (`+5899690797`); scalar `qcom_stats/ddr` remained
+  `0/0`. Linux exposes these as separate records and the public mapping does
+  not define what this platform's `0xd0` means. This is evidence that the
+  separate firmware DDR-LPM counter is advancing, not proof of a particular
+  DDR state or of no DDR low-power residency. The exact trace is in
+  `../sm8550-suspend-lab-runs/20260918T005938Z-f9ed9257d8db/device/raw/trace/trace.txt`;
+  the before/after genpd snapshots are in that run's `device/pre` and
+  `device/post` directories. The kprobe profile reports 1,002 function hits
+  and zero misses, so this remains temporary instrumentation and not a battery
+  measurement.
+- Read-only live preflight at 2026-09-18 01:09 UTC confirms the target symbol
+  is available, not blacklisted, and has no registered kprobe/event; global
+  kprobes remain enabled. Bluetooth is powered on, Wi-Fi enabled, the device
+  kept the same boot ID, and `[s2idle] deep` remains selected. The run's
+  post-snapshot records USB online `0`. The run-specific event and trace
+  instance have been cleaned up.
+- Pre-run baseline for the Bluetooth comparison at 2026-09-18 01:16 UTC:
+  USB online `0`, battery discharging at 88% (`charge_now=5798156`), Bluetooth
+  powered on and unblocked, Wi-Fi `wlp1s0` linked, `[s2idle] deep`, empty
+  `/sys/class/rtc/rtc0/wakealarm`, and unchanged boot ID. The 01:09 root
+  preflight showed no remaining kprobe; no probe has been registered since.
+  This led into the matched run below, which changed only Bluetooth to
+  rfkill-blocked, kept Wi-Fi on, and repeated the same five-minute s2idle
+  kretprobe capture. The comparison focuses on PSCI return counts and genpd
+  deltas, not the noisy battery gauge.
+- Bluetooth-off comparison `20260918T011816Z-656072014367` completed with
+  Bluetooth hard-blocked through `rfkill`, Wi-Fi preserved, USB online `0`,
+  and the same boot ID. The device measured 298.523 seconds of s2idle
+  separation (300.948 seconds boottime). For state `0x4100c344`, the trace has
+  one `is_s2idle=yes` enter/exit pair and one `retval=0` return on CPU3, which
+  spans nearly the full sleep; there are no `-95` or `-1` returns. Cluster
+  genpd counters changed Usage 166 to 167, Rejected 331 to 331, and S2idle
+  494 to 495, matching one success and zero rejections. The Bluetooth-on
+  matched run had three successes and 31 rejections, so hard-blocking
+  Bluetooth coincided with no rejection burst in this one comparison. This
+  supports a Bluetooth association with the retries but does not prove that
+  Bluetooth caused them or explain battery drain. AOSD, CXSD, and scalar DDR
+  counters still stayed at zero; separate `ddr_stats` `0xd0` duration rose
+  from `854798553285` to `860688362435` ticks (`+5889809150`), with its count
+  still one and no documented state mapping. The charge gauge fell 51,160 uAh
+  in this short interval (about 612 mA derived), another noisy result that
+  cannot establish a drain rate or Bluetooth benefit. During cleanup,
+  `rfkill unblock bluetooth` succeeded but `bluetoothctl power on` returned
+  1; a direct follow-up check then showed Powered yes and rfkill unblocked, so
+  the original radio state was restored. The exact trace, counters, and
+  cleanup receipts are in
+  `../sm8550-suspend-lab-runs/20260918T011816Z-656072014367`.
+- A fresh read-only root preflight at 2026-09-18 01:27 UTC independently
+  confirms the Bluetooth-off run's temporary kprobe is absent from
+  `kprobe_events`, `kprobes/list`, and `kprobe_profile`, while global kprobes
+  remain enabled. Bluetooth is `Powered: yes` and unblocked, Wi-Fi is enabled,
+  the boot ID is unchanged, and `[s2idle] deep` is still selected. This closes
+  the apparent Bluetooth restore-command error in the run receipt without
+  leaving a radio or trace change on the device.
+- Fresh live-tree inspection at 2026-09-18 01:28 UTC confirms the current
+  image's PSCI topology directly: the Nova compatible is
+  `retroidpocket,rpnova` / `qcom,qcs8550` / `qcom,sm8550`, PSCI uses SMC, and
+  `/cpus/domain-idle-states` contains only `cluster-sleep-0` and
+  `cluster-sleep-1`. A full node-name search finds neither `system_pd` nor
+  `domain_ss3`; the current genpd summary likewise lists the CPU0-7 and
+  cluster PSCI domains, without a system domain. Linux therefore has no
+  described system/SS3 PSCI domain to request through this s2idle OSI
+  hierarchy. This does not rule out AOP autonomously applying deeper residency
+  from RPMh sleep votes, so the missing node is not yet a proven cause of the
+  zero named counters or reported drain. No device setting was changed.
+- Read-only firmware/status inventory at 2026-09-18 01:36 UTC narrows the
+  remaining AOP question. The live firmware tree has no AOP image/version
+  path, and all 120 files under `qcom_socinfo` contain no AOP entry. The only
+  AOP-named device-tree paths are reserved-memory regions
+  `aop-cmd-db-region@81c60000` and `aop-config-merged-region@81c80000`; these
+  confirm shared-memory plumbing exists but reveal no firmware build or sleep
+  decision. The kernel does expose `qcom_aoss/{prevent_aoss_sleep,
+  prevent_cx_collapse,prevent_ddr_collapse,ddr_frequency_mhz}`, but read-only
+  `cat` of each returns `EINVAL`, so they are not status readouts. No AOP
+  acceptance/residency interface is currently available through the inspected
+  read-only sysfs/debugfs/firmware inventory. Do not write the `prevent_*`
+  controls as a diagnostic. This leaves AOP firmware behavior unresolved and
+  means deeper acceptance tracing would need a different existing tracepoint
+  or temporary kernel instrumentation; it does not establish that AOP is
+  rejecting a valid request. Source/preflight receipt:
+  `/private/tmp/sm8550-after-btoff-preflight/preflight-20260918T012750Z-16dbf3a7045d.json`.
+- Public-source follow-up found no exact SM8550 `domain_ss3` mapping to use.
+  Upstream SM8750 does define `system_pd` -> `domain_ss3` with PSCI parameter
+  `0x0200c354`, but that is a different SoC and remains unsafe to copy. A
+  related X1E80100 tree has a `system_pd` parent but explicitly leaves its
+  system-wide idle-state list as TODO; adding only a parent node is not a
+  functional deep-state fix. The plausible DTS path therefore requires the
+  SM8550-specific firmware parameter and timing tuple, or a maintainer/vendor
+  confirmation that firmware accepts the state. Current searches did not
+  reveal that mapping. References: [X1E80100 PSCI domains](https://android.googlesource.com/kernel/common/+/dc99c0ff53f588bb210b1e8b3314c7581cde68a2/arch/arm64/boot/dts/qcom/x1e80100.dtsi#L346-L365),
+  [SM8750 system idle state](https://github.com/torvalds/linux/blob/master/arch/arm64/boot/dts/qcom/sm8750.dtsi#L2520-L2545).
+- A completed five-minute unplugged s2idle comparison with Wi-Fi off and
+  Bluetooth off is archived as `20260917T230920Z-e03e810704f8`. USB online
+  stayed zero; the kernel observed 298.549 seconds of s2idle separation, the
+  boot ID was unchanged, suspend succeeded, and the RTC was the only observed
+  wake source. The battery charge counter fell by 656 uAh over 301.101 seconds
+  (about 7.8 mA derived average), while the independent Qualcomm capacity
+  percentage changed from 100 to 99. Since that property is an integer from
+  `BATT_CAPACITY`, it is coarse and does not mean a full 1% charge loss; this
+  one near-ceiling measurement remains provisional. Labeled AOSD, CXSD, and
+  scalar DDR counters remained zero; APSS increased by one, ADSP by 223, and
+  DDR LPM `0xd0` duration increased by about 5.896 billion ticks. Those
+  counter labels still do not identify a specific accepted system/DDR state.
+- After the Wi-Fi-off run, the harness restored Wi-Fi to enabled, left the
+  original Bluetooth powered-off state intact, cleared the RTC alarm, and
+  restored debug settings.
+- `20260917T231840Z-d5195f1b8ba3` completed 299.563 seconds of s2idle with
+  Wi-Fi on and Bluetooth off, also unplugged (`qcom-battmgr-usb/online=0`).
+  The boot ID stayed unchanged, suspend succeeded, and only the expected RTC
+  wake source changed. With capacity at 99% before and after, `charge_now` /
+  `charge_counter` fell 16,397 uAh (about 196 mA derived average), versus
+  656 uAh in the preceding Wi-Fi-off run. Armada's 0902 patch exposes the same
+  Qualcomm `BATT_CHG_COUNTER` value through both names, so these are one gauge
+  reading, not two corroborating sensors; `capacity` is a separate integer
+  firmware property. AOSD, CXSD, and scalar DDR stayed zero; APSS increased
+  by one and ADSP by 204, similar to the off-radio interval. Wi-Fi was linked
+  before sleep (`wlp1s0` up with carrier); after resume it was briefly down,
+  then SSH and Bluetooth recovered. The Wi-Fi-off repeat at 99% below shows
+  similar charge loss, so these two matched runs do not demonstrate a Wi-Fi
+  effect. The exact archive is
+  `../sm8550-suspend-lab-runs/20260917T231840Z-d5195f1b8ba3`.
+- The QCOM property semantics explain why `charge_now` and `charge_counter`
+  are not independent checks here: both are populated from the same firmware
+  `BATT_CHG_COUNTER` field. The upstream patch author describes that SM8350-
+  class field as remaining charge in uAh (tested at 59% and 85.6%) and maps it
+  to `CHARGE_NOW`; Armada also retains the `CHARGE_COUNTER` mapping. Linux's
+  generic class docs describe `CHARGE_COUNTER` as relative/time-based, so the
+  Qualcomm-specific behavior matters. See the
+  [upstream patch](https://lkml.iu.edu/2608.3/10890.html) and
+  [power-supply class docs](https://github.com/torvalds/linux/blob/master/Documentation/power/power_supply_class.rst).
+- The subsequent matched Wi-Fi-off repeat started at 99% with charge_now
+  6,509,807 uAh, battery discharging, Wi-Fi enabled/linked before the harness
+  disabled it, Bluetooth powered on before the harness blocked it, and USB
+  online zero. Run `20260917T232717Z-4f4794c002ca` completed 298.732 seconds of
+  s2idle, unchanged boot ID, successful suspend, and expected RTC-only wake.
+  Charge_now fell 18,365 uAh over 301.222 seconds (about 220 mA derived
+  average), while capacity changed 99% to 98%. Compared with the matched
+  Wi-Fi-on result of 16,397 uAh over 301.79 seconds (capacity remained 99%),
+  this does not show a meaningful Wi-Fi drain effect; both readings are of the
+  same order and the off run was slightly higher. AOSD, CXSD, and scalar DDR
+  stayed zero; APSS increased by one and ADSP by 238. Exact archive:
+  `../sm8550-suspend-lab-runs/20260917T232717Z-4f4794c002ca`.
+- `20260917T235022Z-6e38cb425e6b` was a 60-second unplugged s2idle run with
+  Wi-Fi and Bluetooth preserved. Suspend separation was 59.247 seconds;
+  suspend succeeded, boot ID stayed stable, and the expected RTC was the only
+  wake source. The new root-side read-only capture found 48 genpd domains. All
+  eight CPUs recorded one s2idle entry in their PSCI cpuidle state counters
+  (`cpu-sleep-0-0` on cpu0-2, `cpu-sleep-1-0` on cpu3-6, and `cpu-sleep-2-0`
+  on cpu7). `power-domain-cluster` state S1 Usage increased 131 to 132 while
+  Rejected stayed 271; its descriptor reports 7,200 us latency and 10,150 us
+  residency but labels the state `N/A`. The cluster genpd S2idle column stayed
+  zero, consistent with this being a cpuidle/PSCI transition rather than the
+  separate synchronous-genpd s2idle statistic. In the same interval, QCOM
+  AOSD, CXSD, and scalar DDR remained zero; ADSP count increased by 213. This
+  directly confirms Linux selected CPU and cluster idle states, but does not
+  show that firmware entered the deeper named system/DDR states or identify
+  the PSCI parameter behind cluster S1. The battery gauge fell 9,183 uAh over
+  the 61.735-second measurement window (about 535 mA derived average), with no
+  capacity percentage change; this short result is too noisy to treat as an
+  hourly drain estimate. Exact archive:
+  `../sm8550-suspend-lab-runs/20260917T235022Z-6e38cb425e6b`.
+  Read-only postcheck confirmed discharging, USB online zero, Bluetooth
+  powered on, `[s2idle]` selected, and an empty RTC wakealarm.
+- The closed [#274](https://github.com/armada-os/armada/issues/274) reports
+  the same zero AOSD/CXSD counters on Odin 2 and an active `88e8000.phy` while
+  the storage controllers are suspended. It identifies a UFS/SD interrupt
+  storm and the shared Qualcomm USB PHY as candidate blockers. Nova also has
+  `88e8000.phy` at `power/control=on`, `runtime_status=active`, and zero
+  runtime-suspended time, while `a600000.usb` is suspended. However, Nova uses
+  internal UFS for root and its CPU0 deep cpuidle state is enabled, unlike the
+  Odin 2 report's SD-root and disabled CPU0 state. The Odin 2 findings are a
+  close analogue, not proof that the same IRQ source is responsible here.
+- The fork branch `feat/sm8550-dwc3-skip-phy` carries the July proposal that
+  creates a software node in `dwc3_qcom_probe()`. Do not deploy that commit:
+  an upstream report found duplicate software-node creation, a refcount
+  use-after-free, and an Oops when DRD switched to gadget mode ([review](https://lkml.iu.edu/2609.1/02793.html)). A September 14 revision moves
+  the skip flag into DWC3 core properties and host initialization (11 added
+  lines across five files, tested by its author on SM8750 MTP). It is still a
+  proposed upstream patch, not a fix validated on Nova. Separately, the
+  September 2 cable-free A/B of the xHCI skip-PHY-init patch did not change the
+  combo PHY's active/on state, its clocks, regulator votes, callback sequence,
+  or named residency counters. Do not prioritize another DWC3 port without a
+  changed workload that demonstrates the targeted xHCI reference is relevant;
+  any future port must use the revised upstream approach and test
+  host/gadget/charger transitions.
+- `20260917T213335Z-d3f423182f8b` was the first 45-second UFS trace, but it
+  used tracefs `local`; that clock stops across suspend and the archive cannot
+  distinguish in-suspend events from transition events. Its pre/post captures
+  remain intact but are not evidence of IRQ frequency during s2idle.
+- The harness now selects tracefs `boot` in the run-private instance and
+  records the original and selected clock. Python compilation, host self-test,
+  and `git diff --check` passed. With that correction,
+  `20260917T213812Z-1f8ded068061` completed 44.220 seconds of measured s2idle
+  separation, retained the boot ID, and produced a 921,543-byte trace with no
+  per-CPU overruns or dropped events. It recorded 1,624 UFS IRQ entries and
+  3,230 UFS command events, but these clustered around suspend entry and RTC
+  resume: there were no filtered UFS IRQ or command events during the central
+  roughly 44-second interval. The large aggregate IRQ count is therefore not
+  evidence of a Nova UFS IRQ storm during stable s2idle. The short event burst
+  at entry appears before steady low power is reached; the trace does not
+  explain its source or power cost.
+- The five-minute unplugged comparison now has a matched 99% Wi-Fi-off repeat:
+  the Wi-Fi-on run lost 16,397 uAh and the Wi-Fi-off run lost 18,365 uAh. These
+  are the same order, with the off run slightly higher, so the tests do not
+  support Wi-Fi as the cause. The 656 uAh result began at exactly 100% and is
+  treated as a near-ceiling gauge edge. The Qualcomm charge value is not
+  independently checked by `capacity`. The live DWC3 PHY state is a lead, but
+  the closest targeted
+  cable-free kernel A/B produced no observable change, so it is not currently
+  a supported root-cause candidate. AOSD/CXSD/DDR acceptance still needs a
+  firmware-visible status source; more untraced RTC runs will not establish
+  that.
+
 ### Current sleep reports and low-cost next steps
 
-- [#264](https://github.com/armada-os/armada/issues/264) reports Odin 2 drain
-  with Bluetooth still powered in both s2idle and deep. This Nova baseline
-  had Bluetooth powered off already, so it does not validate that report.
-  [#235](https://github.com/armada-os/armada/pull/235) only gates radios in
-  fake suspend, is conflicting, and has a request to shorten comments. It
-  does not address native s2idle.
+- [#264](https://github.com/armada-os/armada/issues/264) remains open and
+  reports Odin 2 drain with Bluetooth powered in both s2idle and deep; its
+  reported `rfkill block bluetooth` workaround reduces drain to about 1%/hour.
+  The latest Nova run preserved Bluetooth powered on and found 31 rejected
+  cluster PSCI calls (22 `-EOPNOTSUPP`, 9 `-EPERM`) plus three successful
+  calls, all during s2idle. This is consistent with a Bluetooth-related
+  low-power issue but does not establish that Bluetooth caused the rejections
+  or the drain. One matched five-minute rfkill-blocked Nova capture had one
+  accepted cluster call and no rejections, compared with 31 rejections while
+  Bluetooth was on. This is a useful association, not a drain-rate result or
+  a proven root cause. [#235](https://github.com/armada-os/armada/pull/235)
+  only gates radios in fake suspend and does not address native s2idle.
 - [#265](https://github.com/armada-os/armada/issues/265) reports localized
   warmth even after the Bluetooth workaround, with a similar Odin 3 report.
   The least work is a longer matched sleep-debug/current/wakeup-source capture
@@ -68,19 +689,76 @@ self-test covers both cases.
   Synaptics I2C failures and a concrete source-level resume/polling failure
   path. A deliberate touch check plus a controlled `pm_async=0` comparison
   can test it before spending time on a kernel build.
-- Open [#442](https://github.com/armada-os/armada/pull/442) removes blanket
-  USB autosuspend rules to prevent downstream hub input re-enumeration; its
-  image check passes and it is clean to merge. [#234](https://github.com/armada-os/armada/pull/234)
+- [#442](https://github.com/armada-os/armada/pull/442) has merged, removing
+  blanket USB autosuspend rules that could power off hub downstream ports.
+  It does not explain the Nova's zero AOSD/CXSD/DDR counters. [#234](https://github.com/armada-os/armada/pull/234)
   addresses fake-suspend audio unmute, while [#273](https://github.com/armada-os/armada/pull/273)
-  is charge-aware sleep for Pocket EVO and conflicting. Neither explains the
-  Nova's zero AOSD/CXSD/DDR counters.
+  is charge-aware sleep for Pocket EVO and conflicting.
 
-The next diagnostic with the most information per unit of effort is a proper
-deep-mode test only after the supported Armada userspace path can request it.
-For current native s2idle concerns, repeat the same policy run with a longer
-idle window and retain `armada-sleep-debug` plus wakeup-source/current
-deltas. Kernel work is premature until a specific PM callback, missing state,
-or failing resume device is isolated.
+The next source-level diagnostic is **not another or longer suspend**. The
+current direct `deep` run already reproduces the zero named-state counters, and
+the prior instrumented `7.2.0` run found no Linux-visible active-TCS or
+command-status error. The upstream RPMh and stats sources are unchanged through
+`7.2.3`, and the current package patch series does not modify those drivers, so
+a kernel-only rebuild is unlikely to change what the observer can tell us. The
+remaining gap is AOP decision/status and the meaning of the firmware DDR IDs.
+No public readback of current AOP acceptance has been found. The mainline
+QMP/stats source review below confirms that the available kernel interface has
+no read-only acceptance query. The remaining path is vendor AOP/QMP
+documentation or a maintainer-provided status interface. For issue #265, longer matched
+sleep-debug/current/wakeup-source captures remain useful only on an affected
+warm/draining device.
+
+### 2026-09-17 source review: what Linux can prove about AOP
+
+- The v7.2 AOSS QMP driver sends a text command through shared message RAM and
+  waits until the AOSS empties that buffer; its completion trace reports that
+  transport acknowledgement. That proves the message was consumed, not that
+  AOP selected or entered a particular sleep mode. The upstream driver exposes
+  only four QMP debugfs writes: set DDR frequency and toggle prevention of
+  AOSS, CX, or DDR collapse. There is no read-only sleep-state query in this
+  interface, and those writes can alter the state under investigation, so they
+  are not suitable probes. See
+  [qcom_aoss.c QMP send/ack](https://github.com/torvalds/linux/blob/v7.2/drivers/soc/qcom/qcom_aoss.c#L1858-L1955)
+  and [its debugfs controls](https://github.com/torvalds/linux/blob/v7.2/drivers/soc/qcom/qcom_aoss.c#L491-L541).
+- `qcom_stats` reads AOSD/CXSD/DDR records from the stats memory exposed by
+  firmware and formats the record names into debugfs. For DDR, it sends the
+  documented `freqsync` QMP message before rereading the table to refresh
+  duration counters. These are the best existing low-cost outcome counters,
+  but they do not expose the sleep request accepted by AOP or map the Nova's
+  undocumented DDR LPM IDs to named states. See
+  [qcom_stats.c record reads](https://github.com/torvalds/linux/blob/v7.2/drivers/soc/qcom/qcom_stats.c#L130-L145),
+  [DDR refresh](https://github.com/torvalds/linux/blob/v7.2/drivers/soc/qcom/qcom_stats.c#L148-L222),
+  and [record-name discovery](https://github.com/torvalds/linux/blob/v7.2/drivers/soc/qcom/qcom_stats.c#L244-L287).
+- Therefore the successful direct-`deep` run proves Linux selected the PSCI
+  system-suspend path and resumed, while its zero AOSD/CXSD/scalar-DDR deltas
+  show no recorded residency in those named states. The staged sleep TCS values
+  and their RSC register status do not close the AOP decision gap. The current
+  `7.2.3` image has no RSC snapshot tracepoint or register readback captured in
+  its debugfs tree. More RTC cycles or a kernel rebuild that only repeats the
+  existing RPMh trace would not answer whether AOP accepted the sleep vote.
+- A public search found no SM8550 AOP/QMP status command or documentation that
+  supplies that missing acknowledgement or names the `0xd0` DDR state. The
+  next meaningful source-level lead is Qualcomm/vendor AOP firmware protocol
+  documentation or a maintainer-provided status interface. On the device, the
+  latest read-only check after the user's plug/wake confirms Wi-Fi enabled,
+  Bluetooth powered off, no RTC alarm, `[s2idle] deep`, and charging at 88%.
+- Keep the missing `system_pd`/`domain_ss3` clue scoped to **s2idle**. Linux
+  documents s2idle as allowing processors to spend time in their deepest
+  configured idle states; PSCI's cpuidle domain driver builds that hierarchy
+  from DT and sends domain states only when PSCI OSI support is active. In PC
+  mode it leaves those generic power domains always on. By contrast, the
+  successful `deep` run uses the separate PSCI `SYSTEM_SUSPEND` system-sleep
+  operation. Live logs now confirm this device uses PSCI OSI mode, and live DT
+  inspection confirms there is no `system_pd`/`domain_ss3`. A SM8550-specific
+  system-domain state parameter is still unknown; do not copy SM8750's PSCI
+  parameter by analogy. Before considering a DTS change, compare per-domain
+  genpd `idle_states` usage deltas over s2idle with QMP residency counters.
+  The current unprivileged account cannot read `/sys/kernel/debug`; check its
+  mount state and arrange a temporary read-only privileged capture. See the
+  [s2idle contract](https://cdn.kernel.org/doc/html/latest/admin-guide/pm/sleep-states.html#suspend-to-idle),
+  [PSCI domain mode handling](https://github.com/torvalds/linux/blob/v7.2/drivers/cpuidle/cpuidle-psci-domain.c#L620-L690),
+  and [PSCI SYSTEM_SUSPEND path](https://github.com/torvalds/linux/blob/v7.2/drivers/firmware/psci/psci.c#L2734-L2777).
 
 ## 2026-09-01 correction addendum
 
@@ -1768,11 +2446,2099 @@ regenerate the Armada initramfs, then use bootc's downloaded-image apply flow.
 Every layer has a distinct tag and a preserved rollback receipt. This rule is
 also stored in the persistent Codex memory note for future sessions.
 
+## 2026-09-18 01:27 UTC — dedicated AOP partitions found
+
+- The fresh root preflight
+  `/private/tmp/sm8550-after-btoff-preflight/preflight-20260918T012750Z-16dbf3a7045d.json`
+  lists two dedicated UFS partitions: `/dev/sde9` (`aop_a`) and `/dev/sde28`
+  (`aop_b`). Sysfs reports 1024 sectors (512 KiB) for each. Both are readable
+  only by root/the `disk` group, so the normal SSH account cannot hash them
+  directly. `/proc/cmdline` has no `androidboot.slot_suffix` or `boot_slot`,
+  so the active slot is not identified yet.
+- This is a concrete read-only route to fingerprint the installed AOP images,
+  after prior searches found no AOP image/version under `/usr/lib/firmware`,
+  `/sys/firmware`, or `qcom_socinfo`. Hashing both raw partitions is useful,
+  but their hashes cannot be compared directly with the community
+  `qcom-aop-debug` example hash unless the partition bytes are exactly that
+  complete image. The public example is a 32-bit ARM ELF for other SM8550
+  handhelds; its notes do not establish Nova's partition format or slot.
+- Next inspect both partitions read-only, preserving a raw SHA-256, byte size,
+  `file`/ELF metadata and any format-derived embedded-image boundary. Do not
+  trim padding or strip a presumed MBN wrapper by guesswork. First find a
+  trustworthy active-slot indicator; until then, treat both partition
+  fingerprints as installed-slot inventory only, not proof of the running AOP
+  build. No partition bytes have been read or changed yet.
+
+### 2026-09-18 01:51 UTC — both AOP partition hashes match the published SM8550 ELF
+
+- A fresh preflight using the updated, read-only lab inventory completed on
+  boot ID `7dc5e1e8-3b94-4479-8b16-c297c8f1c7ba`, image
+  `20260915.feca679`, kernel `7.2.3`. Its receipt is
+  `/private/tmp/sm8550-aop-partition-preflight/preflight-20260918T015158Z-27830d9c4849.json`.
+- `/dev/disk/by-partlabel/aop_a` resolves to `/dev/sde9`; `_b` resolves to
+  `/dev/sde28`. Each is exactly 524,288 bytes (512 KiB), and each full raw
+  partition SHA-256 is
+  `6aceb38f5ef10663ac5c29ffc4e9ee27b6339e8746ff3490485f8cf2640ef687`.
+  Both start with `7f 45 4c 46` (ELF magic). This exactly matches the 32-bit
+  ARM ELF hash published by `qcom-aop-debug` for its SM8550 handheld example;
+  there is no wrapper or partition-padding mismatch in these bytes. Because
+  both A/B images are identical, the unresolved active-slot selector does not
+  leave uncertainty about which AOP build either slot would supply. This is a
+  firmware identity match, not yet proof of runtime acceptance or residency.
+- The lab helper edit only added the root preflight's fixed hash/metadata read;
+  the refreshed helper was installed under `/var/lib/sm8550-suspend-lab`.
+  Neither partition nor system image was written. The full receipt preserves
+  commands and output; no suspend cycle was run for this inventory.
+- The exact firmware match removes the earlier “unknown AOP build” blocker.
+  Next review the published monitor request and decoder against this exact
+  image, then decide whether one read-only AOP low-power monitor query is
+  sufficiently supported on Nova. The request's QMP transport ACK alone is
+  still not proof that a valid report was produced or correctly decoded; do
+  not infer a blocker or residency from an ACK alone.
+
+### 2026-09-18 01:55 UTC — matching firmware has a tested CXPC query, but no Nova interface
+
+- The public `qcom-aop-debug` record ties the exact matched hash to an AOP
+  image from SM8550 AYN Thor / Retroid Pocket 6. It says the compact request
+  `{class:lpm_mon,type:cxpc,dur:2000,flush:1,log_once:1}` was accepted by that
+  firmware and produced an awake/idle CXPC row. The project labels it low risk,
+  but still firmware-specific. This is strong support for the request syntax
+  on Nova's installed AOP image; it is not a Nova runtime result.
+- The same project warns that its decoder assumes a Kalama-family monitor
+  sink at QMP message-RAM offset `0x20000` and a 22-driver row layout, and says
+  the address and layout must be validated before porting. Its experimental
+  kernel patch only enables debugfs endpoints for `ayn,thor` and
+  `retroidpocket,rp6`, so Nova has no `thor_lpm_mon_cxpc`, raw dump, or raw QMP
+  sender. Stock Linux describes `qmp_send()` as a kernel API and does not
+  expose an unrestricted userspace sender. The running Nova has `qcom_aoss`
+  built into the kernel; no unloadable module shortcut exists.
+- The published CXPC query is a bounded diagnostic sample, not a power-vote
+  change. “Read-only” does not mean no state writes: it sends a QMP request
+  and asks AOP to write a transient MSGRAM log, so it may slightly perturb
+  sampled timing. The guidance is one known request while fully awake,
+  preserving raw output and avoiding unknown-message discovery in a suspend
+  loop. A transport ACK only establishes that firmware handled the request;
+  output must be read from the separate sink and validated.
+- Thus exact firmware identity has narrowed the remaining gap to whether Nova
+  uses the same mapped message-RAM window and monitor sink layout, plus a
+  minimal safe diagnostic interface to issue the query and preserve raw output.
+  The live DT resource check below shows Nova's mapping is only 0x400 bytes.
+  No QMP message has been sent to Nova. Do not use the sample decoder on Nova
+  solely because the firmware hash matches: device-specific RAM layout still
+  matters.
+- Sources reviewed: [SM8550 handheld observations](https://github.com/jaewun/qcom-aop-debug/blob/main/docs/sm8550-handhelds.md),
+  [QMP interface and risk notes](https://github.com/jaewun/qcom-aop-debug/blob/main/docs/qmp.md),
+  and the project's `patches/sm8550-thor/0001-soc-qcom-qcom_aoss-add-Thor-AOP-diagnostics.patch`.
+
+### 2026-09-18 01:58 UTC — published MSGRAM offset is outside Nova's live QMP mapping
+
+- Read the live Nova FDT node
+  `/sys/firmware/devicetree/base/soc@0/power-management@c300000`. Its
+  `compatible` is `qcom,sm8550-aoss-qmp`, and its `reg` bytes decode big-endian
+  to base `0x0c300000`, size `0x400` (1 KiB). This agrees with upstream
+  `sm8550.dtsi`'s `aoss_qmp` resource.
+- The published Thor/RP6 patch's monitor dump uses
+  `qmp->msgram + 0x20000` for the CXPC log. Its DDR vote collector reads at
+  offsets around `0xf0000`. Neither is within Nova's `0x400`-byte mapping.
+  The patch itself adds a `msgram_size` guard requiring enough space for the
+  DDR vote area before creating its diagnostic files; against Nova's live
+  resource size it would decline to create those nodes. Reading those offsets
+  through the current mapping would be out of bounds and is not a safe test.
+- This means the exact AOP binary match validates the known request grammar,
+  but not the sample monitor buffer address or decoder. It also explains why
+  the existing debugfs directory has no monitor nodes: this kernel's device
+  tree only maps QMP's 1-KiB protocol window. No QMP command or out-of-range
+  MMIO read was attempted.
+- The next investigation is source-only: determine whether Nova has a
+  separately described AOP monitor/shared-memory region or whether a platform
+  firmware/device-tree change would be required to expose it. Do not build the
+  sample patch until the buffer mapping and bounds are resolved; the current
+  minimal route cannot safely query or decode CXPC output.
+
+### 2026-09-18 02:02 UTC — widening QMP to cover all sample diagnostics conflicts with qcom_stats
+
+- The sample patch uses QMP-relative DDR-vote offset `0xf01f0`, which resolves
+  from base `0x0c300000` to physical `0x0c3f01f0`. Upstream SM8550 separately
+  declares `qcom,rpmh-stats` at `0x0c3f0000` with size `0x400`, covering that
+  exact location, and the current Nova image has the `qcom_stats` debugfs
+  driver bound there. The sample patch's minimum `msgram_size` of `0xf0240`
+  would extend the QMP resource through and beyond this separate stats window.
+- Therefore do not enlarge Nova's single QMP `reg` to make the copied Thor/RP6
+  patch pass its full diagnostic size check. That range is already described
+  and owned as a separate qcom_stats resource on this kernel. The CXPC-only
+  sink at `0x0c320000` is a smaller separate mapping question; it is still
+  outside QMP's declared `0x400` resource and has no Nova DT node.
+- A safe diagnostic design would need a separate, explicitly validated CXPC
+  sink resource and must leave the existing `qcom_stats` mapping alone. The
+  sample's DDR-vote extension is unnecessary to answer the immediate CXPC
+  question and should not be carried over without a separate design review.
+- Evidence: upstream v7.2.3 `sm8550.dtsi` declares both the QMP resource and
+  the adjacent `sram@c3f0000` stats resource; the qcom-aop-debug patch uses the
+  matching absolute DDR-vote address and requires one large QMP mapping.
+  Armada's preflight records `qcom_stats` debugfs active on Nova. No resource
+  enlargement, QMP message, or MMIO read was attempted.
+
+### 2026-09-18 02:04 UTC — the community patch needs an undocumented DT difference
+
+- Compared the community patch's stated upstream v7.1 base with v7.2.3. Both
+  upstream SM8550 device trees declare QMP `reg` as `0x0c300000/0x400` and
+  separately declare `qcom,rpmh-stats` at `0x0c3f0000/0x400`. Yet the sample
+  Thor/RP6 patch requires one QMP mapping of at least `0xf0240` bytes before it
+  creates any monitor node. That condition cannot pass against either vanilla
+  upstream SM8550 tree.
+- The community repository calls the patch experimental and device-specific,
+  but does not include a matching device-tree patch that supplies the larger
+  region. Therefore its reported Thor/RP6 captures imply an additional local
+  DT/resource setup or another tree difference that is not in the published
+  patch set. We cannot treat the sample's `qmp->msgram + 0x20000` pointer as a
+  generally available QMP mapping just because the AOP ELF hash matches.
+- The remaining research target is the exact downstream FDT/resource setup
+  used to obtain the published `0x0c320000` CXPC capture. If it cannot be
+  established from public source, a Nova test would need a separately
+  described and validated resource; do not copy the undocumented mapping or
+  widen QMP through the existing `qcom_stats` block.
+
+### 2026-09-18 02:00 UTC — no separate Nova CXPC sink appears in the device tree
+
+- Armada's Nova source DT includes the RP6 DT, which changes model/compatible
+  and panel/input details. Its shared QCS8550 common DT removes standalone
+  `aop_image_mem` and `aop_config_mem`, then reserves merged XBL/AOP-image
+  memory at `0x81a00000..0x81c60000`, keeps AOP cmd-db at
+  `0x81c60000..0x81c80000`, and reserves merged AOP config at
+  `0x81c80000..0x81cf4000`. These are distinct from the published monitor
+  sink at physical `0x0c320000` (the `0x20000` offset from QMP base).
+- No Nova DT node separately describes the published CXPC sink. The running
+  QMP node maps only `0x0c300000..0x0c300400`; `qcom_aoss` maps resource 0 via
+  `devm_platform_ioremap_resource()`, so the current driver cannot read the
+  sink through its existing mapping. The kernel binding defines `reg` as the
+  QMP client's message-RAM base and size. The community patch's 1-MiB check
+  is not satisfied, and its 22-driver dump path is unavailable.
+- The current live `/proc/iomem` redacts physical ranges to zero, so it cannot
+  tell us whether `0x0c320000` is claimed by another resource. No separate AOP
+  monitor mapping, userspace QMP sender, or output reader has been found in
+  Armada's source/runtime inventory. No direct physical-memory read or QMP
+  write was attempted.
+- Remaining possibilities are to find a device-specific vendor DT/resource
+  definition for the same tested Thor/RP6 image, or to stop pursuing this
+  monitor path until such a sink mapping is documented. Do not enlarge the
+  live QMP mapping or read `/dev/mem` based only on adjacency or the AOP hash.
+
 ## Next controlled step
 
-Do not resume blind repeats or select a functional device patch yet. The one
-next experiment is a read-only RPMh/AOP firmware-state observation, matched to
-the current image and exact AOP build, capable of distinguishing a valid quiet
-Linux handoff from firmware policy/acceptance and from misunderstood residency
-counter names. Keep the current diagnostic layer deployed and preserve all
-existing run IDs.
+Keep the current image and existing run IDs intact. Source research should now
+find the exact Thor/RP6 downstream FDT/resource setup used by the published
+capture, especially the separate `0x0c320000` CXPC sink. Do not expand QMP's
+existing resource across `qcom_stats`, read `/dev/mem`, or build a diagnostic
+until the CXPC sink has an independently validated Nova resource. The exact
+AOP hash supports the request syntax, but does not make an out-of-range sink
+safe to read.
+
+### 2026-09-18 02:08 UTC — historical monitor patch used a separate physical sink
+
+- Compared the two published revisions of the community diagnostic patch.
+  Initial commit `8668843` defines the CXPC sink at physical `0x0c320000` and
+  calls `ioremap(0x0c320000, 0x1000)` from both the decoded dump and raw dump
+  paths. The later commit `adbfcdf` replaces that physical base with
+  `THOR_VX_OFFSET = 0x20000`, reads `qmp->msgram + 0x20000`, and adds a global
+  gate requiring the QMP resource to cover the DDR vote area (at least
+  `0xf0240` bytes).
+- This resolves the apparent conflict between captures documented as live on
+  Thor/RP6 and the current patch's impossible size gate under upstream's
+  `0x400`-byte QMP `reg`: the published capture can have come from the original
+  separate-physical-map version, while the later relative-map version cannot
+  pass with vanilla upstream DT. Public docs do not yet identify which exact
+  patch revision produced each capture or provide a matching DT resource node.
+- The initial implementation is historical evidence that the monitor output
+  resides at the separate physical address on those tested boards. It is not
+  proof that Nova reserves, exposes, or permits safe access to that range.
+  Nova's live DT still has no separate sink node, and `/proc/iomem` is
+  redacted; do not copy the old hard-coded `ioremap` onto Nova without an
+  independently validated resource/ownership source.
+- Evidence: [initial patch, direct physical map](https://github.com/jaewun/qcom-aop-debug/blob/866884393d6322fd0598cebc52a9e34391c53ba0/patches/sm8550-thor/0001-soc-qcom-qcom_aoss-add-Thor-AOP-diagnostics.patch#L75-L104);
+  [follow-up patch, QMP-relative map and size gate](https://github.com/jaewun/qcom-aop-debug/blob/adbfcdfcbd64ed795400fdf324c78bc317f3e048/patches/sm8550-thor/0001-soc-qcom-qcom_aoss-add-Thor-AOP-diagnostics.patch#L109-L141).
+  No device read, mapping, QMP send, build, or suspend occurred.
+
+### 2026-09-18 02:07 UTC — upstream QMP APIs do not provide a userspace monitor read path
+
+- Re-read upstream `qcom_aoss.c` and the public `qcom,aoss-qmp` binding while
+  checking for a safe way to access the CXPC sink. The binding describes `reg`
+  as the message RAM for that QMP client's communication with AOSS; it does not
+  define the separate CXPC monitor-output sink as part of this resource.
+- Upstream exposes `qmp_get()`/`qmp_send()` as a GPL-exported kernel API for
+  other kernel devices. Its generic debugfs files are fixed control writes
+  (`prevent_*_collapse` and DDR frequency), with no read operation or monitor
+  buffer dump. The existing `qcom_aoss` tracepoints report messages and
+  acknowledgements, not the contents of the monitor sink.
+- Public AYN QCS8550 common-DT and Retroid Nova/RP6 DTS sources show the device
+  DT layering but add no independent `0x0c320000` monitor resource; the Nova
+  definition includes the shared SoC/common tree. No safe read-only userspace
+  path to validate the CXPC buffer has surfaced. A future kernel diagnostic
+  would need a separately justified, explicitly mapped resource and ownership
+  check; the current `0x400` QMP resource is not such a mapping. Avoid `/dev/mem`
+  and avoid widening the existing QMP resource.
+- Sources checked: [QMP binding](https://github.com/torvalds/linux/blob/master/Documentation/devicetree/bindings/soc/qcom/qcom%2Caoss-qmp.yaml),
+  [upstream AOSS/QMP driver](https://github.com/torvalds/linux/blob/master/drivers/soc/qcom/qcom_aoss.c),
+  [Nova/RP6 DTS series context](https://lkml.rescloud.iu.edu/hypermail/linux/kernel/2608.1/00453.html),
+  and [AYN common QCS8550 DTS patch](https://patchew.org/linux/20260727-ayn-qcs8550-v9-0-e3db456e10e5%40gmail.com/20260727-ayn-qcs8550-v9-3-e3db456e10e5@gmail.com/).
+
+### 2026-09-18 02:09 UTC — correction: historical direct mapping needs no QMP DT enlargement
+
+- The 02:04 inference that Thor/RP6 captures necessarily imply a larger QMP
+  DT resource is too strong. The initial public diagnostic patch used a
+  separate hard-coded `ioremap()` of the CXPC sink, so that version could read
+  the sink without enlarging QMP's `0x400` resource. The later revision changed
+  to an offset in the QMP mapping and added the larger-size gate.
+- Therefore the unresolved Nova question is whether `0x0c320000` has a
+  documented memory owner and safe, conflict-free mapping on this board, not
+  whether the QMP `reg` should be widened. Public source has not yet shown that
+  owner or a separate resource for Nova. Keep both unsafe paths closed: do not
+  widen QMP across `qcom_stats`, and do not reproduce the old hard-coded
+  `ioremap()` without an ownership/resource justification.
+- The next useful source check is the exact version used for the documented
+  live captures and any downstream declaration/ownership for the separate
+  sink. If neither is public, stop this monitor path pending a documented
+  Nova resource rather than treating a guessed physical map as a diagnostic.
+
+### 2026-09-18 02:11 UTC — Qualcomm declares a separate 1 KiB sys-pm-vx window
+
+- Qualcomm's public Kalama DTSI declares AOSS QMP at `0x0c300000/0x400` and a
+  separate `sys-pm-vx@c320000` region at `0x0c320000/0x400`. An AYN Thor
+  Android running-DT dump has the same standalone region. The Qualcomm-derived
+  `sys_pm_vx.c` driver maps its own platform resource with `of_iomap(..., 0)`;
+  this confirms `0x0c320000` is a distinct monitor-output interface on the
+  documented vendor/Thor platform, not an extension of QMP's mailbox window.
+- The archived `cxpc-raw-head.txt` explicitly labels its physical addresses as
+  coming from the original lab patch and starts at `0c320000`. This ties that
+  capture to the original patch's separate physical mapping. The later patch
+  conversion to `qmp->msgram + 0x20000` was not shown to have produced the
+  archived sample and cannot work with the `0x400` QMP resource as written.
+- This narrows the Nova path: if Nova exposes the same vendor region, it should
+  be represented as a separate bounded resource (at most the vendor-declared
+  `0x400`) and consumed through an owned platform mapping. No Nova-specific
+  active `sys-pm-vx` node or RP6 running FDT has been found yet, and the
+  community patch's original `ioremap(..., 0x1000)` exceeds the vendor DT's
+  declared `0x400` span. Do not copy that mapping. First inspect Nova's live
+  flattened DT for any matching node/resource, then check kernel resource
+  ownership before designing a bounded diagnostic.
+- Evidence: [Kalama DTSI AOSS QMP and sys-pm-vx nodes](https://android.googlesource.com/kernel/msm-extra/devicetree/+/refs/heads/android-msm-eos-android13-wear-kr3-pixel-watch/qcom/kalama.dtsi#2073);
+  [Thor running DT sys-pm-vx node](https://gist.github.com/TheGammaSqueeze/69ddf2254b7a9be2a0b7d23bd7c450be#file-thor-dts-L18622-L18627);
+  [sys_pm_vx resource mapping](https://github.com/OnePlusOSS/android_kernel_oneplus_sm8550/blob/c462ef8ffab7a58e035ee04705b16cdfced494b1/drivers/soc/qcom/sys_pm_vx.c#L417-L434);
+  [raw sample provenance](https://github.com/jaewun/qcom-aop-debug/blob/main/examples/sm8550-6aceb38f/cxpc-raw-head.txt#L1-L3).
+  No Nova mapping, QMP request, build, or suspend was attempted.
+
+### 2026-09-18 02:15 UTC — active Nova FDT does not declare the vendor monitor window
+
+- Read-only SSH preflight confirms the current Nova is awake, unplugged and
+  discharging at 80% (`qcom-battmgr-usb/online=0`, `charge_now=5297704`,
+  `charge_full=6559000`). Wi-Fi and Bluetooth are both enabled. Current image
+  remains `20260915.feca679`, kernel `7.2.3`, boot ID unchanged from the prior
+  preflight.
+- Walked every live FDT `reg` property using the parent address/size cell
+  counts and checked the platform-device `resource` files for an overlap with
+  `0x0c320000..0x0c320400`. No node/resource describes or claims that range.
+  The live QMP node remains `0x0c300000/0x400`. No `sys-pm-vx` node was found.
+  This independently confirms the previous source-only finding against the
+  active Nova device tree; the public vendor/Thor declaration cannot be
+  assumed to be present in Armada's FDT.
+- Receipt: `/private/tmp/sm8550-latest-unplugged-preflight/preflight-20260918T021051Z-70db1d5b031c.json`.
+  Follow-up remote command was read-only and returned no address claim for the
+  CXPC window. No QMP message, MMIO access, build, or suspend occurred.
+
+### 2026-09-18 02:24 UTC — Armada can use qcom_aoss API without vendor QMP mailbox
+
+- The Qualcomm `sys_pm_vx.c` reference uses `mbox_request_channel(..., 0)` and
+  an AOP mailbox packet to send `lpm_mon/cxpc`; its Kalama DTS supplies a
+  `qcom,qmp-mbox` provider and a separate `sys-pm-vx` node. Those mailbox
+  provider properties are vendor-specific and are not needed for a small
+  Armada diagnostic because upstream `qcom_aoss` exports `qmp_get()` and
+  `qmp_send()`. `qmp_get()` resolves a consumer node's `qcom,qmp` phandle;
+  Armada's kernel config already selects `CONFIG_QCOM_AOSS_QMP=y`.
+- A minimal out-of-tree diagnostic driver could bind to a new Nova DT node with
+  a separately declared `reg = <0x0c320000 0x400>` resource and
+  `qcom,qmp = <&aoss_qmp>`. It can use `devm_platform_ioremap_resource()` for
+  the bounded sink mapping and `qmp_get()/qmp_send()` for the CXPC query,
+  avoiding Qualcomm's `qcom,qmp-mbox` provider and the vendor-only
+  `subsystem_sleep_stats.h` helpers. The existing Nova FDT has no such node,
+  so adding only the DT node would not send a query or produce a decoded
+  capture; a driver/module (or an in-tree kernel patch) is also required.
+- Do not copy the full vendor parser unchanged: it trusts the sink's `logsize`
+  and loops over the reported rows without checking that the reads fit the
+  mapped region. The vendor DT declares only `0x400` bytes, while the public
+  experimental decoder's `0x1000` size is not valid for that resource. A small
+  port should clamp rows to the declared resource size and reject malformed
+  headers.
+- Effort estimate (not yet built): a purpose-limited module with fixed CXPC
+  request, suspend/resume trigger, and bounded raw/decoded debugfs read is
+  roughly 100–180 LOC plus a DT change; it can be module-only if exact running
+  kernel build artifacts and exported-symbol metadata are available. A DTB-only
+  change is insufficient. Extending built-in `qcom_aoss` can avoid a separate
+  module but needs a kernel image rebuild and a clean way to reference/map the
+  second resource; it is not simpler than a small driver. Do not add the
+  address to Nova DT until its board-level ownership is justified, even though
+  Qualcomm Kalama and Thor declare the same 1 KiB window.
+- Evidence: [vendor QMP packet and capture request](https://github.com/OnePlusOSS/android_kernel_oneplus_sm8550/blob/c462ef8ffab7a58e035ee04705b16cdfced494b1/drivers/soc/qcom/sys_pm_vx.c#L182-L205),
+  [vendor parser](https://github.com/OnePlusOSS/android_kernel_oneplus_sm8550/blob/c462ef8ffab7a58e035ee04705b16cdfced494b1/drivers/soc/qcom/sys_pm_vx.c#L208-L263),
+  [vendor debugfs/match/probe](https://github.com/OnePlusOSS/android_kernel_oneplus_sm8550/blob/c462ef8ffab7a58e035ee04705b16cdfced494b1/drivers/soc/qcom/sys_pm_vx.c#L391-L493),
+  [vendor PM callbacks](https://github.com/OnePlusOSS/android_kernel_oneplus_sm8550/blob/c462ef8ffab7a58e035ee04705b16cdfced494b1/drivers/soc/qcom/sys_pm_vx.c#L522-L573),
+  [v7.2.3 QMP API header](https://github.com/gregkh/linux/blob/v7.2.3/include/linux/soc/qcom/qcom_aoss.h#L12-L18),
+  [v7.2.3 qmp_get/qmp_send implementation](https://github.com/gregkh/linux/blob/v7.2.3/drivers/soc/qcom/qcom_aoss.c#L228-L278),
+  [v7.2.3 qmp_get implementation](https://github.com/gregkh/linux/blob/v7.2.3/drivers/soc/qcom/qcom_aoss.c#L442-L489),
+  [Kalama QMP mailbox and 1 KiB monitor node](https://android.googlesource.com/kernel/msm-extra/devicetree/+/refs/heads/android-msm-eos-android13-wear-kr3-pixel-watch/qcom/kalama.dtsi#L2083-L2088).
+  No code was changed, no module or DTB was built, and no device action or
+  monitor request was performed.
+
+### 2026-09-18 02:34 UTC — a temporary module can avoid DT overlays, but resource ownership is not proven
+
+- `request_mem_region(0x0c320000, 0x400, ...)` followed by `ioremap()` is
+  mechanically possible without a DT node. It would reserve the range in
+  Linux's I/O resource tree and let a temporary module release it on unload.
+  This does not establish that Nova's bus decodes the address or that firmware
+  has no unreported owner; successful reservation is only a Linux-side
+  conflict check. An invalid MMIO read can still fault. Because Nova's live FDT
+  and platform-resource inventory contain no claim for this range, do not map
+  or read it until the board/SoC ownership is independently substantiated.
+- No DT overlay is needed to get the existing AOSS QMP handle either: upstream
+  `qmp_get(dev)` looks for a `qcom,qmp` property on the consumer device. The
+  existing `qcom,rpmh-stats` platform device has that property pointing at
+  `aoss_qmp`, and is already active (`qcom_stats` debugfs exists). A temporary
+  no-OF-node module could find that platform device with
+  `of_find_device_by_node()` and call `qmp_get(&stats_pdev->dev)`, then use the
+  exported `qmp_send()`. The QMP calls are serialized by the AOSS driver's
+  transmit lock. A no-node module would need a manual trigger/read interface
+  or a PM notifier; it would not get a platform device's suspend/resume
+  callbacks automatically.
+- Module-only build is possible in principle, but the current Armada package
+  does not retain a kernel build tree or publish kernel-devel artifacts. Its
+  package script pins 7.2.3, builds inside a disposable `podman run --rm`,
+  always targets `Image dtbs modules`, and stages only `/lib/modules`; it
+  removes `build` and `source` links and discards the container work tree.
+  There is no local `.config`, `Module.symvers`, `vmlinux`, or build tree.
+- Minimum reproducible module build needs the exact patched 7.2.3 source,
+  effective Armada `.config`, generated Kbuild headers/scripts from
+  `modules_prepare`, an AArch64 toolchain/builder, and matching `Module.symvers`
+  if `CONFIG_MODVERSIONS=y`. Then Kbuild can build only the external module
+  with `make -C "$KDIR" ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- M="$PWD"
+  modules`; it does not inherently require an Image/DTB build when
+  modversions are disabled and the needed build artifacts exist. The Armada
+  fragment selects `CONFIG_QCOM_AOSS_QMP=y` but does not pin
+  `CONFIG_MODULES`, `CONFIG_MODVERSIONS`, or module-signature settings; arm64
+  defconfig enables modules, while the final generated config and target's
+  load/signing policy are not retained in the package. Inspect the effective
+  target config before relying on module loadability.
+- Official Kbuild docs state that `modules_prepare` does not create
+  `Module.symvers` when MODVERSIONS is enabled; then a full symbol-version
+  build is required. For a low-cost path, first verify the target config is
+  MODVERSIONS=n, preserve the configured/prepared tree, and build only the
+  diagnostic `.ko`. Do not use forced vermagic or force-load to get past ABI
+  checks.
+- Evidence: [Armada kernel version](../../../armada-packages/kernel/BASE.env),
+  [Armada kernel build wrapper](../../../armada-packages/kernel/build.sh#L17-L30),
+  [Armada build/staging steps](../../../armada-packages/kernel/scripts/build-kernel.sh#L183-L270),
+  [Armada QMP config](../../../armada-packages/kernel/config/armada-kernel.config.overrides#L22-L27),
+  [v7.2.3 arm64 defconfig modules setting](https://github.com/gregkh/linux/blob/v7.2.3/arch/arm64/configs/defconfig#L2429-L2432),
+  [v7.2.3 qmp_get/send API](https://github.com/gregkh/linux/blob/v7.2.3/drivers/soc/qcom/qcom_aoss.c#L228-L278),
+  [v7.2.3 qmp_get phandle handling](https://github.com/gregkh/linux/blob/v7.2.3/drivers/soc/qcom/qcom_aoss.c#L442-L489),
+  [v7.2.3 QMP API declarations](https://github.com/gregkh/linux/blob/v7.2.3/include/linux/soc/qcom/qcom_aoss.h#L12-L18),
+  [v7.2.3 SM8550 stats device QMP phandle](https://github.com/gregkh/linux/blob/v7.2.3/arch/arm64/boot/dts/qcom/sm8550.dtsi#L4677-L4680),
+  [official external-module build and Module.symvers requirements](https://docs.kernel.org/kbuild/modules.html).
+  No module was built, no device was touched, and no MMIO or QMP access was
+  attempted.
+
+### 2026-09-18 02:16 UTC — vendor sys-pm-vx is a suspend/resume monitor, not only a dump
+
+- Qualcomm's Kalama DTS gives the `sys-pm-vx` node its own `0x0c320000/0x400`
+  memory resource and an AOP QMP mailbox. The Qualcomm-derived driver maps
+  resource 0 with `of_iomap()`, creates read-only debugfs
+  `/sys/kernel/debug/sys_pm_violators`, and has system suspend/resume PM ops.
+- With debugging enabled, its resume callback checks whether system and
+  subsystem sleep counters advanced. `monitor_enable` starts false; after the
+  first qualifying resume (system sleep did not occur, but a subsystem did),
+  the driver arms monitoring. The next suspend sends a CXPC QMP request, and
+  the following resume reads driver votes if the system still failed to sleep
+  while the subsystem did. If system sleep succeeds or no subsystem slept, it
+  stops the monitor. This is a direct reference implementation for the
+  missing observability: it coordinates the monitor with real PM boundaries
+  rather than asking userspace to guess a 2-second query window.
+- The driver is a Qualcomm vendor implementation, absent from Nova's current
+  FDT/runtime inventory. Its full source and any Qualcomm-only dependencies
+  still need review before choosing a small port. The active Nova FDT has no
+  monitor resource; the public Kalama/Thor `0x400` resource is evidence for a
+  separately bounded mapping, not authorization to read the address without a
+  declared/claimed resource.
+- Evidence: [Kalama sys-pm-vx DT node](https://android.googlesource.com/kernel/msm-extra/devicetree/+/refs/heads/android-msm-eos-android13-wear-kr3-pixel-watch/qcom/kalama.dtsi#L2331-L2336),
+  [debugfs and compatible table](https://github.com/OnePlusOSS/android_kernel_oneplus_sm8550/blob/c462ef8ffab7a58e035ee04705b16cdfced494b1/drivers/soc/qcom/sys_pm_vx.c#L391-L405),
+  [probe maps the resource and requests its mailbox](https://github.com/OnePlusOSS/android_kernel_oneplus_sm8550/blob/c462ef8ffab7a58e035ee04705b16cdfced494b1/drivers/soc/qcom/sys_pm_vx.c#L417-L493),
+  [suspend/resume monitor behavior](https://github.com/OnePlusOSS/android_kernel_oneplus_sm8550/blob/c462ef8ffab7a58e035ee04705b16cdfced494b1/drivers/soc/qcom/sys_pm_vx.c#L522-L573).
+  No driver was built or loaded; no monitor request was sent.
+
+### 2026-09-18 02:26 UTC — live configfs cannot add a device-tree overlay
+
+- Nova has `CONFIG_OF_OVERLAY=y` and `CONFIG_CONFIGFS_FS=y`, but its running
+  kernel config does not include `CONFIG_OF_CONFIGFS`; `/sys/kernel/config`
+  contains only PCI endpoint directories and no `device-tree/overlays` path.
+  Therefore the monitor node cannot be added as a live configfs overlay on this
+  boot. Testing the proposed explicit resource would require an offline DTB or
+  boot image change and reboot, or a different platform-device creation path.
+- This narrows the low-build test route: there is no overlay-only live trial.
+  The current kprobe harness remains the no-reboot option; a CXPC sink reader
+  needs both a driver and a DT resource claim. No files on the device were
+  changed, and no address mapping or read was attempted.
+
+### 2026-09-18 02:30 UTC — one matched pair shows different PSCI returns with Bluetooth blocked
+
+- Re-parsed the two archived five-minute `psci-kretprobe` cycles. Both ran the
+  same Armada image/kernel and selected `s2idle`; Wi-Fi was enabled in both.
+  Run `20260918T005938Z-f9ed9257d8db` preserved Bluetooth powered on and the
+  filtered `psci_cpu_suspend_enter` event for state `0x4100c344` recorded 34
+  returns: 22 `-95`, 9 `-1`, and 3 `0`. Run
+  `20260918T011816Z-656072014367` hard-blocked Bluetooth with rfkill; the same
+  state filter recorded one return of `0` and no negative returns. Both had
+  about 298.5 seconds of clock separation and unchanged boot IDs.
+- The output is a suggestive correlation from one pair, not proof Bluetooth
+  causes rejection: the runs were not randomized or replicated, and the PSCI
+  return values still need mapping against Armada's exact v7.2.3 call path and
+  PSCI ABI. Do not infer AOSD/CXSD/DDR residency from these returns. Their
+  named `qcom_stats` counters remained zero in both runs while ADSP advanced.
+- Battery gauge deltas are not a usable discriminator here: the reported
+  window averages were about 658 mA with Bluetooth on and 612 mA with it
+  blocked. Treat these five-minute values as noisy; they neither measure the
+  reported hourly drain reliably nor outweigh the one-pair design.
+- Evidence: `../sm8550-suspend-lab-runs/20260918T005938Z-f9ed9257d8db/` and
+  `../sm8550-suspend-lab-runs/20260918T011816Z-656072014367/`, especially each
+  `device/raw/trace/trace.txt`, `device/raw/trace/kprobe_profile.txt`,
+  `device/meta/radio-before.json`, and `device/derived/summary.json`. The
+  recorded per-CPU trace `dropped events` counts are zero. No new suspend run
+  was started for this re-analysis.
+
+### 2026-09-18 02:33 UTC — PSCI errno values identify firmware rejection classes
+
+- Traced `psci_cpu_suspend_enter()` in Armada's exact Linux v7.2.3 source. It
+  calls the selected PSCI `cpu_suspend` operation; the PSCI driver converts
+  firmware returns to Linux errors. `PSCI_RET_NOT_SUPPORTED` becomes
+  `-EOPNOTSUPP` (`-95`), and `PSCI_RET_DENIED` becomes `-EPERM` (`-1`). A
+  returned `0` is `PSCI_RET_SUCCESS`. Therefore the 31 negative returns in the
+  Bluetooth-on run were firmware PSCI `NOT_SUPPORTED`/`DENIED` responses for
+  state `0x4100c344`, while its three `0` returns were successful entries.
+- This establishes that firmware sometimes rejects that CPU-idle power state;
+  it does not establish why, whether Bluetooth is causal, or which AOSD/CXSD/
+  DDR state was reached after successful entries. The one Bluetooth-off run
+  remains a single comparison.
+- Evidence: [v7.2.3 PSCI return-to-errno mapping and CPU_SUSPEND wrapper](https://github.com/gregkh/linux/blob/v7.2.3/drivers/firmware/psci/psci.c#L2094-L2173),
+  [v7.2.3 PSCI result constants](https://github.com/gregkh/linux/blob/v7.2.3/include/uapi/linux/psci.h#L685-L703).
+
+### 2026-09-18 02:34 UTC — independent Bluetooth-on PSCI replicate started
+
+- Fresh preflight `preflight-20260918T023047Z-c758397510b9` confirmed the
+  same boot ID, image `20260915.feca679`, kernel `7.2.3`, Bluetooth powered
+  on/unblocked, Wi-Fi enabled, and no stale `psci_cpu_suspend_enter` probe.
+  A live check at 02:26 had USB online `0`, battery discharging at 78%, and an
+  empty RTC wakealarm; the run's own start gate also refuses a pre-existing
+  alarm.
+- Run `20260918T023202Z-2b9e17892e57` is an independent five-minute `s2idle`
+  repeat with Wi-Fi and Bluetooth preserved. The run-scoped kretprobe filters
+  `psci_cpu_suspend_enter` to `0x4100c344`, and the hypothesis is whether the
+  prior Bluetooth-on burst of `PSCI_NOT_SUPPORTED`/`PSCI_DENIED` returns
+  repeats. It makes no persistent radio, kernel, firmware, or sleep-policy
+  change. SSH timed out after launch while the autonomous RTC-controlled run
+  entered suspend; this is expected during the test, not a failure report.
+- Do not interpret or compare battery gauge deltas as the outcome. The
+  diagnostic question is reproducibility of PSCI return values and the paired
+  cluster genpd Usage/Rejected/S2idle counters. Result pending resume and
+  retrieval.
+
+### 2026-09-18 02:35 UTC — separate DDR LPM duration advances during the five-minute tests
+
+- Exact v7.2.3 `qcom_stats.c` source distinguishes the `ddr_stats` table from
+  the scalar `qcom_stats/ddr` sleep counter. It calls `0xd0` a DDR low-power
+  statistic ID (along with `0xd4`, `0xd3`, and `0x11`), but does not give the
+  IDs stable human-readable state names. On SM8450-and-newer platforms, it
+  asks AOP to synchronize the DDR table before each read when a QMP handle is
+  available.
+- In both archived five-minute PSCI tests, `ddr_stats` code `0xd0` kept
+  `count=1` while its duration advanced about 5.89 billion ticks over 298.5
+  seconds, roughly 19.7 MHz and close to the full suspend-clock separation.
+  The scalar `qcom_stats/ddr`, AOSD, and CXSD counters remained zero. This is
+  evidence that the separate firmware DDR LPM duration counter advances across
+  the sleep interval; the numeric ID still does not identify which DDR state
+  it measures, so it cannot prove the intended deepest DDR state was reached.
+- Evidence: [v7.2.3 qcom_stats DDR LPM ID and QMP synchronization logic](https://github.com/gregkh/linux/blob/v7.2.3/drivers/soc/qcom/qcom_stats.c#L1282-L1408),
+  plus the exact before/after `ddr_stats` and clock receipts in
+  `../sm8550-suspend-lab-runs/20260918T005938Z-f9ed9257d8db/device/` and
+  `../sm8550-suspend-lab-runs/20260918T011816Z-656072014367/device/`.
+
+### 2026-09-18 02:38 UTC — Bluetooth-on repeat reproduces PSCI NOT_SUPPORTED burst
+
+- Run `20260918T023202Z-2b9e17892e57` completed on the unchanged boot/image,
+  unplugged, with Bluetooth and Wi-Fi preserved on. It observed `s2idle`,
+  298.899646 seconds of suspend-clock separation, and the expected RTC wake.
+  The filtered state `0x4100c344` had 26 PSCI returns: 13 `-95`
+  (`PSCI_NOT_SUPPORTED`) on CPU0 and 13 `0` returns (12 on CPU0 and one
+  spanning the interval on CPU3). No `-1`/`PSCI_DENIED` occurred. Trace buffers
+  reported zero drops.
+- `power-domain-cluster` S1 counters moved Usage 167 to 180 (+13), Rejected
+  331 to 344 (+13), and S2idle 495 to 521 (+26), exactly matching the 13
+  successful calls, 13 rejected calls, and all 26 s2idle requests. This
+  independently reproduces the Bluetooth-on rejection burst from
+  `20260918T005938Z-f9ed9257d8db`; the prior Bluetooth-off five-minute control
+  had one successful call and zero rejections. Since a separate one-minute
+  Bluetooth-on run also had only a successful call, rejections are
+  intermittent and Bluetooth is not established as the cause.
+- AOSD, CXSD, and scalar DDR sleep-stat counters remained zero. The separate
+  `ddr_stats` `0xd0` LPM duration advanced 5,906,676,200 ticks (`count=1`),
+  about 19.76 MHz across the 298.9-second interval. That remains an unnamed
+  DDR LPM bucket. The battery gauge reported 64,279 uAh consumed over 301.7
+  seconds (about 767 mA); do not treat this noisy short-window gauge value as
+  a drain-rate result.
+- Cleanup verified the probe/trace instance were removed, the RTC alarm was
+  restored empty, Wi-Fi/Bluetooth stayed enabled, and the device resumed on
+  the same boot. Exact evidence is under
+  `../sm8550-suspend-lab-runs/20260918T023202Z-2b9e17892e57/`.
+
+### 2026-09-18 02:40 UTC — Bluetooth-off replicate planned, then re-preflighted
+
+- Preflight `preflight-20260918T024005Z-3f4eae74db24` confirms the same boot
+  ID, image `20260915.feca679`, kernel `7.2.3`, Bluetooth on/unblocked,
+  Wi-Fi enabled, `[s2idle] deep`, and no registered kprobe. Direct read-only
+  check confirms USB online `0`, battery discharging at 76%, and an empty RTC
+  wakealarm.
+- The Bluetooth-off replicate had not actually been launched at this point;
+  the heading/wording in this entry was premature. A second fresh preflight at
+  02:42 confirmed the same boot and image, Bluetooth on, Wi-Fi on, and no
+  matching probe. Direct SSH confirmed `battery` at 76% and discharging,
+  `qcom-battmgr-usb` and `ucsi-source-psy-pmic_glink.ucsi.01` both offline,
+  wireless charging offline, and an empty RTC wakealarm. The matched control
+  remained pending until the 02:44 launch below.
+
+### 2026-09-18 02:42 UTC — module-only CXPC probe may avoid a full image build
+
+- Local Armada packaging review found the build container discards its Kbuild
+  tree, `.config`, `Module.symvers`, and `vmlinux`; it packages `/lib/modules`
+  only. So the current checkout cannot immediately produce a matching module.
+  If the exact patched 7.2.3 source and generated config are reconstructed,
+  module-only compilation is plausible when `CONFIG_MODVERSIONS=n`; with
+  `CONFIG_MODVERSIONS=y`, the matching `Module.symvers` is required. The
+  target's final config and module-signing policy remain to be checked.
+- The active `qcom,rpmh-stats` platform device can supply the existing AOSS QMP
+  handle to a diagnostic module, so a Device Tree edit may not be needed just
+  to send QMP. However, claiming and mapping the separate `sys-pm-vx` 0x400
+  region would only show no Linux resource conflict; it would not prove
+  hardware ownership or make an unsafe MMIO read safe. No module was built or
+  loaded and no device register was accessed. This remains a possible later
+  diagnostic, not a current sleep-drain finding.
+- Source refs: SM8550's `qcom,rpmh-stats` node references `aoss_qmp` in
+  [sm8550.dtsi](https://github.com/gregkh/linux/blob/v7.2.3/arch/arm64/boot/dts/qcom/sm8550.dtsi#L4677-L4681);
+  [qcom_aoss.c](https://github.com/gregkh/linux/blob/v7.2.3/drivers/soc/qcom/qcom_aoss.c#L442-L489)
+  implements `qmp_get()` and
+  [qmp_send()](https://github.com/gregkh/linux/blob/v7.2.3/drivers/soc/qcom/qcom_aoss.c#L228-L278).
+  Armada packaging evidence is in `armada-packages/kernel/build.sh:17-30`
+  and `kernel/scripts/build-kernel.sh:183-270`: the effective config/Kbuild
+  artifacts are produced in a disposable container and not retained in the
+  package. `kernel/BASE.env` pins 7.2.3; the fragment sets
+  `CONFIG_QCOM_AOSS_QMP=y`.
+- Reference-driver nuance: `sys_pm_vx.c` sends its command as an mbox packet,
+  while `qmp_send()` sends a raw formatted QMP string using the shared AOSS
+  transport. This suggests a small explicit QMP diagnostic might not need the
+  reference driver's extra client mbox plumbing, but the `lpm_mon` command
+  has not been validated through `qmp_send()` on this device. Neither API
+  solves the monitor's system-PM timing or missing MMIO ownership.
+
+### 2026-09-18 02:44 UTC — matched Bluetooth-off PSCI replicate launched
+
+- Run `20260918T024408Z-d8c24b37df7d` started through the host harness after
+  the 02:42 preflight and direct power-state checks. It requests five minutes
+  of unplugged `s2idle`, preserves Wi-Fi, temporarily blocks Bluetooth, and
+  records returns from `psci_cpu_suspend_enter` for state `0x4100c344`.
+- This is the independent Bluetooth-off replicate for comparison with
+  Bluetooth-on run `20260918T023202Z-2b9e17892e57`. Outcome is pending RTC
+  resume and retrieval. The harness is responsible for restoring Bluetooth,
+  RTC wakealarm, and temporary tracing after resume.
+- At about 02:44 UTC the host observed SSH loss from `192.168.0.20`, which is
+  expected while this RTC-controlled run is suspended; resume and the saved
+  on-device status still need verification.
+
+### 2026-09-18 02:48 UTC — short-window battery estimate needs a mid-charge baseline
+
+- Rechecking run `20260917T230920Z-e03e810704f8` explains its anomalous
+  7.84 mA counter-derived estimate: it began at `charge_counter=6,559,000`
+  uAh, exactly equal to `charge_full`, and ended at 6,558,344 uAh. The
+  `current_now` point readings were -616,348 and -695,085 uA. This is
+  consistent with top-of-charge clipping in that five-minute counter delta;
+  the reported 100-to-99 integer capacity change is too coarse to resolve it.
+  It must not be used as evidence of negligible s2idle drain.
+- More generally, five-minute integrated estimates vary from about 196 to
+  798 mA across non-top-clipped runs, while a 5%/hour loss at the 6.442 Ah
+  design capacity is about 322 mA. The current short runs do not establish
+  whether the user's reported drain rate is reproduced. Relevant exact files:
+  `../sm8550-suspend-lab-runs/20260917T230920Z-e03e810704f8/device/{pre,post}/power_supplies.json`
+  and `device/derived/summary.json`.
+- After the current Bluetooth-off traced control resumes and verifies cleanup,
+  the next measurement will be one 30-minute unplugged `s2idle` interval with
+  tracing disabled and radios preserved, starting away from full charge. This
+  should test the rate without extending into a multi-hour run.
+
+### 2026-09-18 02:49 UTC — Bluetooth-off PSCI replicate had one clean entry
+
+- Run `20260918T024408Z-d8c24b37df7d` completed on the same boot and image,
+  with 299.098914 seconds of suspend-clock separation and the expected RTC
+  wake. For state `0x4100c344`, the trace contains one CPU0 PSCI return of 0
+  and no `-95`/`-1` rejections; all per-CPU buffers report zero dropped
+  events. Cluster genpd S1 moved Usage 180 to 181, Rejected stayed 344, and
+  S2idle moved 521 to 522, matching one successful transition. This repeats
+  the earlier clean Bluetooth-off sample, but does not establish that
+  Bluetooth causes the intermittent rejections seen in two Bluetooth-on
+  runs.
+- AOSD, CXSD, and scalar DDR counters again remained zero. ADSP count increased
+  by 205 and APSS by one. Separate DDR LPM code `0xd0` stayed at count 1 while
+  duration advanced 5,914,667,213 ticks across the interval. Its state meaning
+  is still unknown, so this does not prove a specific deep DDR state.
+- The short Bluetooth-off charge-counter delta was 56,407 uAh over 301.86 s
+  (about 673 mA) and capacity moved 76% to 75%. This noisy five-minute value
+  is not a reliable hourly-drain estimate and will be checked with the planned
+  untraced mid-charge interval. Exact data is in
+  `../sm8550-suspend-lab-runs/20260918T024408Z-d8c24b37df7d/`.
+- Cleanup restored an empty RTC alarm; the run trace instance and kprobe were
+  already absent on cleanup. `bluetoothctl power on` returned 1 in the cleanup
+  receipt, but a direct post-run `bluetoothctl show` reports `Powered: yes`;
+  battery is discharging at 75%, and wired/wireless supplies report offline.
+  Same boot ID remained present. Check Wi-Fi and probe state again during the
+  next fresh preflight before starting the no-trace interval.
+
+### 2026-09-18 02:52 UTC — 30-minute untraced mid-charge baseline requested
+
+- Fresh preflight `preflight-20260918T025158Z-c1a545752b29` confirmed the same
+  boot/image/kernel, `[s2idle] deep`, Bluetooth and Wi-Fi powered on, no
+  matching kprobe, and no active source-power input. Direct SSH check recorded
+  `battery` at 75%, discharging, `charge_counter=4,930,400` uAh, all USB/wireless
+  supplies offline, and an empty RTC wakealarm.
+- Run `20260918T025221Z-0dd0e448a37f` requests 1,800 seconds of unplugged
+  `s2idle` with tracing off and Wi-Fi/Bluetooth preserved. A status query
+  shortly after launch timed out as the device became unreachable, consistent
+  with entering suspend but not yet a completion receipt. Outcome remains
+  pending RTC resume, retrieval, and post-run state/cleanup checks.
+
+### 2026-09-18 02:54 UTC — DDR frequency table is dominated by the 547 MHz bin
+
+- While the untraced baseline is suspended, compared the separate QCOM DDR
+  frequency-stat deltas from three retrieved five-minute runs. In the new
+  Bluetooth-off run, `ddr_freq_547mhz` advanced 5,772,146,176 ticks out of
+  5,914,667,520 total ticks across frequency bins (97.6%); the next-largest
+  bin, 2736 MHz, advanced 105,775,616 ticks (about 5.35 seconds at the common
+  counter rate). The Bluetooth-on repeat was similar: 5,767,496,704 of
+  5,906,676,224 ticks in the 547 MHz bin. The earlier Bluetooth-off sample
+  was also similar at 5,734,760,960 of 5,889,808,896 ticks.
+- This points to consistent low-frequency DDR reporting across Bluetooth
+  conditions, rather than a radio-specific effect. It does not establish what
+  DDR power mode the 547 MHz bin represents or prove self-refresh/collapse;
+  the independent `0xd0` LPM ID remains unnamed. The QCOM source distinguishes
+  frequency buckets from LPM IDs but provides no meaning for `0xd0`:
+  [qcom_stats.c](https://github.com/gregkh/linux/blob/v7.2.3/drivers/soc/qcom/qcom_stats.c#L1282-L1408).
+  Exact counters are in the three runs' `pre/snapshot.json` and
+  `post/snapshot.json` under their `qcom_stats.ddr_stats` sections.
+- In each of these same three runs, the `0xd0` duration delta nearly exactly
+  matched the sum of all DDR frequency-bin duration deltas: differences were
+  only -307, -24, and -48 ticks against totals near 5.9 billion. Therefore
+  seeing `0xd0` advance is not independent evidence of a deeper DDR state; its
+  duration tracks essentially the whole interval alongside the frequency
+  table. A firmware definition is still needed to interpret the ID.
+
+### 2026-09-18 02:56 UTC — no local AOP image is available to decode 0xd0
+
+- A read-only search of existing run archives and local research found no raw
+  512 KiB AOP ELF/partition blob; the captured preflight preserves partition
+  size, SHA-256, ELF identification, and only the first 64 bytes. Both Nova
+  partitions hash to `6aceb38f5ef10663ac5c29ffc4e9ee27b6339e8746ff3490485f8cf2640ef687`,
+  matching the cached public SM8550 example, but the associated notes say the
+  image itself is not distributed. Searches of cached AOP docs for `0xd0`
+  produced no DDR-state mapping. Therefore offline inspection cannot name this
+  LPM bucket from the available artifacts; do not infer its state from its
+  advancing duration. Receipt:
+  `/private/tmp/sm8550-aop-partition-preflight/preflight-20260918T015158Z-27830d9c4849.json`;
+  cached research: `/tmp/qcom-aop-debug/docs/sm8550-handhelds.md` and
+  `/tmp/qcom-aop-debug/examples/sm8550-6aceb38f/README.md`.
+
+### 2026-09-18 02:58 UTC — APSS and named AOSD/CXSD/DDR counters are different sources
+
+- Exact v7.2.3 `qcom_stats.c` source places `apss` in the subsystem statistics
+  table backed by QCOM SMEM item 631. The named `aosd`, `cxsd`, and `ddr`
+  counters are a separate RPMh sleep-stat table. The `ddr_stats` frequency/LPM
+  records are another separate table. Therefore APSS +1 during a run confirms
+  an APSS subsystem-stat event only; it cannot substitute for missing AOSD,
+  CXSD, or named DDR residency, and the `0xd0` LPM ID cannot be substituted for
+  the named DDR counter either. This explains why the counters can appear
+  contradictory without showing which physical rails were powered down.
+- In the three latest five-minute kretprobe receipts, APSS accumulated sleep
+  duration advanced by 5,742,636,637 ticks (Bluetooth off, count +1),
+  5,738,424,727 ticks (Bluetooth on, count +2), and 5,731,599,095 ticks
+  (earlier Bluetooth off, count +1), roughly 97% of each interval on the same
+  timer scale. The named AOSD/CXSD/DDR stats remained zero in all three. This
+  narrows the observation to APSS subsystem sleep with no corresponding named
+  whole-system/DDR counter; it still does not identify physical rail state or
+  the missing firmware decision.
+- Source: [v7.2.3 qcom_stats.c subsystem registrations](https://github.com/gregkh/linux/blob/v7.2.3/drivers/soc/qcom/qcom_stats.c#L1123-L1149),
+  [APSS sleep-stat counter handling](https://github.com/gregkh/linux/blob/v7.2.3/drivers/soc/qcom/qcom_stats.c#L1207-L1230),
+  [DDR-stat encoding](https://github.com/gregkh/linux/blob/v7.2.3/drivers/soc/qcom/qcom_stats.c#L1282-L1408),
+  and [RPMh sleep-stat names](https://github.com/gregkh/linux/blob/v7.2.3/drivers/soc/qcom/qcom_stats.c#L1485-L1510).
+
+### 2026-09-18 03:00 UTC — related public sleep reports are still open
+
+- Refreshed Armada GitHub state read-only. [Issue #264](https://github.com/armada-os/armada/issues/264)
+  remains open with no comments since its report: an Odin 2 owner reports
+  25% battery loss in 90 minutes with Bluetooth on and about 1%/hour after
+  hard-blocking Bluetooth with rfkill, in both s2idle and deep. This supports
+  testing the Nova radio relationship, but is cross-device evidence only; the
+  current Nova short-window gauge deltas have not shown a matching reduction.
+- [Issue #265](https://github.com/armada-os/armada/issues/265) remains open;
+  the report says localized warmth persisted after the Bluetooth drain
+  workaround, and a comment reports similar warmth on Odin 3 Max. This is a
+  separate symptom from battery drain and may require a wake-source/rail
+  investigation even if the radio workaround proves effective.
+- [PR #235](https://github.com/armada-os/armada/pull/235) is still open on
+  `main`, titled `feat(fake-suspend): opt-in radio suspend to cut idle drain`.
+  Its implementation is scoped to fake suspend, not native s2idle. The latest
+  file list is only `devices/defaults.conf`, `device-env`, and `fake-suspend`;
+  it adds no systemd/native-suspend hook. The latest comment (September 12)
+  asks the author to resolve conflicts; GitHub currently reports merge state
+  `UNKNOWN`, so no current conflict status was inferred.
+- A wider open-issue search also returned #428, whose body/comments are still
+  empty; #438, a separate Pocket ACE Synaptics resume/input issue; and #466, a
+  Retroid Pocket Flip 2 / SM8250 `qcom,pm8150b-fg` report where `current_now`
+  has reversed sign. That driver is different from Nova's SM8550
+  `qcom,battmgr`; do not apply its sign finding to this device's counter or
+  infer sleep drain from a generic instantaneous-current convention.
+
+### 2026-09-18 03:22 UTC — 30-minute unplugged baseline confirms roughly 5%/h drain
+
+- Run `20260918T025221Z-0dd0e448a37f` completed after an observed
+  `suspend_clock_separation_seconds=1799.475715` and measured battery interval
+  of `1801.858295` seconds. It stayed on the same boot, suspend returned
+  successfully, and the expected RTC alarm/IRQ was observed. The run used
+  `s2idle`, no trace profile, and preserved Wi-Fi/Bluetooth policy; the
+  pre/post snapshots confirm the battery remained unplugged and discharging.
+- `charge_counter` fell from 4,924,497 to 4,774,296 uAh, a loss of 150,201 uAh.
+  That integrated counter gives 300.09 mA average over the measurement window.
+  Relative to `charge_full_design=6,442,000` uAh, it projects to 4.66 percentage
+  points per hour; relative to reported `charge_full=6,559,000` uAh, 4.57%/h.
+  This is strong evidence that the user's roughly 5%/h report is real on this
+  device in native s2idle. It is still a one-window gauge measurement, not a
+  wall-power measurement or proof of root cause.
+- Integer capacity fell from 75% to 72% over the window, consistent in scale
+  but coarse. Instantaneous `current_now` varied from -660,660 to -742,327 uA
+  and should not replace the integrated counter. Voltage changed from 4,021,250
+  to 4,009,378 uV; battery temperature from 26.0 C to 25.0 C.
+- Wake attribution matched `rtc0`: IRQ 199's `pm8xxx_rtc_alarm` count advanced
+  once, the PM wakeup IRQ stayed 199, and the RTC wakeup source matched. The
+  separate `battery` wakeup-source counters also advanced by +2 active/+2
+  events. This is an unresolved counter detail, not evidence that the battery
+  woke the system; inspect source snapshots/logs before interpreting it.
+- Raw receipt: `.external-research/sm8550-suspend-lab-runs/20260918T025221Z-0dd0e448a37f/`;
+  derived metrics are in `device/derived/summary.json`, raw battery readings in
+  `device/pre/power_supplies.json` and `device/post/power_supplies.json`, and
+  wake sources/IRQ evidence in the matching pre/post snapshots plus the
+  summary. The independent full-window interpretation should be reviewed
+  before using the rate as anything more than strong supporting evidence.
+
+### 2026-09-18 03:25 UTC — baseline cleanup and live device state verified
+
+- Run cleanup restored `/sys/class/rtc/rtc0/wakealarm` to empty, left tracing
+  and transient mode unchanged, and made no radio changes. The pre-run and
+  post-cleanup receipts both show Bluetooth powered/on and Wi-Fi radio enabled.
+  Post-resume health reported `wlp1s0` down/no carrier despite Wi-Fi radio being
+  enabled, so treat “Wi-Fi preserved” as radio policy, not an active connection.
+- Direct SSH at 03:25 UTC confirms the same boot ID, battery discharging at
+  72%, USB/wireless/UCSI online flags all zero, Wi-Fi radio enabled, Bluetooth
+  powered/on, and an empty RTC alarm. The battery counter had continued to
+  decline after the 03:22 snapshot while awake, as expected for a powered-on
+  idle device; this is outside the measured sleep interval.
+- The `battery` wakeup-source row advanced active/event counts by +2 each, but
+  its `wakeup_count` stayed 0 and `prevent_suspend_time` stayed 0. The RTC row
+  advanced +2 too, and the distinct RTC IRQ evidence matches the sole expected
+  wake. Therefore the battery row does not currently identify an actual
+  battery-originated wake; its extra event activations remain unexplained but
+  are not evidence of repeated wakeups in this run.
+
+### 2026-09-18 03:26 UTC — launch matched Bluetooth-off 30-minute control
+
+- Next discriminator: compare a 30-minute unplugged, untraced native s2idle
+  window with Bluetooth powered off against baseline run
+  `20260918T025221Z-0dd0e448a37f`, which had Bluetooth powered on. Preserve
+  Wi-Fi radio policy (enabled, though its interface had no carrier/down), use
+  the same boot/image/kernel, and collect the same integrated battery counter.
+- Hypothesis: if Bluetooth materially accounts for Nova's roughly 5%/h drain,
+  the charge-counter loss should fall substantially in the Bluetooth-off
+  window. Cross-device issue #264 makes this worth testing, while earlier
+  five-minute Nova samples were too noisy to decide.
+- No kernel/image/software change; trace profile remains `none`. Run is
+  authorized as a bounded 30-minute control, not a multi-hour test. Await the
+  post-run counter, RTC-only wake evidence, and cleanup/state verification.
+
+### 2026-09-18 03:27 UTC — independent audit refines normalization and meter caveat
+
+- A second review of the archived raw uevents confirms `CHARGE_NOW` and
+  `CHARGE_COUNTER` are the same Qualcomm BATT_CHG_COUNTER firmware value. They
+  agree because they are aliases, not independent sensors; the integrated
+  delta remains the best available device-side drain estimate.
+- Normalizing `charge_now` by the stable `charge_full=6,559,000` uAh gives
+  75.08% before and 72.79% after, a 2.29 percentage-point loss in 0.5005h,
+  or 4.58%/h. A 5%/h loss at that full counter would be about 328mAh/h,
+  compared with the measured 300mAh/h. This is close enough to support the
+  reported approximate rate, but remains one fuel-gauge window without an
+  external power meter or repeated hour-long validation.
+- Integer capacity's 75%→72% is only directional corroboration: it is coarse
+  and does not exactly follow charge_now normalization. Pre/post current_now
+  are instantaneous endpoint samples (-660,660 and -742,327 uA), not a window
+  average; prefer the 300mA counter-derived average.
+
+### 2026-09-18 03:28 UTC — RTC wake attribution has direct IRQ and kernel-log proof
+
+- Independent receipt review located the missing direct wake evidence in
+  `device/post/logs/journal-kernel.txt`: kernel records “PM: Triggering wakeup
+  from IRQ 199” before resume. The 1,800-second RTC alarm was armed, IRQ 199
+  (`pm8xxx_rtc_alarm`) advanced exactly once (20→21), and the same-boot s2idle
+  interval completed successfully. This confirms the intended RTC wake; the
+  unchanged `pm_wakeup_irq=199` is stale pre-existing state and adds no proof.
+- Battery wakeup-source active/event counts rose 176→178 and 184→186, but
+  `wakeup_count` remained 0 and total active time grew only 9 ms. RTC source
+  counts also rose +2 despite exactly one RTC IRQ and one resume. These
+  co-increments have no timestamp/IRQ mapping in the receipt, so they cannot be
+  interpreted as two wakes or as battery-caused wakes.
+- The harness verified Wi-Fi radio enabled and Bluetooth powered/unblocked
+  before and after; it did not test connectivity. Radio cleanup made no state
+  changes, RTC was restored to empty, and temporary debug flags were restored.
+
+### 2026-09-18 03:30 UTC — fetched upstream main has new suspend-adjacent changes
+
+- Read-only `git fetch upstream main` advanced the local remote-tracking ref from
+  `b3ee817` to `c97ecf6` while leaving the worktree untouched. Compared with
+  this research branch's HEAD, upstream adds a kernel image bump associated
+  with the ath12k Wi-Fi reconnect fix and changes the USB autosuspend udev rule
+  to target only the DWC3 controller instead of the full USB tree (merged PRs
+  #465 and #442). The latter overlaps the lab's earlier DWC3/runtime-PM
+  investigation and could affect interpretation of image-level comparisons.
+- The active Nova baseline and new Bluetooth-off control were captured on
+  Armada version `20260915.feca679`, kernel `7.2.3`. I have not yet verified
+  whether that running image includes the upstream USB-rule change or the
+  exact bumped kernel package. Do not assume the stale branch's source view
+  matches the device. Inspect installed receipts before rebasing/merging or
+  attributing a behavior change to either commit.
+- Fetch updated only Git's remote-tracking metadata; no branch merge, source
+  edit, build, image change, or device mutation was made by this discovery.
+
+### 2026-09-18 03:31 UTC — Nova's recorded source predates both fetched upstream changes
+
+- Matched the baseline's recorded Armada version `20260915.feca679` to the
+  corresponding Git tree. That tree does **not** contain upstream commit
+  `98d8f53` (PR #442) or `a4daf4c` (PR #465): its USB udev rule still sets
+  `power/control=auto` on every USB leaf device as well as the DWC3 controller,
+  and its `Containerfile` pins kernel image digest
+  `4659cccbecd0015e5ab6ffb566d59e19b5514f889914b7ecbba2dad65addb550`.
+  Current fetched upstream main removes the USB-leaf rule and pins
+  `9987eead115330b3ad8c0b5b73dbdbe8319e86a1c3200ae2636c5835a7a5e673`.
+- Therefore both the completed Bluetooth-on baseline and in-progress control
+  are from the pre-PR-442 / pre-PR-465 system image. The USB-rule correction
+  explicitly says its s2idle impact should be nil because system suspend drops
+  the DWC3 interconnect vote regardless of the runtime `power/control` value;
+  however, the device's actual active rule and kernel image must be verified
+  after wake before treating the new upstream image as equivalent.
+- This is a real freshness limitation: counter comparison isolates Bluetooth
+  only within the older Nova image. The next low-cost validation after the
+  current control is to read the installed USB rule, active kernel package
+  provenance, and USB device runtime-PM states over SSH; no build/update has
+  been applied.
+
+### 2026-09-18 03:33 UTC — research branch merged current upstream main
+
+- Merged fetched `upstream/main` (`c97ecf6`, including PRs #442 and #465) into
+  `feat/sm8550-suspend-lab`; merge commit is `15c9842`. The three in-progress
+  modified research files were stashed and restored cleanly; `git diff --check`
+  passes. The branch is now five commits ahead of its origin tracking branch;
+  it has not been pushed.
+- The merged source now uses upstream's DWC3-only USB autosuspend rule and
+  kernel package digest `9987eead115330b3ad8c0b5b73dbdbe8319e86a1c3200ae2636c5835a7a5e673`.
+  The live test remains on the older Nova image `20260915.feca679`; the merge
+  changes only the research checkout, not the running device or detached
+  experiment.
+
+### 2026-09-18 03:35 UTC — PR #442's reverted USB-leaf rule likely did not affect this baseline
+
+- Parsed the 30-minute baseline's pre/post runtime-PM inventory. It contains
+  zero `/sys/class/usb` leaf-device entries both before and after, so the old
+  blanket `SUBSYSTEM=="usb"` udev rule had no enumerated USB child to change
+  during this cable-free test.
+- The DWC3 platform controller itself already had
+  `power/control=auto` and `runtime_status=suspended` before the test
+  (`runtime_suspended_time=38,596,680 ms`). This is the controller rule retained
+  by PR #442. After resume it was active in the post snapshot, which is a
+  post-wake state and does not show its residency during the sleep window.
+- This weakens PR #442's relevance to the measured 4.58%/h drain on the current
+  cable-free Nova run: the rule's reverted leaf-device clause had no matching
+  device here, and the retained DWC3 autosuspend was already active before
+  sleep. It does not test USB-docked use or prove behavior inside the sleep
+  transition. Receipts: run `20260918T025221Z-0dd0e448a37f`,
+  `device/pre/runtime_pm.json` and `device/post/runtime_pm.json`.
+
+- The matched Bluetooth-off control is run
+  `20260918T032612Z-8e8f3f46c215`, requested at 03:26:12 UTC on the same
+  `armada` target, `s2idle`, 1,800 seconds, Wi-Fi policy preserved, Bluetooth
+  off, trace profile `none`. Its host manifest captured the pre-merge research
+  HEAD `b42a3d5`; the upstream merge happened after launch and does not change
+  the already-running device-side agent. The device has not yet returned its
+  post-run receipt.
+
+### 2026-09-18 03:36 UTC — baseline entered sleep with connected ath12k Wi-Fi
+
+- Correction to the 03:31 and 03:35 shorthand: although the post-resume health
+  snapshot showed `wlp1s0` down/no carrier, the baseline's **pre-suspend**
+  runtime-PM snapshot shows Wi-Fi `carrier=1`, `operstate=up`, radio unblocked,
+  and PCIe device `0000:01:00.0` driven by `ath12k_wifi7_pci` with
+  `power/control=on` and runtime status `active`. Its Wi-Fi connection state
+  before sleep therefore was not “radio enabled but disconnected.”
+- The first 30-minute run is a connected-Wi-Fi, Bluetooth-on baseline. Its
+  post-resume snapshot reports `wlp1s0` down and carrier 0, so the sleep/wake
+  cycle did not preserve the link at capture time. The merged #465 change is
+  specifically an ath12k reconnect kernel bump; its possible relation is
+  resume/reconnect reliability, not yet battery drain.
+- The ongoing Bluetooth-off run uses `--wifi-state preserve`, which does not
+  guarantee identical association state. Once its receipt returns, compare
+  `pre/runtime_pm.json` and radio metadata against this baseline. If Wi-Fi was
+  not up/carrier before its suspend, its charge delta cannot cleanly isolate
+  Bluetooth from the first run. No radio conclusion is drawn yet.
+
+### 2026-09-18 — baseline kernel logs show Wi-Fi and DWC3 system-suspend callbacks succeeded
+
+- Read-only analysis of the baseline's kernel PM trace shows the
+  `ath12k_wifi7_pci` suspend-late callback returned 0 after ~93 ms and its
+  suspend-noirq callback returned 0. The Qualcomm WCN power-sequence suspend
+  callback also returned 0. On wake, ath12k resume-noirq returned 0, while
+  resume-early took ~556 ms and the driver logged its chip/firmware identity.
+  This is orderly callback completion, not evidence that Wi-Fi caused the
+  charge loss or that firmware remained in its lowest-power state.
+- DWC3's `genpd_suspend_noirq` also returned 0. Together with the controller's
+  pre-run runtime-suspended state and zero USB leaf devices, these observations
+  lower the priority of DWC3/USB as the immediate drain cause in this
+  cable-free run. They do not expose AOP's accepted power level or DDR
+  residency.
+- After the cycle the netdev was `wlp1s0` down/carrier 0 in the capture. The
+  newer upstream #465 kernel bump is described only as an ath12k reconnect fix;
+  it may address this resume/link symptom, but no battery benefit is established.
+  Raw callback timeline: `device/post/logs/journal-kernel.txt`, lines 52-53,
+  338-380, 490, 565-595, and 879-904 for run
+  `20260918T025221Z-0dd0e448a37f`.
+
+### 2026-09-18 — upstream PR details narrow USB and Wi-Fi hypotheses
+
+- Reviewed the merged PR metadata and upstream patch descriptions. PR #442's
+  change is exactly deletion of the USB-leaf autosuspend rule while retaining
+  DWC3's platform autosuspend rule. Its rationale is hub/input re-enumeration;
+  the PR says system suspend suspends the USB tree and DWC3 drops its vote
+  independently of `power/control`. Baseline snapshots show no `/sys/class/usb`
+  entries and no USB child in DWC3's recorded device subtree, but the run did
+  not capture a literal `/sys/bus/usb/devices` listing. After the current test,
+  run that read explicitly before asserting there are no USB children.
+- PR #465 changes only the kernel package image digest at the Armada layer.
+  The package-side ath12k fix is about scan-priority delivery/WCN7850 scan
+  refusal and reconnect delay after rfkill changes, not a documented suspend
+  power-state change. The baseline log has no recorded scan refusal; its one
+  system wake has only 2.38 seconds of monotonic-clock advance across the
+  30-minute boottime interval, so repeated userspace reconnect loops are not
+  evident. The 556 ms ath12k resume-early latency is a resume/connectivity
+  lead only.
+- Provenance caveat: the Nova reports source version `20260915.feca679`, whose
+  source tree pins the old kernel image digest; its `uname -r` is `7.2.3`, and
+  the device receipt does not include a package/image digest proving which
+  kernel image was actually booted. Treat the old-digest conclusion as likely
+  from image provenance, not a direct runtime package hash.
+
+### 2026-09-18 — PR #465 kernel fix is a WMI scan-priority assignment
+
+- Read-only `gh api` inspection of Armada Packages commit
+  `adfcaf03f27faf5f8cfa1038551b6b55e78061ff` confirms the kernel patch adds
+  one assignment in `ath12k_wmi_send_scan_start_cmd()`, copying the driver's
+  computed scan priority into the outgoing WMI command. Its patch rationale is
+  scan refusal/reconnect delay after rfkill unblock on WCN7850. It contains no
+  suspend-state or power-management change. The same commit only updates the
+  package patch manifest and series entry around that kernel patch.
+- This makes #465 an unrelated radio-resume/connectivity fix for the drain
+  question, although it may improve the observed post-resume netdev/link
+  recovery. Testing its intended reconnect behavior is a simple rfkill
+  block/unblock timing check; testing battery impact would require an A/B on
+  the newer prebuilt kernel package and is not needed to interpret the current
+  Bluetooth control.
+
+### 2026-09-18 — the 30-minute APSS counter matches suspend time; DDR counters still do not name residency
+
+- Baseline QCOM subsystem stats show APSS count +3 and accumulated duration
+  +34,549,657,958 ticks, which converts to 1,799.461 seconds at 19.2 MHz,
+  essentially the measured 1,799.476-second suspend interval. Named AOSD, CXSD,
+  and scalar DDR stats did not change at all. This is consistent with APSS
+  subsystem sleep across the whole interval, without a corresponding named
+  system/collapse statistic; it still cannot distinguish firmware counter
+  coverage from an unentered physical state.
+- The separate DDR LPM `0xd0` duration advanced 34,702,115,760 ticks. The sum
+  of all DDR frequency-bucket deltas was 34,702,115,840 ticks, a difference of
+  only 80 ticks (about 4.2 microseconds). The 547 MHz bucket accounts for
+  34,552,680,960 ticks, about 1,799.6 seconds at that scale. Thus the raw
+  `0xd0` value tracks the sum of DDR frequency-duration records almost exactly;
+  it is not independent evidence of memory self-refresh/collapse. The ID's
+  physical mode remains undocumented.
+- Exact before/after counters: `device/pre/qcom_stats.json` and
+  `device/post/qcom_stats.json` in baseline run
+  `20260918T025221Z-0dd0e448a37f`.
+
+### 2026-09-18 — refreshed related issue and PR status
+
+- Read-only `gh` refresh: [issue #264](https://github.com/armada-os/armada/issues/264)
+  remains open with its Odin 2 report of 25 percentage points lost in 90 minutes
+  with Bluetooth on, versus about 1%/hour after hard rfkill block. No comments
+  or update since August 17. This is a cross-device hypothesis, not Nova proof.
+- [Issue #265](https://github.com/armada-os/armada/issues/265) remains open;
+  its Odin 2 warmth-after-Bluetooth-fix report has an Odin 3 Max confirmation
+  comment from August 21. It concerns residual warmth after drain is reduced,
+  a separate clue that sleep may still fail to reach deeper physical states.
+- [PR #235](https://github.com/armada-os/armada/pull/235) is still an open
+  fake-suspend-only radio opt-in and reports `mergeStateStatus=DIRTY` (latest
+  update/comment September 12). Correction to the earlier 03:00 entry: GitHub
+  no longer reports `UNKNOWN`. Its ~300→180mA Wi-Fi+Bluetooth-off measurement
+  is from fake suspend on RP6, not native s2idle and not a Nova control.
+  No newly open native-s2idle fix appeared in the refreshed query.
+
+### 2026-09-18 — matched Bluetooth-off s2idle control is in progress
+
+- Detached 30-minute run `20260918T032612Z-8e8f3f46c215` started at
+  `2026-09-18T03:26:12Z`, requesting explicit `s2idle`, unplugged, Bluetooth
+  off, Wi-Fi state preserved, and no tracing. Its host manifest records the
+  requested controls and runner/source provenance. The first status attempt
+  timed out while the Nova was suspended, consistent with the prior RTC-timed
+  run; no result has been retrieved yet.
+- This is intended as a matched radio control against
+  `20260918T025221Z-0dd0e448a37f`, with Bluetooth as the only requested
+  variable. Interpretation still depends on the new run's recorded pre-sleep
+  Wi-Fi carrier/operstate matching the connected baseline; `preserve` retains
+  whatever Wi-Fi state existed and does not force association.
+- Harness review confirms the control: Wi-Fi changes use `nmcli radio
+  wifi off/on`, while `preserve` performs no association control. The pre-run
+  receipt `device/meta/radio-before.json` records the radio toggle, and
+  `device/pre/runtime_pm.json` records `wlp1s0` carrier/operstate plus ath12k
+  runtime state. The baseline began with Wi-Fi associated/up and Bluetooth
+  powered/unblocked. If the current run's Wi-Fi link does not match, the
+  least-work next isolation is another 30-minute unplugged s2idle with Wi-Fi
+  explicitly off and Bluetooth preserved/on; compare it with the connected
+  baseline to estimate the aggregate connected-Wi-Fi cost.
+- Expected RTC resume is about `03:56:12Z`. On retrieval, first verify the
+  run completed in the same boot, actual suspended duration, cleanup/radio
+  restoration, battery counter delta, and Wi-Fi pre-state before attributing
+  any drain difference to Bluetooth.
+
+### 2026-09-18 — 30-minute Bluetooth-off control completed
+
+- Run `20260918T032612Z-8e8f3f46c215` completed successfully in the same boot,
+  with `s2idle` clock separation of `1799.209` seconds and battery-counter
+  measurement interval `1801.729` seconds. RTC IRQ 199 incremented once and
+  matched the armed wake; monotonic time advanced 2.520 seconds. No reboot or
+  unintended input-power connection was recorded.
+- This is a close radio match to baseline
+  `20260918T025221Z-0dd0e448a37f`: both started with Wi-Fi enabled,
+  `wlp1s0 carrier=1, operstate=up`, and ath12k runtime-active; Bluetooth
+  started powered/unblocked in both, but was rfkill-blocked only for this run.
+  Both remained cable-free. Battery charge-counter loss was `131,180 uAh`
+  (`262.1 mA` gauge-derived average; capacity 72% to 70%) with Bluetooth off,
+  versus `150,201 uAh` (`300.1 mA`; 75% to 72%) in the baseline. Normalized
+  using `charge_full=6,559,000 uAh`, that is about `4.00%/h` versus
+  `4.58%/h`, a roughly 13% reduction in this one matched pair. This suggests
+  Bluetooth contributes some drain on Nova, but it does not account for all
+  of the reported ~5%/h; replication is still needed before estimating effect.
+- AOSD/CXSD/scalar DDR counters remained zero. APSS advanced by 3 entries and
+  `34,543,989,333` ticks. Separate DDR LPM `0xd0` advanced
+  `34,705,167,980` ticks, and the 547 MHz bucket advanced
+  `34,571,155,456` ticks. As in baseline, those separate records span about
+  the sleep interval without naming the physical DDR mode.
+- Cleanup restored the Bluetooth rfkill soft-block to unblocked, but its
+  follow-up `bluetoothctl power on` returned 1; the receipt captured the HCI
+  as still not powered after rfkill unblock. Therefore the saved original
+  Bluetooth power state (`yes`) may not have been restored. Verify current
+  live state and restore it before any next suspend run.
+- Evidence is in the run archive's `device/{pre,post}/power_supplies.json`,
+  `device/{pre,post}/runtime_pm.json`, `device/{pre,post}/qcom_stats.json`,
+  `device/meta/radio-before.json`, `device/meta/radio-cleanup-after-rfkill.json`,
+  `device/cleanup/radios.json`, `device/derived/summary.json`, and
+  `result.md`.
+- Correction after delayed read-only verification: `bluetoothctl power on`
+  returned `org.bluez.Error.Busy` during cleanup, but a fresh host preflight at
+  `2026-09-18T04:00:12Z` shows `Powered: yes`, `PowerState: on`, and Bluetooth
+  soft/hard block both `no`; Wi-Fi radio is also enabled. The radio recovered
+  without a manual change. The first preflight output was retained under
+  `../sm8550-suspend-lab-runs/preflight-after-20260918T032612Z-8e8f3f46c215.json/`.
+
+### 2026-09-18 — source audit tightens what zero Qualcomm sleep counters mean
+
+- Rechecked Linux v7.2 `qcom_stats.c`: `apss` is read from its own SMEM
+  subsystem record, while the three scalar AOSD/CXSD/DDR files are separately
+  read from the RPMh stats window. The `ddr_stats` LPM/frequency table is a
+  third interface; on SM8450+ Linux asks AOP to sync its duration fields with
+  QMP before displaying them. Linux decodes the `0xd0` LPM identifier but
+  supplies no physical-state name for it.
+- So the 30-minute baseline's APSS and DDR-table increments do not validate
+  the scalar AOSD/CXSD/DDR records. Those records staying zero means no
+  transition was recorded in those named firmware counters, assuming the
+  firmware updates them on this image; it does not prove that DDR had no
+  low-power residency or identify physical rail state. The live data rules
+  out a completely static/empty stats interface, but leaves the named-counter
+  update path and AOP's selected physical state unresolved. The driver formats
+  firmware's fields but does not validate that these three payloads advanced
+  on this Nova image, so the conditional must remain explicit.
+- Source: [Linux v7.2.3 qcom-stats binding](https://github.com/gregkh/linux/blob/v7.2.3/Documentation/devicetree/bindings/soc/qcom/qcom-stats.yaml#L12-L52)
+  and [qcom_stats.c](https://github.com/gregkh/linux/blob/v7.2.3/drivers/soc/qcom/qcom_stats.c#L49-L63),
+  [scalar and DDR readers](https://github.com/gregkh/linux/blob/v7.2.3/drivers/soc/qcom/qcom_stats.c#L129-L222),
+  [RPMh record naming/layout](https://github.com/gregkh/linux/blob/v7.2.3/drivers/soc/qcom/qcom_stats.c#L244-L287),
+  [SM8550 stats memory/QMP node](https://github.com/gregkh/linux/blob/v7.2.3/arch/arm64/boot/dts/qcom/sm8550.dtsi#L4651-L4666).
+- A potentially useful follow-up surfaced in the kernel history: an earlier
+  Qualcomm DDR-stat patch requested `{class: ddr, res: drvs_ddr_votes}` over
+  AOSS QMP and read an appended table of 18 aggregated DDR AB/IB votes. The
+  current upstream stats code intentionally includes DDR LPM/frequency data
+  but not that vote-table request; the later series explicitly says resource
+  vote tables, possibly including CX rail votes, are a separate feature.
+  This could help identify active bandwidth clients, but does not yet show
+  suspend-time vetoes and has not been validated against Nova's AOP firmware.
+  After the current run, check whether the existing kernel can support a tiny
+  diagnostic module; do not infer compatibility or issue this QMP request
+  until its target memory layout and query behavior are confirmed.
+- Source: [earlier qcom_stats vote-table patch](https://lkml.iu.edu/2311.3/07915.html#168),
+  [later series scope that omits DDR/CX vote tables](https://patchew.org/linux/20250429-ddr._5Fstats._5F-v1-0-4fc818aab7bb%40oss.qualcomm.com/diff/20250611-ddr._5Fstats._5F-v5-0-24b16dd67c9c%40oss.qualcomm.com/).
+
+### 2026-09-18 — next 30-minute Wi-Fi-off control launched
+
+- Read-only preflight `preflight-20260918T040012Z-35c1744e2524` confirmed the
+  Nova was back on the same boot and image, Bluetooth powered/on with both
+  rfkill blocks clear, and Wi-Fi radio enabled. The earlier cleanup's
+  transient BlueZ `Busy` error had cleared without manual intervention.
+- Started `20260918T040206Z-2913994f60b9` at `04:02:08Z`: 1,800-second
+  unplugged `s2idle`, tracing off, Wi-Fi radio off, Bluetooth preserved. This
+  isolates the enabled-Wi-Fi condition against the 30-minute baseline, where
+  both radios were on, and complements the Bluetooth-off run. It estimates
+  each radio's effect against the common both-on baseline; interactions remain
+  unmeasured. The run's pre-suspend `wlp1s0` carrier/operstate must still be
+  checked before calling Wi-Fi disabled an associated-link comparison.
+- Expected RTC wake is about `04:32:08Z`. Retrieve after network recovery,
+  verify same boot and cleanup restored Wi-Fi/Bluetooth/RTC, then compare the
+  gauge charge-counter loss per measured hour. No result is available yet.
+
+### 2026-09-18 — QMP diagnostic route has exported APIs but no userspace read endpoint
+
+- Linux v7.2.3 exports GPL `qmp_get()` and `qmp_send()`. `qmp_get()` requires
+  a client device whose DT node has a `qcom,qmp` phandle; the SM8550
+  `qcom,rpmh-stats` node already has that phandle. `qmp_send()` transmits one
+  request and waits for AOSS acknowledgement. That leaves a small kernel
+  diagnostic consumer technically possible without changing the sleep
+  firmware interface, provided its module ABI can be satisfied.
+- The shipped `/sys/kernel/debug/qcom_aoss` entries are mode `0200` and have
+  only a write handler. They issue four fixed controls: DDR frequency,
+  prevent AOSS sleep, prevent CX collapse, and prevent DDR collapse. They
+  provide no readback or arbitrary QMP-message interface, so they cannot
+  safely substitute for a stats query. No control was written.
+- Before a module experiment, still verify `CONFIG_MODVERSIONS`, module
+  signing policy, exported symbols in the running kernel, and availability of
+  matching headers/`Module.symvers`. The historic `drvs_ddr_votes` message and
+  appended table format also need confirmation against Nova's AOP/shared-memory
+  layout; it is a lead, not a validated query. No module or kernel change was
+  built or loaded.
+- Sources: [qmp_send acknowledgement and exports](https://github.com/gregkh/linux/blob/v7.2.3/drivers/soc/qcom/qcom_aoss.c#L1860-L1955),
+  [qmp_get phandle lookup/export](https://github.com/gregkh/linux/blob/v7.2.3/drivers/soc/qcom/qcom_aoss.c#L2206-L2258),
+  [fixed write-only QMP debugfs controls](https://github.com/gregkh/linux/blob/v7.2.3/drivers/soc/qcom/qcom_aoss.c#L2301-L2418),
+  [SM8550 QMP phandle](https://github.com/gregkh/linux/blob/v7.2.3/arch/arm64/boot/dts/qcom/sm8550.dtsi#L4651-L4666).
+
+### 2026-09-18 04:06 UTC — Wi-Fi-off run remains asleep at early status check
+
+- A status attempt at `04:06:47Z`, about four minutes after the planned start,
+  timed out connecting to SSH. The run is RTC-timed for about `04:32:08Z`, so
+  this is consistent with the Nova being suspended and is not evidence of a
+  run failure. The host archive still contains only its manifest; wait until
+  the RTC wake window plus Wi-Fi recovery before checking status or retrieving
+  results. No device state was changed by the failed SSH attempt.
+
+### 2026-09-18 — if DDR votes are queried, extend qcom_stats at its owned dynamic table
+
+- A closer source comparison refines the earlier overlap warning. Linux v7.2.3
+  `qcom_stats` already owns the `0x0c3f0000/0x400` mapping. Its `ddr_stats`
+  reader sends `{class: ddr, action: freqsync}`, reads the live entry count,
+  then copies exactly that many 16-byte records from the table at offset 8
+  within the configured DDR area (Nova's table begins at resource offset
+  `0xb8`).
+- Qualcomm's older vote-table patch then sends
+  `{class: ddr, res: drvs_ddr_votes}` and reads 18 vote words immediately after
+  the actual header plus `entry_count * sizeof(entry)` payload. The community
+  diagnostic's fixed `QMP +0xf01f0` address is the same as stats-resource
+  offset `0x1f0`; that assumes 19 entries. A different entry count moves the
+  vote table, so copying that constant is not robust for Nova.
+- If a vote snapshot becomes worth building, the smallest credible design is
+  to extend the existing `qcom_stats` reader, reuse its mapping/QMP handle,
+  calculate the tail from the live entry count, and bounds-check it against
+  the 0x400 resource. Do not add a competing standalone `ioremap` or widen
+  QMP's resource. Even a correct awake vote snapshot would identify current
+  aggregate DDR bandwidth requests only; it would not establish a
+  suspend-time veto or AOP's accepted sleep state. No patch or query was made.
+- Sources: [v7.2.3 DDR reader, QMP sync, and dynamic entry-count copy](https://github.com/gregkh/linux/blob/v7.2.3/drivers/soc/qcom/qcom_stats.c#L1356-L1408),
+  [v7.2.3 probe mapping and stats offset configuration](https://github.com/gregkh/linux/blob/v7.2.3/drivers/soc/qcom/qcom_stats.c#L1541-L1613),
+  [Qualcomm's vote-table placement after the actual stats payload](https://lkml.iu.edu/2311.3/07915.html#168),
+  plus the Nova resource declaration at
+  [SM8550 DTS](https://github.com/gregkh/linux/blob/v7.2.3/arch/arm64/boot/dts/qcom/sm8550.dtsi#L4651-L4666).
+
+#### Addendum — the current debugfs dump does not expose `entry_count`
+
+Both completed 30-minute `ddr_stats` dumps print 14 recognized rows (four LPM
+IDs and ten frequency buckets), but upstream reads `entry_count` without
+printing it and skips zero/unknown frequency rows. Therefore 14 is only a
+lower bound, not a safe buffer-layout value; the fixed `0x1f0` location cannot
+be confirmed from existing userspace output. A diagnostic in the current
+reader should report the count it already reads and derive/bounds-check the
+vote tail from that value.
+
+### 2026-09-18 04:12 UTC — related Armada sleep issues and radio PR checked
+
+- Current open Armada issue [#264](https://github.com/armada-os/armada/issues/264)
+  reports Bluetooth remaining powered on AYN Odin 2 and a user-reported fall
+  from about 25%/90 min to ~1%/h after rfkill-blocking Bluetooth in both
+  `s2idle` and `deep`. That is a useful SM8550-family comparison, but it is a
+  different board/firmware and a much larger BT effect than the Nova's one
+  matched 30-minute result so far (about 4.58%/h both radios on vs 4.00%/h BT
+  blocked with Wi-Fi associated). Do not assume its root cause or magnitude
+  transfers to Nova. Open follow-up [#265](https://github.com/armada-os/armada/issues/265)
+  reports localized warmth despite low drain and suggests sampling current
+  and wakeup sources; Odin 3 warmth is also reported in a comment.
+- Open [PR #235](https://github.com/armada-os/armada/pull/235) adds opt-in
+  Wi-Fi/Bluetooth rfkill around **fake-suspend** only. Its RP6 measurement is
+  ~300 mA with radios on, ~180 mA off, and ~17 seconds to restore Wi-Fi; no
+  device is opted in by default. It does not modify Nova's native `s2idle`
+  path, but the current Wi-Fi-off control will help separate the radio
+  contribution on Nova.
+- Open [issue #428](https://github.com/armada-os/armada/issues/428), "Add
+  always on sleep debug logs," has an empty body, so its requested behavior
+  cannot be compared with this temporary per-run lab harness yet. No issue or
+  PR was changed, and no message was sent.
+
+### 2026-09-18 — DDR `0xd0` delta duplicates the frequency-bucket total in both 30-minute runs
+
+- Recomputed the raw `ddr_stats` pre/post receipts for both completed 30-minute
+  tests. In baseline `20260918T025221Z-0dd0e448a37f`, the `0xd0` duration
+  increased by `34,702,116,172` ticks; the sum of all DDR-frequency bucket
+  duration deltas was `34,702,116,352` ticks (180 ticks apart). In Bluetooth-off
+  run `20260918T032612Z-8e8f3f46c215`, the corresponding deltas were
+  `34,705,167,568` and `34,705,167,872` ticks (304 ticks apart).
+- The near-exact equality means the observed `0xd0` counter is not independent
+  evidence that DDR entered a deeper low-power mode. Linux source labels this
+  numeric bucket as a DDR LPM statistic but does not name its physical state;
+  its measured duration tracks the total frequency-table time in these runs.
+  The firmware meaning and reason for this equality remain unresolved.
+- This narrows/corrects the 02:35 interpretation: `0xd0` advanced across the
+  sleep window, but that fact alone cannot be used to claim DDR low-power
+  residency. Keep the state opaque pending a vendor definition or independent
+  firmware observation.
+- Raw sources: pre/post `device/{pre,post}/files/sys/kernel/debug/qcom_stats/ddr_stats`
+  in the two run archives above. The public parser labels the number and
+  frequency fields but does not map `0xd0` to hardware state:
+  [Linux v7.2.3 qcom_stats.c](https://github.com/gregkh/linux/blob/v7.2.3/drivers/soc/qcom/qcom_stats.c#L1282-L1408).
+
+### 2026-09-18 — upstream history cautions against restoring the old DDR-vote patch wholesale
+
+- The original 2023 Qualcomm DDR stats implementation, including the DDR vote
+  query, was reverted after reports of boot failures on older SM8150/SDM7180
+  platforms; the revert attributes the breakage to differences in shared
+  RPMh-stats layouts. The author called the data useful but deferred it until
+  it could be enabled conditionally.
+- The later 2025 upstream implementation was reintroduced with per-SoC stats
+  offsets for SM8450-and-newer and provides LPM/frequency counters. It omits
+  the old DDR-vote-table query. Therefore do not restore or transplant the
+  2023 patch as-is. Any vote diagnostic should be a small, explicitly guarded
+  extension to the existing SM8550 `qcom_stats` config, with validated buffer
+  boundaries and a known vote-table layout.
+- Sources: [upstream revert and stated older-SoC layout failures](https://lkml.iu.edu/2312.1/08468.html),
+  [later v5 series scope](https://patchew.org/linux/20250611-ddr._5Fstats._5F-v5-0-24b16dd67c9c%40oss.qualcomm.com/).
+
+## 2026-09-18 04:24 UTC — SM8550 system-domain gap is an s2idle request limitation, not proof of firmware residency
+
+Upstream Linux v7.2 DTS review found that SM8550's PSCI genpd hierarchy ends at `cluster_pd`: its CPU domains have cluster idle states, but there is no parent `system_pd` or `domain_ss3`. SM8750 adds a `system_pd` with a state labeled `domain_ss3` and parameter `0x0200c354`. In PSCI OSI mode, s2idle suspends the genpd hierarchy and passes the selected domain state to `CPU_SUSPEND`; the missing SM8550 system domain is therefore a credible limit on the system-level state Linux can request through this hierarchy. It does not show which state AOP/firmware actually enters.
+
+Do not copy `0x0200c354` into SM8550 based on the SM8750 DTS. The generic binding defines it only as the `power_state` argument; the value's Qualcomm state mapping and firmware prerequisites are not established for Nova. A recent report of repeatable resets on a different Snapdragon X2 platform after requesting that value is a further reason to require exact platform evidence first. The existing `deep` test is not a test of this domain state: `deep` uses PSCI `SYSTEM_SUSPEND`, while the relevant s2idle OSI path uses `CPU_SUSPEND`.
+
+Sources reviewed: [SM8550 DTS](https://github.com/torvalds/linux/blob/v7.2/arch/arm64/boot/dts/qcom/sm8550.dtsi#L369-L385), [SM8550 domain hierarchy](https://github.com/torvalds/linux/blob/v7.2/arch/arm64/boot/dts/qcom/sm8550.dtsi#L781-L833), [SM8750 SS3 state and hierarchy](https://github.com/torvalds/linux/blob/v7.2/arch/arm64/boot/dts/qcom/sm8750.dtsi#L199-L215), [PSCI genpd and s2idle path](https://github.com/torvalds/linux/blob/v7.2/drivers/cpuidle/cpuidle-psci-domain.c#L32-L43), [PSCI suspend paths](https://github.com/torvalds/linux/blob/v7.2/drivers/firmware/psci/psci.c#L501-L545), [generic PSCI binding](https://github.com/torvalds/linux/blob/v7.2/Documentation/devicetree/bindings/arm/psci.yaml#L89-L99), [separate-platform reset report](https://lkml.iu.edu/2609.1/15301.html).
+
+## 2026-09-18 04:26 UTC — Armada Nova board DTS adds no PSCI system-domain state
+
+Checked the checked-out Armada kernel DTS overlay and patch stack. Nova's board DTS includes `qcs8550-retroidpocket-rp6.dts`, which in turn includes `qcs8550-ayn-common.dtsi`; the Nova file only changes model/compatible and panel, touchscreen, and gamepad details. Targeted searches of `kernel/dts` and `kernel/patches` found no SM8550 `system_pd`, `domain_ss3`, or `arm,psci-suspend-param` addition. This agrees with upstream's SM8550 hierarchy finding: Armada's tracked board overlay does not currently supply the missing system-level PSCI OSI state. This is source-tree evidence, not proof of the exact live DTB; confirm the running DT/genpd after the current test resumes.
+
+Local sources: `armada-packages/kernel/dts/qcs8550-retroidpocket-rpnova.dts` (includes RP6 board file and contains only Nova-specific display/touch/gamepad edits) and `armada-packages/kernel/dts/qcs8550-retroidpocket-rp6.dts` (includes AYN common file). Checked source tree: `armada-packages/kernel/dts/` and `armada-packages/kernel/patches/`.
+
+### 2026-09-18 — Qualcomm downstream Kalama corroborates cluster-only OSI topology; system suspend is separate
+
+A source review of Qualcomm's downstream SM8550-family/Kalama device tree found the PSCI domain hierarchy is CPUs under one `CLUSTER_PD`, with the cluster advertising only `CLUSTER_PWR_DN` and `APSS_OFF`. Its `APSS_OFF` label describes cluster E3 / LLCC-off and uses parameter `0x4100c344`; it is not evidence of a whole-system SS3 state. This independently corroborates the public upstream and Armada overlay result, but the downstream tree is from a different SM8550-family device/branch and is medium-confidence corroboration only, not proof of Nova's shipping firmware behavior.
+
+Qualcomm's SM8550-family PSCI `SYSTEM_SUSPEND` implementation for suspend-to-RAM is separately reported in upstream Linux discussion. This supports the distinction already made from the Nova direct `deep` test: firmware implementing SYSTEM_SUSPEND does not show that an s2idle OSI request through CPU_SUSPEND has a system-level domain state. The generic PSCI binding represents OSI with hierarchical domains and per-domain idle-state parameters; generic TF-A documentation describes firmware validation/denial semantics, but is not a Qualcomm firmware contract.
+
+Sources: [Qualcomm downstream Kalama PSCI hierarchy](https://android.googlesource.com/kernel/msm-extra/devicetree/+/refs/heads/android-msm-eos-android13-wear-kr3-pixel-watch/qcom/kalama.dtsi#713) and [cluster sleep-state labels/parameters](https://android.googlesource.com/kernel/msm-extra/devicetree/+/refs/heads/android-msm-eos-android13-wear-kr3-pixel-watch/qcom/kalama.dtsi#316), [SM8550 SYSTEM_SUSPEND discussion](https://lists.openwall.net/linux-kernel/2024/02/23/234#L82-L87), [PSCI DT binding](https://github.com/torvalds/linux/blob/master/Documentation/devicetree/bindings/arm/psci.yaml#L880-L904), [generic TF-A OSI semantics](https://trustedfirmware-a.readthedocs.io/en/v2.14.0/design_documents/psci_osi_mode.html#psci-set-suspend-mode).
+
+### 2026-09-18 04:29 UTC — Armada Odin 2 issue #274 adds measured IRQ and PHY suspects, but is not Nova proof
+
+Read closed Armada issue [#274](https://github.com/armada-os/armada/issues/274), a measured Odin 2 / SM8550 case. On its older `20260817.8b49045` / `7.2.0-rc7` SD-card install, AOSD/CXSD counters stayed at zero during successful `rtcwake -m freeze`; `mmc0` IRQ 170 advanced roughly 28–35 times/s during suspend even while its controller reported runtime-suspended; and the DWC3 USB PHY stayed runtime-active with `power/control=on`. The issue proposes (not confirms) SDHCI clock gating and a USB-PHY management fix; it also mentions CPU0 deep idle disabled by firmware. The issue is closed but provides no follow-up resolution for these observations.
+
+Treat as comparison leads only: the Nova has a different board/storage setup, and our prior Nova DWC3 skip-PHY A/B showed no relevant residency or drain improvement, so the Odin2 PHY report does not override that negative Nova result. Current 30-minute Wi-Fi-off run has tracing disabled and cannot reveal in-sleep IRQ rates; do not infer that its aggregate pre/post IRQ deltas exclude an IRQ storm. Once this run returns, compare Nova's DT/storage path and inspect its captured interrupt receipts; a short targeted IRQ trace would be a separate next test only if this remains plausible.
+
+### 2026-09-18 04:31 UTC — Nova root storage is not the mmc0 SD slot from Odin 2 issue #274
+
+The live Nova preflight at `preflight-after-20260918T032612Z-8e8f3f46c215.json/preflight-20260918T040012Z-35c1744e2524.json` reports `/` as the expected composefs overlay and the backing `/sysroot` Btrfs partition as `/dev/sda20` (`PARTLABEL=ARMADA_ROOT`). Thus Nova is not booted from the `mmc0` SD slot described as Odin 2's rootfs in issue #274; its specific “do not gate the rootfs SDHCI” constraint does not transfer. This storage map does not rule out `mmc0` generating interrupts on Nova, and the current test's aggregate pre/post IRQ snapshots cannot expose a suspend-only rate. Check its live `mmc0`/UFS mapping and use an in-sleep trace only if evidence warrants it.
+
+### 2026-09-18 04:32 UTC — Wi-Fi-off 30-minute run: first post-RTC SSH check timed out
+
+At 04:32:13 UTC, about five seconds after the nominal 30-minute RTC wake, `host status` for `20260918T040206Z-2913994f60b9` timed out connecting to `192.168.0.20:22`. This is only the first reconnect check; it does not establish missed RTC wake or a failed run. Prior Wi-Fi-radio-off cleanup took several minutes for SSH/Wi-Fi to return. Wait briefly, then retry status; retrieve only after SSH and cleanup are available.
+
+### 2026-09-18 04:39 UTC — Wi-Fi-off 30-minute control completed on Nova
+
+Run `20260918T040206Z-2913994f60b9` completed and was retrieved. It selected/observed `s2idle`, had 1799.192 s suspend-clock separation, returned through the expected RTC wake source, kept the same boot ID, and reported suspend success. The device pre-state had Wi-Fi enabled and connected/up (`wlp1s0`, carrier 1; ath12k PCI device runtime-active), Bluetooth powered and rfkill-unblocked, battery discharging at 69%, and USB/wireless supplies offline. The run disabled only Wi-Fi; cleanup restored Wi-Fi and the RTC alarm, with no trace/debug controls changed. Device-side checksums passed for all 4,433 files.
+
+Battery charge-counter loss was 82,644 uAh over 1801.557 s, average gauge-derived draw 165.15 mA, about 2.52%/h using the captured 6,559,000-uAh full-charge value; capacity moved 69% to 68%. The matched 30-minute single-run samples currently read: both radios on 300.09 mA / 4.575%/h; Bluetooth blocked with Wi-Fi on 262.11 mA / 3.996%/h; Wi-Fi off with Bluetooth on 165.15 mA / 2.518%/h. This points to a substantial Wi-Fi-associated reduction, but each condition has only one run and gauge/start-condition noise remains. Repeat the Wi-Fi-off/Bluetooth-on run before treating the difference as stable.
+
+AOSD, CXSD, and scalar DDR sleep counters again had zero count/duration deltas. The opaque DDR `0xd0` duration advanced 34,702,963,010 ticks, within 190 ticks of the sum of the DDR frequency-bucket deltas (34,702,963,200); it is not independent proof of a self-refresh residency. IRQ 170 `mmc0` advanced only 48 counts during the 1799-s interval, comparable to the other two Nova runs (44 and 48), not the Odin 2 issue's reported ~28–35/s storm. `ufshcd`, `apps_rsc`, and `arch_timer` advanced 17,123, 10,600, and 19,687 counts respectively; these were similar across the other two Nova runs, so they are persistent leads, not evidence of a Wi-Fi-off-specific effect or confirmed wakeups. The pre/post IRQ snapshots cannot locate those events within suspend with per-event timing.
+
+Evidence: `device/derived/summary.json`, `device/pre/power_supplies.json`, `device/pre/runtime_pm.json`, `device/pre/qcom_stats.json`, `device/post/qcom_stats.json`, `device/pre/interrupts.json`, `device/post/interrupts.json`, `device/cleanup/summary.json`, and `checksum-verification.json` under the run archive. Conclusion remains observation-only; no code, kernel, DTB, or device policy was changed.
+
+### 2026-09-18 04:40 UTC — repeat Wi-Fi-off/Bluetooth-on 30-minute control started
+
+Started run `20260918T043959Z-8e885685e77c` on target `armada`: explicit `s2idle`, 1800 seconds, Wi-Fi radio off, Bluetooth preserved, tracing disabled, unplugged per the current test setup. Nominal RTC wake is 05:10 UTC. The outcome and pre-state still need retrieval; no conclusion is attached to this repeat yet.
+
+### 2026-09-18 04:41 UTC — existing ufs-irq trace profile can test whether UFS IRQs occur during suspend
+
+Read-only review of the current lab runner found an existing `ufs-irq` profile that uses tracefs already present on the device: it filters `irq_handler_entry/exit` to the discovered `ufshcd` IRQ and records available UFS request/runtime-PM events plus device-PM callback events. This needs no kernel or module build and uses a private trace instance. The pre/post counters alone show UFS IRQ totals near 17k–19k across all three 30-minute runs but cannot say when they occurred. After the current Wi-Fi-off repeat is retrieved, a short 60-second `ufs-irq` trace is the lowest-cost next test to see whether those IRQs recur inside s2idle and whether they line up with UFS activity; no IRQ masking, unbind, clock gating, or storage changes are proposed.
+
+### 2026-09-18 04:42 UTC — live Nova genpd snapshot exposes only cluster PSCI domain; S1 counters moved during the run
+
+The retrieved run's live `/sys/kernel/debug/pm_genpd` snapshot contains 48 total genpds but only one PSCI topology domain, `power-domain-cluster`, with states S0/S1; no system-level PSCI domain appears. Its S1 debug counters changed from Usage 216 / Rejected 417 / S2idle 630 before the run to Usage 223 / Rejected 434 / S2idle 654 after it. Record this as Linux genpd accounting, not proof of AOP selection or physical residency: AOSD/CXSD/scalar DDR qcom_stats remained zero, the S1 `Time(ms)` field displayed 5 both before and after, and the precise counter semantics need source validation before interpreting the small Usage delta. This live observation matches the source-tree finding that the currently running Nova kernel has only a cluster PSCI domain, but does not show whether firmware independently selects a deeper state.
+
+### 2026-09-18 04:45 UTC — Nova UFS and apps-RSC IRQ counters are concentrated on CPU0 across all three runs
+
+Compared per-CPU interrupt deltas in all three successful 30-minute s2idle receipts. Every counted `ufshcd` IRQ (IRQ 169: 18,742 / 19,041 / 17,123) and `apps_rsc` IRQ (IRQ 14: 10,272 / 10,689 / 10,600) landed on CPU0; `mmc0` (IRQ 170: 48 / 44 / 48) was also CPU0-only. `arch_timer` was spread across all eight CPUs (~18.6k–19.7k total). Because each interval had ~1799 s of boot-minus-monotonic suspend separation and only about 2.4 s monotonic advancement, most of these aggregate IRQ increments occurred during the s2idle interval, not ordinary awake runtime. They are not automatically equivalent to full system wakeups: the pre/post counters do not show event timestamps, wake-source classification, or time spent servicing each IRQ. The repeated CPU0 UFS/RSC activity is now a more concrete no-build trace target than the Odin-specific mmc0 storm; use the existing short `ufs-irq` trace after the running repeat completes.
+
+### 2026-09-18 04:50 UTC — archived UFS traces qualify the IRQ-count inference and identify one usable capture
+
+Re-analyzed the two archived 45-second `ufs-irq` captures at `../sm8550-suspend-lab-runs/20260917T213335Z-d3f423182f8b/` and `../sm8550-suspend-lab-runs/20260917T213812Z-1f8ded068061/`. The first trace has 2,214 events over 2.589 s and zero dropped events, but its trace metadata has no suspend-inclusive clock selection; its event timestamps cover only awake transition time. This is not evidence that the middle of that suspend was quiet. The second explicitly selected `[boot]`, spans 46.687 s around a measured 44.220 s s2idle interval, and reports zero dropped events on every CPU. Its 6,612 events are concentrated at the edges: 6,220 in relative second 0, none in seconds 1–44, and 392 in seconds 45–46. In this one sampled window, the `ufshcd` IRQ/command activity appears around suspend entry and wake, with no UFS events through the middle of the actual s2idle interval.
+
+Correction to the 04:45 interpretation: the ~1799 s boot-minus-monotonic separation proves that each 30-minute test included a long suspend interval, but aggregate pre/post IRQ deltas alone do not locate the 17k–19k UFS or ~10.6k apps-RSC events inside that interval. Do not claim those counts mostly occurred during sleep based on the clock separation. The edge-only 45-second trace conflicts with that inference for its sampled window; because it was a single charging/radios-preserved sample, it does not settle the untraced unplugged Wi-Fi-off conditions. Repeat a short `[boot]`-clock `ufs-irq` capture after the active Wi-Fi-off control, matching its unplugged/Wi-Fi-off/Bluetooth-on state. Do not mask IRQs or alter storage/power policy.
+
+### 2026-09-18 04:50 UTC — Linux genpd counters count PSCI staging and rejected returns, not hardware residency
+
+Checked the exact Linux v7.2.3 path used by this image (`armada-packages/kernel/BASE.env` pins 7.2.3; the patch stack does not modify genpd or PSCI accounting). On the Nova `power-domain-cluster` S1 row, S2idle +24 means 24 successful synchronous genpd power-off callbacks were accounted as s2idle requests. In PSCI OSI, that callback stages the domain state for the later `CPU_SUSPEND`; it does not itself power the cluster off. The Rejected delta of +17 is consistent with 17 nonzero PSCI returns subsequently correcting genpd Usage, leaving net Usage +7, or seven calls that Linux did not reject (assuming there were no separate genpd callback failures). This is useful evidence that the PSCI request sometimes returns successfully from Linux's perspective, but it does not prove AOSD/CXSD/DDR or physical cluster residency.
+
+The unchanged S1 `Time(ms)=5` is expected for this path: `genpd_sync_power_off/on()` do not call the ordinary genpd idle-time accounting routine. That field is not a residency measurement for these s2idle PSCI transitions. Sources: [v7.2.3 genpd sync accounting](https://github.com/gregkh/linux/blob/v7.2.3/drivers/pmdomain/core.c#L801-L824), [s2idle counters and idle-states output](https://github.com/gregkh/linux/blob/v7.2.3/drivers/pmdomain/core.c#L1404-L1443), [PSCI genpd state staging](https://github.com/gregkh/linux/blob/v7.2.3/drivers/cpuidle/cpuidle-psci-domain.c#L32-L44), and [PSCI suspend return/rejection path](https://github.com/gregkh/linux/blob/v7.2.3/drivers/cpuidle/cpuidle-psci.c#L64-L106).
+
+### 2026-09-18 04:51 UTC — IRQ trace counts do not reconcile with interrupt snapshots; suspend silence is not yet conclusive
+
+Joined each archived 45-second UFS trace with that run's pre/post `/proc/interrupts` snapshots. In the first run, IRQ 169 (`ufshcd`) advanced by 19,066 while the local-clock trace recorded 547 IRQ-169 handler entries. In the second run, IRQ 169 advanced by 20,710 while the boot-clock trace recorded 1,624 entries; IRQ 14 (`apps_rsc`) advanced by 14,225 but was not selected by that trace profile. All per-CPU trace stats show zero drops/overruns and the trace headers report every written entry still in the buffer, so ordinary ring-buffer overflow does not explain the mismatch.
+
+This is a material instrumentation/interval mismatch. Until the runner timeline and kernel tracing behavior explain why the snapshots count far more interrupts than the active trace, the 45-second trace's 45-second UFS-event gap cannot establish that UFS IRQs were absent during s2idle. It establishes only that the selected tracepoint recorded no UFS IRQ/request events in that portion of the recorded boot-clock window. The `ufs-irq` repeat proposed above should also snapshot `/proc/interrupts` immediately around trace start/stop and compare exact deltas; inspect when snapshots, tracing_on, suspend dispatch, and post-resume collection occur before interpreting the result. No IRQ or device policy was changed.
+
+To isolate the mismatch, added narrow `ufshcd`/`apps_rsc` `/proc/interrupts` counter snapshots immediately before trace enable, before trace disable, and immediately after trace disable in `sm8550_suspend_lab.py`. The snapshots are saved with trace metadata and bracket the trace-active window, so the next short capture can distinguish an in-suspend tracing gap from IRQ increments that fall in the broader pre/post snapshot window. This only changes the research recorder; it does not modify device power settings. Host-only `self-test`, Python AST parsing, and `git diff --check` all pass. Deploy this updated recorder only in the next controlled UFS trace after the current 30-minute run is retrieved.
+
+The runner ordering explains why the full pre/post IRQ delta is not a trace-window count: it captures the pre snapshot before radio/sleep preparation, RTC setup, and `trace_start()`, then calls `trace_stop()` immediately after suspend returns and only afterward captures the post snapshot. The 2026-09-17 pre IRQ snapshot was at 21:38:22, trace start at 21:38:23, trace stop around 21:39:10, and post IRQ snapshot at 21:39:14. So the counter delta includes untraced setup/teardown intervals; the archive has no per-file timestamps for the IRQ reads, so their exact contribution is unknown. This reconciles the different measurement windows as a plausible cause, but it does not prove they account for all +20,710 UFS IRQs. Keep the next bracketed trace as the discriminator. The zero-event middle in the boot-clock trace remains a one-run observation for the trace's recorded window, not a general rate claim.
+
+The old trace selected UFS IRQ 169 only; it never enabled IRQ 14 (`apps_rsc`), so the +13,992/+14,225 apps-RSC deltas cannot be compared to handler events in those traces. In Linux v7.2.3 the generic IRQ action tracepoints bracket registered actions, while the IRQ count can also be incremented by `handle_bad_irq()` without such an action. If the new boundary-aligned UFS count still exceeds its trace entries, investigate that path or a version/config-specific IRQ flow; current archives do not establish it. Sources: [v7.2.3 action entry/exit tracepoints](https://github.com/gregkh/linux/blob/v7.2.3/kernel/irq/handle.c#L1088-L1130), [IRQ count before action dispatch](https://github.com/gregkh/linux/blob/v7.2.3/kernel/irq/chip.c#L3328-L3372), and [bad-IRQ accounting](https://github.com/gregkh/linux/blob/v7.2.3/kernel/irq/handle.c#L825-L845).
+
+### 2026-09-18 05:10 UTC — first SSH check after repeated Wi-Fi-off RTC wake timed out
+
+The Wi-Fi-off repeat `20260918T043959Z-8e885685e77c` reached its nominal 05:10 UTC RTC wake, but the first host SSH status check at 05:10 UTC timed out connecting to port 22. This is not enough to classify the RTC wake or suspend as failed; the previous Wi-Fi-off run also needed time for radio/SSH recovery. Wait briefly and retry status before attempting retrieval.
+
+### 2026-09-18 05:12 UTC — Wi-Fi-off repeat completed but did not reproduce the low-drain first sample
+
+The repeat `20260918T043959Z-8e885685e77c` is complete: `s2idle` returned through `rtc0`, the boot ID is unchanged, and boot-minus-monotonic time shows 1799.168 s of suspend over a 1801.666 s battery interval. The gauge lost 129,868 uAh, about 259.50 mA average, and capacity moved by 2 percentage points, approximately 4%/h. This is materially higher than the first Wi-Fi-off/Bluetooth-on run (`20260918T040206Z-2913994f60b9`: 165.15 mA, about 2.52%/h) and is close to the earlier Wi-Fi-on/Bluetooth-blocked sample (~4.0%/h). Thus the apparent Wi-Fi-associated drain reduction is not replicated; treat that first result as noisy or state-dependent, not a confirmed radio fix. Retrieve and inspect the complete receipt and compare starting battery/radio/runtime state before deciding whether another matched run is worthwhile.
+
+The full archive is now retrieved and its 4,433 file checksums all pass. Pre/post battery gauge values were 67% / 4,437,163 uAh / -665 mA and 65% / 4,307,295 uAh / -698 mA; both snapshots show Discharging, USB/wireless offline, and 25.0 C. Wi-Fi was enabled before the run and was disabled by the test; Bluetooth stayed powered and unblocked. AOSD, CXSD, and scalar DDR counters stayed at zero; APSS moved 52→55 and ADSP 159,334→159,944. The full pre/post interrupt deltas were CPU0-only: `ufshcd` +12,871, `apps_rsc` +10,401, and `mmc0` +52. Because this run had no tracing, these IRQ changes still cannot be assigned to the s2idle window. Evidence is in the run's `device/{pre,post}/power_supplies.json`, `qcom_stats.json`, `interrupts.json`, `meta/radio-before.json`, `cleanup/radios.json`, `derived/summary.json`, and `checksum-verification.json`.
+
+### 2026-09-18 05:13 UTC — 60-second boundary-bracketed UFS trace started
+
+Started `20260918T051332Z-1a9b21946c4b` on the Nova: explicit `s2idle`, 60-second RTC wake, unplugged, Wi-Fi disabled, Bluetooth preserved, and `ufs-irq` tracing. The updated research recorder records `ufshcd` and `apps_rsc` `/proc/interrupts` counters immediately before tracing starts, before tracing stops, and just after it stops. Nominal wake is 05:14:35 UTC. This run is intended to separate IRQ changes during the trace-active suspend window from the wider pre/post collection window; it is not a physical residency or battery-drain test.
+
+Verified the deployed runner identity from this run's host manifest: its recorded SHA-256 (`2144c4d9…9814c31d`) exactly matches the current local runner containing the boundary snapshots. The next archived trace should therefore include the new counters, rather than only the old whole-run pre/post snapshots.
+
+At nominal wake 05:14:35 UTC, the first SSH status check timed out. This is the usual Wi-Fi-off recovery delay pattern; keep waiting/retrying before classifying the 60-second RTC trace.
+
+### 2026-09-18 05:17 UTC — bracketed trace resolves UFS counter mismatch for this 60-second run
+
+Retrieved `20260918T051332Z-1a9b21946c4b`; it completed `s2idle` through `rtc0` on the same boot, with 58.910 s of proven suspend and all 4,525 archive checksums passing. The boundary snapshots show UFS IRQ 169 at 1,137,011 before tracing and 1,137,594 just before trace stop: +583 during the trace-active window. The trace records exactly 583 IRQ-169 handler entries, with zero per-CPU drops/overruns. It therefore reconciles the earlier apparent mismatch: full pre/post counters advanced +19,924, but +17,575 occurred before trace start and +1,766 after trace stop. Those old broad deltas were not comparable to trace counts.
+
+The boot-clock trace spans 61.308 s; selected UFS IRQ/request events occurred in relative seconds 0, 60, and 61, with no UFS events in seconds 1–59. The proven s2idle section lasted 58.910 s, so this one unplugged/Wi-Fi-off/Bluetooth-on sample recorded UFS activity only at the edges, not through the sleep interval. This is stronger evidence than the old traces, but remains a single 60-second sample and covers only UFS. `apps_rsc` advanced +672 during the trace-active window, but that IRQ was not selected in the trace; its timing within the interval remains unknown. Next low-cost discriminator is a matching short trace that includes IRQ 14 as well as UFS.
+
+### 2026-09-18 05:18 UTC — repeat short trace now filters both UFS and apps-RSC IRQs
+
+Updated the `ufs-irq` profile to resolve both `ufshcd` and `apps_rsc` by name from `/proc/interrupts`, then filter `irq_handler_entry/exit` to both live IRQ numbers. This is a small lab-recorder change only; host `self-test`, Python AST parsing, and `git diff --check` pass. Started `20260918T051831Z-94e04a2713ea`: 60-second `s2idle`, unplugged, Wi-Fi disabled, Bluetooth preserved. Its host manifest runner SHA-256 matches the updated local file, so the dual-IRQ filter and boundary counters are deployed. Nominal RTC wake is 05:19:36 UTC. The result should show whether the +672 apps-RSC events from the prior trace-active window occur during the core suspended interval or only near its boundaries.
+
+At the 05:19:36 UTC nominal wake, the first SSH status check timed out. As with the prior radio-off captures, wait and retry; this is not yet a suspend or RTC failure.
+
+### 2026-09-18 05:22 UTC — apps-RSC and UFS IRQ deltas match trace entries and cluster at both edges
+
+Retrieved `20260918T051831Z-94e04a2713ea`; it completed through the expected `rtc0` wake on the same boot, with 58.746 s of proven suspend and all 4,525 checksums passing. The dual-filter boot-clock trace recorded 605 UFS entries and 628 apps-RSC entries, exactly matching their respective IRQ-counter deltas while tracing was enabled. Per-CPU trace stats report zero drops/overruns. Event bins show UFS entries only in relative seconds 0 and 60, and apps-RSC only in seconds 0, 59, and 60; there is no selected IRQ activity through seconds 1–58. These two handlers were quiet through most of this sampled sleep, with the RSC tail clustered near the wake edge. The trace lacks an explicit `machine_suspend` transition marker, so the few second-59 events cannot yet be assigned to the final suspended instant versus wake/resume; do not call this exact-boundary proof.
+
+The full pre/post counters still look large (`ufshcd` +19,983, `apps_rsc` +11,741), but the boundary brackets show the active trace window accounts for only +605/+628 respectively; most of the difference is outside the trace interval. Evidence is in `device/meta/trace.json`, `device/raw/trace/trace.txt`, per-CPU stats, before/after interrupt snapshots, and `derived/summary.json` under this run archive. Next improvement, if exact edge timing is needed, is to include the kernel `power:suspend_resume` marker in the short trace; no long run or policy change is required.
+
+### 2026-09-18 05:25 UTC — suspend transition marker trace started
+
+Started `20260918T052356Z-78162af5ddc0`, a 60-second unplugged `s2idle` trace with Wi-Fi disabled and Bluetooth preserved. It extends the validated dual `ufshcd`/`apps_rsc` handler trace with `power:suspend_resume` to place the edge-clustered IRQs against suspend entry/exit. The deployed host-manifest SHA-256 `dd40bb63a9fc25dd513a882b55fd1985f07d16c286263611f403af0c68799c52` matches the local runner. Nominal RTC wake was 05:24:58 UTC. This is a short timing diagnostic, not a battery-drain/residency test; no kernel, firmware, or device policy was changed.
+
+Retrieved the run with unchanged boot ID; observed `s2idle`, RTC wake, and 58.836 s separation between `timekeeping_freeze` begin/end (machine-suspend markers span 58.839 s). The trace filters captured 851 UFS and 647 apps-RSC IRQ handler entries total with zero per-CPU drops/overruns; only one apps-RSC handler occurred after `machine_suspend` begin and before `timekeeping_freeze` begin, and none occurred between `timekeeping_freeze` begin at 59261.402261 and end at 59320.238395. UFS recorded no handler between `machine_suspend` begin and end. The remaining IRQs are clustered before entry and immediately after resume. Thus this sample directly shows those two IRQ sources are quiet during the traced 58.836-second frozen-time interval; it does not show deeper AOSD/CXSD or DDR self-refresh residency. All 4,530 archive checksums pass. Evidence: `device/raw/trace/trace.txt`, `device/meta/trace.json`, per-CPU stats, and `checksum-verification.json` in the run archive.
+
+### 2026-09-18 11:56 UTC — next short trace should include the architected timer IRQ
+
+Reviewed the latest 30-minute Wi-Fi-off receipt `20260918T043959Z-8e885685e77c`: IRQ 11 (`arch_timer`) advanced by 19,747 entries (about 11/s), spread across all eight CPUs; IRQ 33 (`arch_mem_timer`) advanced by 116. The exact-boundary 60-second trace only filtered IRQs for `ufshcd` and `apps_rsc`, so it ruled out sustained activity from those two in the frozen-time interval but did not account for this timer count. Next low-cost drain-side discriminator is to add IRQ 11 by its live name to the existing boundary trace and check whether it fires between `timekeeping_freeze` markers. This is a wake/activity proxy, not a direct power-state measurement.
+
+At 11:56 UTC, a read-only SSH check of the Nova returned `Host is down`; a second check at 12:00 UTC timed out. No additional suspend run was started and no device state was changed. Recheck reachability before the next short trace. Exact AOSD/CXSD/DDR residency remains a separate gap: it needs a validated firmware/always-on residency counter or firmware state report, since Linux PSCI/genpd request results and the current zero-valued scalar stats do not prove the physical state.
+
+Updated the local observation harness to include the dynamically resolved `arch_timer` IRQ in the existing short boundary trace and counter snapshots, alongside UFS and apps-RSC. Host-only self-test, Python AST parsing, and `git diff --check` pass. The recorder has not been redeployed because SSH is unavailable.
+
+Reviewed the public SM8550 handheld AOP-monitor notes as a possible residency/blocker route. They report an accepted `{class:lpm_mon,type:cxpc,dur:2000,flush:1,log_once:1}` request on inspected Thor/RP6 firmware, but explicitly say the monitor sink address and row layout are firmware-specific; the returned CXPC drivers are blockers/votes, not physical residency counters. The public QMP notes also warn that an acknowledgement only confirms request handling and that the result is written to a separate message-RAM sink. Nova's validated QMP resource remains 0x400 bytes and does not establish the public decoder's expected sink. No QMP request was sent. Next step for this route is to validate Nova's exact AOP image/DT sink mapping and decoder layout, or use an existing Armada-exposed read-only endpoint if one exists; do not widen the mapping or issue a raw request based on the other handheld's example. Sources: https://github.com/jaewun/qcom-aop-debug/blob/main/docs/sm8550-handhelds.md and https://github.com/jaewun/qcom-aop-debug/blob/main/docs/qmp.md.
+
+### 2026-09-18 12:55 UTC — plugged-in live snapshot confirms the residency telemetry gap and defines two separate tests
+
+The Nova is reachable and remains plugged in. Its current boot ID is `c50e87eb-d469-41eb-a899-bb774b9472b7`; `/sys/power/mem_sleep` selects `s2idle` (with `deep` listed), and `/sys/power/state` offers `freeze mem disk`. Read-only live `qcom_stats` currently reports zero count/duration for AOSD, CXSD, and scalar DDR; APSS reports Count 3 and accumulated duration 15,605,731,269 ticks. `ddr_stats` reports DDR `0xd0` and frequency-bucket durations, but upstream Linux's reader sends its built-in `{class: ddr, action: freqsync}` QMP request to refresh them. In prior receipts, the `0xd0` duration equals the sum of the frequency buckets within 80–246 ticks, so it cannot independently prove a deep DDR state. No arbitrary AOP/QMP request was sent.
+
+Validated live topology still has no declared `sys-pm-vx` node or `0xc320000` region: Nova's FDT/IOMEM shows QMP at `0x0c300000/0x400` and RPMh stats at `0x0c3f0000/0x400`; the documented CXPC monitor sink at `0x0c320000/0x400` is a separate, presently unclaimed range. The matching AOP firmware hash makes the public request a lead, not permission to map or decode an unowned buffer. Therefore Linux currently offers no validated read-only path to the AOP blocker log, and the counters available on-device still do not reveal the physical AOSD/CXSD/DDR state.
+
+Keep the two questions experimentally separate. To answer *what state is reached*, first find an authoritative Nova DT/firmware resource declaration and sink layout for CXPC, then expose/read it through a bounded, read-only path; treat any blocker/vote rows as reasons a collapse was rejected, not proof of the state actually entered. For decisive residency, require documented AOP/PMIC domain residency counters or a validated firmware state trace; absent those, report the exact state as unknown. To answer *what causes 4–5%/h drain*, use repeatable battery `charge_counter` deltas over matched unplugged suspend intervals, with temperature/start SOC and actual radio state captured, then change one variable per run. The Nova is plugged in now, so a charge-counter delta would be net charging and cannot quantify system drain. Existing receipts are noisy: two Wi-Fi-off/Bluetooth-on 30-minute runs measured about 165 and 260 mA, so the first low-drain sample did not reproduce; a 60-second exact-boundary trace found UFS and apps-RSC quiet in the frozen-time interval, while the architected timer remains an untested lead. Next drain test should wait until an unplugged window is available; first isolate timer/wakeup activity with the existing short `[boot]` trace, then use a matched 30-minute battery-counter run only if the short trace or repeat baseline gives a concrete hypothesis.
+
+No device policy, source/kernel image, or power-control setting was changed. The plugged-in snapshot is a baseline only; it does not answer physical residency or unplugged drain.
+
+### 2026-09-18 13:00 UTC — Qualcomm Waipio source makes a guarded module probe plausible
+
+Refreshed the live Nova using read-only root commands. It is still on boot `c50e87eb-d469-41eb-a899-bb774b9472b7`, charging at 81%, with `[s2idle] deep`. AOSD, CXSD, and scalar DDR remain all-zero. The current DDR `0xd0` duration is 29,046,827,572 ticks; the ten DDR frequency-bucket durations sum to 29,046,827,520, a difference of 52 ticks. This reinforces that `0xd0` is an aggregate of the frequency buckets in this table, not an independent named residency counter.
+
+New primary-source finding: Qualcomm's Waipio (SM8550-family) SoC DTS explicitly declares `sys-pm-vx@c320000` as compatible with `qcom,sys-pm-violators` / `qcom,sys-pm-waipio`, with a separate `reg = <0xc320000 0x0400>` resource and AOP mailbox. This is stronger than the earlier Kalama-family reference and documents the physical region/size on the matching SoC family. Nova's *active* FDT and `/proc/iomem` still omit that resource, so the source reference does not mean Linux has claimed it on this boot. However, together with the live no-overlap inventory, it supports investigating a temporary driver that must successfully reserve exactly `0xc320000..0xc3203ff` before mapping, and refuses to proceed on any conflict. Do not expand the existing QMP range or map a larger window.
+
+The same live kernel reports `CONFIG_MODULES=y`, `CONFIG_MODULE_UNLOAD=y`, `CONFIG_QCOM_AOSS_QMP=y`, and `CONFIG_KPROBES=y`; `/proc/config.gz` explicitly says `CONFIG_MODVERSIONS` and `CONFIG_MODULE_SIG` are not set, and `SECURITY_LOCKDOWN_LSM` is not set. `/lib/modules/7.2.3` has no `build` or `source` link, so a module cannot be compiled on-device from installed headers. This makes a *module-only* host build from the exact Armada-patched 7.2.3 source/config a credible next route without rebuilding Image/DTBs, subject to matching vermagic/compiler/build metadata and confirming exported `qmp_get`/`qmp_send` availability. No module was built or loaded, and no memory mapping or QMP request was attempted.
+
+The published CXPC request matches the installed AOP ELF hash and has been observed on that firmware image in other SM8550 handhelds, but remains a field-validated diagnostic rather than an official protocol specification. Before a Nova test, review the reference reader's exact 1-KiB bounds and synchronization, then implement the smallest one-shot awake capture with a reserve-resource failure gate, one known CXPC request, raw-buffer preservation, and automatic module unload. The captured CXPC rows can identify AOP votes/blockers; they still must not be presented as direct proof of AOSD/CXSD/DDR physical residency. Sources: [Qualcomm Waipio DTS](https://android.googlesource.com/kernel/msm-extra/devicetree/+/refs/heads/android-msm-eos-android13-wear-kr3-pixel-watch/qcom/waipio.dtsi#L2273-L2277), [SM8550 monitor notes](https://github.com/jaewun/qcom-aop-debug/blob/main/docs/sm8550-handhelds.md), and [CXPC blocker limitations](https://github.com/jaewun/qcom-aop-debug/blob/main/docs/suspend-wake-debugging.md#L223-L233). No device policy or persistent system setting changed.
+
+### 2026-09-18 13:13 UTC — Nova is reachable and charging for low-risk residency tests
+
+Read-only refresh over SSH confirms the existing boot `c50e87eb-d469-41eb-a899-bb774b9472b7`, selected `[s2idle]` with `deep` available, and plugged-in Charging status at 88% (charge counter 5,720,496 uAh; current 1,000,146 uA; battery temperature 31.0 C). Tracefs and debugfs are mounted. AOSD, CXSD, and scalar DDR counters are still all zero; APSS has accumulated 42,989,076,755 ticks. This makes short sleep/IRQ observation feasible without changing radio state, but the charge counter is rising while plugged in and cannot quantify system drain. `sudo -n` is not currently enabled, so the harness may need its documented noninteractive credential setup resolved before deployment; no suspend run or device setting change was made.
+
+### 2026-09-18 13:20 UTC — Nova source lacks a sink declaration but does not rule the monitor out
+
+A targeted search of the Armada kernel device trees, patch stack, and current upstream Nova DTS submission found no Nova-specific `sys-pm-vx`, `0xc320000`, or CXPC sink declaration. The submitted upstream Nova series explicitly omits hardware definitions not yet supported in mainline, so this absence is not evidence the SM8550-family monitor hardware is absent. Qualcomm's Waipio DTS and downstream driver remain family-level support for the exact `0xc320000/0x400` resource and 24-byte-row format; a bounded read could expose CXPC blocker votes, but not prove physical AOSD/CXSD/DDR residency. Since the live Nova FDT still does not claim the range, keep this as a later fail-closed module experiment, not a direct MMIO read.
+
+The lower-risk immediate test needs no build or AOP request: run one 60-second `s2idle` with radios preserved and the current `ufs-irq` trace profile. The checked-out recorder filters `arch_timer`, `ufshcd`, and `apps_rsc`, brackets IRQ counters to trace start/stop, and includes suspend markers. It can establish whether the timer handler occurs inside the measured frozen interval on this boot; it cannot measure drain while charging or establish physical domain residency.
+
+### 2026-09-18 13:18 UTC — short plugged-in trace sees timer IRQ bursts, not a sustained timer storm
+
+Run `20260918T131706Z-c7c3d5a727bc` completed successfully on the same boot. It used Armada's real `s2idle` dispatcher, remained plugged in with Wi-Fi/Bluetooth preserved, woke from the PMIC RTC, and recorded 59.753 seconds of suspend. The `[boot]` trace bracketed `machine_suspend` and `timekeeping_freeze`; all eight per-CPU trace buffers report zero overruns and zero dropped events, and the archive's 4,536 checksums pass.
+
+Within the outer `timekeeping_freeze` interval, the selected IRQ trace records 76 `arch_timer` handler entries: 25 in relative second 0, 25 in second 1, and 26 around second 19; none appear in seconds 2–18 or 20–59. No UFS or apps-RSC handler appears after the freeze marker begins; one apps-RSC IRQ falls just before that marker, during suspend entry. This single powered/charging sample weakens the idea of a continuous `arch_timer` storm as the explanation for multi-percent-per-hour loss. The early/bunched timer entries merit one same-condition short repeat before we rule out transient/state-dependent activity; handler counts alone do not reveal energy cost.
+
+AOSD/CXSD/scalar DDR deltas remained zero, so this still does not identify physical SoC/DDR residency. The battery charge counter increased 86,967 uAh over the 62.018-second whole measurement interval while charging; its derived negative draw is net charge gain, not a drain measurement. This run cannot explain the unplugged 4–5%/h result. Raw trace, trace configuration/stats, and pre/post evidence are in `../sm8550-suspend-lab-runs/20260918T131706Z-c7c3d5a727bc/`; the device has returned to the same boot and trace/RTC/radio cleanup completed.
+
+### 2026-09-18 13:27 UTC — arch_timer burst does not reproduce at the same point in a second short trace
+
+Run `20260918T132539Z-dd80cf6119c5` repeated the plugged-in/radios-preserved 60-second `s2idle` trace on the same boot. It completed 59.539 seconds of measured suspend and woke from the RTC. Within `timekeeping_freeze`, 28 `arch_timer` IRQ handlers occurred together in relative second 6, with none in the other seconds; the first sample had 76 entries clustered in seconds 0, 1, and 19. Neither sample recorded UFS or apps-RSC IRQ handlers after `timekeeping_freeze` began. Thus short timer activity is sparse and its location varies between samples; it is not a stable periodic wake pattern. Both traces are zero-drop and leave AOSD, CXSD, and scalar DDR deltas at zero. The second run's plugged-in charge counter was unchanged, consistent with charge management near full, and is not being used to assess drain.
+
+For the current objective, stop battery-rate experiments. Next prioritize a Nova-validated AOP/PMIC residency source: find the exact firmware/DT mapping and decoder, or identify an existing firmware counter/trace that reports accepted physical domains. Preserve the distinction between PSCI state requests/return codes and actual hardware residency.
+
+### 2026-09-18 13:31 UTC — sleep diagnostic no longer treats zero counters as proof
+
+Corrected `system_files/usr/bin/armada-sleep-debug`: its previous report text claimed that zero AOSD/CXSD/DDR deltas proved the SoC rails never powered down. That inference was unsupported because these are firmware-provided records and their mapping to physical Nova residency is not validated. The report now says only that the counters did not advance and that zero alone does not establish residency; the adjacent comment likewise avoids assigning generic physical meanings to firmware labels. `bash -n` and `git diff --check` both pass. This is a local diagnostic wording correction only; it has not been deployed to the device.
+
+### 2026-09-18 13:33 UTC — Nova AOP image contains low-power monitor code strings
+
+Read-only inspection of the live device shows both `/dev/disk/by-partlabel/aop_a` and `aop_b` are 512 KiB and have identical SHA-256 `6aceb38f5ef10663ac5c29ffc4e9ee27b6339e8746ff3490485f8cf2640ef687`. The ELF strings include `lpm_mon`, `/sleep/aoss`, `cx_collapse_fsm`, `COLLAPSED`, `AOP DDR Log`, and DDR vote/log labels. This confirms the image contains relevant low-power firmware components, but the strings do not establish the CXPC sink address/layout, counter semantics, or per-suspend accepted residency. The active device tree still exposes QMP at `0xc300000/0x400`, separate stats SRAM at `0xc3f0000/0x400`, and no `0xc320000` node/range. No firmware request, MMIO read, or device setting change was made.
+
+### 2026-09-18 13:34 UTC — detailed DDR telemetry is distinct from the zero scalar record
+
+Independent source review of stable Linux v7.2.3 `drivers/soc/qcom/qcom_stats.c` confirms two distinct DDR interfaces: scalar `ddr` is one of the three records read from the 0x48 stats block, while debugfs `ddr_stats` reads the detailed firmware LPM/frequency table at offset 0xb8. On SM8450 and newer, reading `ddr_stats` first sends `{class: ddr, action: freqsync}` so AOP populates that table. The source labels LPM entries only with opaque IDs `0xd4`, `0xd3`, `0x11`, and `0xd0`; it does not map `0xd0` to self-refresh, powerdown, or deepest DDR state. This explains why a zero scalar `ddr` record can coexist with an advancing `ddr_stats` 0xd0 duration and means our existing detailed-table deltas are the useful DDR signal. Next verify the harness captures that distinct table at matched boundaries, and obtain firmware documentation before assigning physical meaning. References: [stable v7.2.3 qcom_stats.c](https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git/tree/drivers/soc/qcom/qcom_stats.c?h=v7.2.3#n148), [qcom-stats binding ownership](https://gbmc.googlesource.com/linux/+/9593bdfa1d146beb8773dc900e62608afcaa47a3/Documentation/devicetree/bindings/soc/qcom/qcom-stats.yaml#L16), [SM8550 stats/QMP DT](https://android.googlesource.com/kernel/common/+/refs/tags/android16-6.12-2025-09_r1/arch/arm64/boot/dts/qcom/sm8550.dtsi#L3589).
+
+Inspection of the two latest raw `qcom_stats.json` pairs confirms the Python harness captures the complete `ddr_stats` table at its broad pre- and post-suspend phases. In the 59.753-second trace, ID `0xd0` duration increased from 47,961,740,309 to 49,271,878,378 ticks (+1,310,138,069); in the 59.539-second repeat it increased from 57,796,924,027 to 59,101,673,204 (+1,304,749,177). IDs `0xd4`, `0xd3`, and `0x11` stayed at zero in both pairs. The scalar `ddr` count/duration stayed zero. These observations show the detailed table is not globally inert, but the existing pre/post snapshots are not aligned to actual suspend entry/return and do not establish its physical DRAM state or calibrated time unit. No additional device-side interface is needed to preserve the raw table.
+
+### 2026-09-18 13:36 UTC — `0xd0` is not independent evidence of DDR low-power residency
+
+Recomputed the latest two `ddr_stats` snapshots row by row. In `20260918T131706Z-c7c3d5a727bc`, the `0xd0` duration delta is 1,310,138,069 ticks and the sum of all DDR frequency-bucket deltas is 1,310,137,856 (difference 213 ticks). In `20260918T132539Z-dd80cf6119c5`, the corresponding values are 1,304,749,177 and 1,304,749,056 (difference 121 ticks). This near equality means the advancing `0xd0` row is not an independent indication of self-refresh/collapse; it appears to track the aggregate frequency-duration accounting, but its firmware-defined meaning is still unproven. The other three LPM IDs remain zero. Preserve this as opaque accounting and do not use it to claim DDR residency.
+
+The harness audit refined the timing caveat: Python `capture_qcom_stats()` does preserve raw `ddr_stats`, but phase-level pre collection happens before radio handling, RTC setup, trace setup, and the final suspend call; phase-level post collection happens after the broad resume inventory. Each `ddr_stats` read sends the driver's supported `freqsync` request, but the harness does not timestamp the actual file read. Therefore current whole-run pre/post deltas include awake setup/resume intervals and cannot be attributed solely to the 60-second sleep. The shell `armada-sleep-debug` snapshots only scalar `Count`/`Accumulated Duration` entries and skips `ddr_stats` entirely. Next improve only the research harness: take a separately labeled detailed-table snapshot immediately before the suspend command and immediately after it returns, timestamp the actual read, parse per-ID/per-frequency deltas into the summary, and retain the raw text. This will tighten the interval while still treating IDs and tick units as undocumented.
+
+### 2026-09-18 13:36 UTC — both Nova DTBO slots lack a Nova CXPC mapping
+
+Read-only extraction and parsing of `/dev/disk/by-partlabel/dtbo_a` and `dtbo_b` found identical 25,165,824-byte partitions (SHA-256 `1bd16dd02a532121fa1b1b3f5d3aa23c7916e880b40ae43678574c381fd3b1a5`). Each Android DTBO table has 56 entries, whose metadata/FDT contents identify generic Qualcomm Crow/Kalama reference boards. Neither slot contains Nova/Retroid markers, `sys-pm-vx`, `qcom,sys-pm-waipio`, `qcom,sys-pm-violators`, `cxpc`, or a `0x0c320000/0x400` resource. Thus the live overlay slots do not provide the missing Nova-specific monitor mapping; the active FDT and `/proc/iomem` checks agree. Qualcomm Waipio DTS remains only SM8550-family precedent, not Nova layout authority. No DTBO was flashed or changed.
+
+### 2026-09-18 13:47 UTC — exact-boundary snapshot works; DDR table still does not identify a low-power state
+
+Run `20260918T134559Z-33c151e23f49` validated the new userspace capture on the plugged-in Nova: requested and observed `s2idle`, 59.632 seconds of suspend, RTC wake, unchanged boot ID, and successful cleanup. The new `meta/qcom-sleep-before-suspend.json` and `after-resume.json` contain raw AOSD/CXSD/scalar-DDR/`ddr_stats` reads with BOOTTIME, MONOTONIC, and realtime timestamps around each read. The `ddr_stats` read window spans 62.059371 seconds, including the suspend and setup/resume/read overhead.
+
+Within that boundary window, `0xd0` advanced by 1,191,534,426 ticks while the summed DDR frequency-bucket rows advanced by 1,191,534,592 ticks, a difference of -166. The observed ratio is about 19.2 million ticks per second over the read window. LPM IDs `0xd4`, `0xd3`, and `0x11` stayed at zero; scalar AOSD/CXSD/DDR also remained unchanged. The live measurement reinforces that `0xd0` tracks aggregate frequency-duration accounting; it is not an independent acceptance counter for DDR low-power residency. The harness now retains exact boundary data and summarizes rows without naming their physical state. No battery-rate comparison, arbitrary QMP message, module load, or persistent device change occurred.
+
+### 2026-09-18 13:50 UTC — awake-only control falsifies `0xd0` as a sleep-residency signal
+
+Read `/sys/kernel/debug/qcom_stats/ddr_stats`, waited 30 seconds while the device remained awake, then read it again. BOOTTIME elapsed 30.001599 seconds. During this awake-only interval, `0xd0` advanced 576,149,563 ticks; the sum of all DDR frequency-bucket deltas was 576,149,504 ticks (difference 59). The ratio is approximately 19.204 million ticks/s, consistent with the 19.2 MHz counter inferred from the suspend run. This controlled comparison confirms `0xd0` is continuously tracking aggregate DDR frequency/time accounting while awake; its growth during suspend cannot indicate that a low-power DDR state was entered. The LPM IDs `0xd4`, `0xd3`, and `0x11` still did not advance. The device was not suspended for this control, radios and power policy were untouched, and no battery-rate comparison was made.
+
+### 2026-09-18 13:51 UTC — live debugfs exposes counters but no read-only AOP state query
+
+Read-only inventory of `/sys/kernel/debug` found the expected `qcom_stats` directory with scalar AOSD/CXSD/DDR and detailed `ddr_stats`. `/sys/kernel/debug/qcom_aoss` contains only four write-only controls (`ddr_frequency_mhz`, `prevent_aoss_sleep`, `prevent_cx_collapse`, `prevent_ddr_collapse`); it has no query/counter node, so none was touched. `/sys/kernel/debug/qcom_sleep_stats` is absent. No `sys_pm_violators`, `sys-pm-vx`, CXPC dump, or AOP residency reader is exposed in the current image. This confirms that the running kernel does not provide a safe read-only AOP acknowledgement interface through debugfs.
+
+### 2026-09-18 14:00 UTC — clarify the authority and limits of Qualcomm sleep counters
+
+- Qualcomm's qcom-stats binding and driver source settle one ambiguity: `/sys/kernel/debug/qcom_stats/{aosd,cxsd,ddr}` reads records maintained by AOP/RPM firmware. The binding describes these as SoC low-power statistics for modes involving backbone-rail and oscillator shutdown, with entry count and accumulated duration; Linux maps the shared records and prints them rather than incrementing them. Therefore zero deltas mean **the firmware stats block recorded no entry for those named modes in the capture window**. This is meaningful negative firmware evidence, stronger than “the Linux counter did not move,” but still not a direct voltage or rail-state measurement. Public sources do not expand the acronyms or define Nova's exact electrical thresholds/topology. Sources: [Qualcomm qcom-stats binding](https://gbmc.googlesource.com/linux/+/9593bdfa1d146beb8773dc900e62608afcaa47a3/Documentation/devicetree/bindings/soc/qcom/qcom-stats.yaml#L16-L21), [Linux qcom_stats record reader](https://code.googlesource.com/linux/torvalds/linux/+/75f2c0b3690702c90863c2e138cb5520670845ea/drivers/soc/qcom/qcom_stats.c#L133-L149), [SM8550 stats SRAM mapping](https://android.googlesource.com/kernel/common/+/refs/tags/android16-6.12-2025-09_r1/arch/arm64/boot/dts/qcom/sm8550.dtsi#L3589-L3592).
+- The same sources distinguish detailed `ddr_stats` from scalar `ddr`: on SM8450+, Linux sends the documented `freqsync` QMP request each time the table is read; the firmware labels LPM records only with raw numeric IDs. The live awake-only control showed `0xd0` tracks frequency-bin duration while fully awake, so `0xd0` is excluded as a standalone sleep-residency signal. Do not map it to self-refresh or collapse. Source: [Linux qcom_stats DDR table/sync](https://code.googlesource.com/linux/torvalds/linux/+/75f2c0b3690702c90863c2e138cb5520670845ea/drivers/soc/qcom/qcom_stats.c#L152-L224).
+- Read-only live check on the plugged-in Nova confirms `current_driver=psci_idle`, `[s2idle] deep`, state1 `cpu-sleep-0-0` (`silver-rail-power-collapse`) with its s2idle counters available, and only `power-domain-cluster` in the PSCI genpd summary. `power:psci_domain_idle_enter/exit`, `rpmh:rpmh_send_msg/tx_done`, and `qcom_aoss:aoss_send/done` tracepoints exist. The existing `psci-kretprobe` profile records `psci_cpu_suspend_enter` state and return value; old receipts show both immediate errors (`-95`, `-1`) and `0` returns. This can separate PSCI CPU/cluster request rejection from a call that remains until wake, but neither tracepoint nor return value is an AOSD/CXSD or physical-residency acknowledgement. The current exact-boundary harness already captures the direct AOP records around the suspend command. Next useful capture is one short `psci-kretprobe` run alongside those boundary records, then correlate nonzero-return versus `-EOPNOTSUPP` attempts with the firmware AOSD/CXSD/DDR records. No power settings or firmware interfaces were written during this inventory.
+
+### 2026-09-18 14:06 UTC — PSCI call outcome correlated with exact firmware-counter window
+
+Run `20260918T140124Z-89bba0b6e2f6` completed a 45-second `s2idle` cycle on the plugged-in Nova: requested and observed mode matched, measured suspend-clock separation was 43.900547 seconds, the RTC woke the same boot, and the run-scoped kretprobe/trace instance was removed during cleanup. This combined the new exact-boundary qcom_stats capture with the existing `psci-kretprobe` profile.
+
+- The exact boundary snapshots show AOSD, CXSD, and scalar DDR each unchanged at count 0, last-entered 0, last-exited 0, accumulated duration 0. Under the Qualcomm binding, that means AOP/RPM recorded no transition into these named SoC low-power modes during this window. It is not a rail-voltage probe and does not name which blocker prevented the record.
+- One CPU0 `psci_cpu_suspend_enter` call for state `0x4100c344` returned `retval=0`; the associated `power:psci_domain_idle_enter/exit` pair is present. This state maps to Qualcomm Kalama cluster E3 (`llcc-off`) in downstream DTS, not a system-level AOSD/CXSD state. This establishes a successful PSCI CPU/cluster call from Linux's perspective while the independent firmware SoC stats still recorded no AOSD/CXSD/DDR entries. It does **not** prove the physical cluster rail or SoC backbone rails reached their target voltage.
+- The kretprobe and matching PSCI events share a single trace timestamp (`5157.741339`) even though the outer BOOTTIME/MONOTONIC bracket proves 43.900547 seconds of s2idle. Do not treat that timestamp equality as zero residence: ftrace's `boot` clock is designed to include suspend time but can be read before the timekeeper's boot offset is injected on resume. The syscall return value and firmware counters are the reliable parts of this receipt; tracing only tells us this cluster state was attempted and the PSCI call returned without an error.
+- Detailed DDR `0xd0` advanced `888,211,288` ticks, while all frequency rows summed to `888,210,944` (difference 344); `0xd4`, `0xd3`, and `0x11` stayed zero. The prior awake-only control showed the same `0xd0`/frequency accounting relationship, so this remains excluded as low-power-entry evidence.
+
+Raw evidence is in the run archive's `device/meta/qcom-sleep-{before-suspend,after-resume}.json`, `device/raw/trace/trace.txt`, `device/meta/trace.json`, and `device/derived/summary.json`. No sleep policy, radio, device binding, kernel, or firmware setting was changed. Sources for semantics: [Qualcomm qcom-stats binding](https://gbmc.googlesource.com/linux/+/9593bdfa1d146beb8773dc900e62608afcaa47a3/Documentation/devicetree/bindings/soc/qcom/qcom-stats.yaml#L16-L21), [PSCI idle trace definition](https://raw.githubusercontent.com/torvalds/linux/v7.2/include/trace/events/power.h#L61-L96), [Qualcomm Kalama cluster states](https://android.googlesource.com/kernel/msm-extra/devicetree/+/refs/heads/android-msm-eos-android13-wear-kr3-pixel-watch/qcom/kalama.dtsi#L283-L333), [ftrace boot-clock semantics](https://github.com/torvalds/linux/blob/v7.2/Documentation/trace/ftrace.rst).
+
+### 2026-09-18 14:14 UTC — report schema v4 independently reports requested CPU state and firmware records
+
+Run `20260918T141126Z-d8d75c760ea7` is the end-to-end validation of the revised report. It completed the requested 30-second s2idle cycle, observed 29.047697 seconds of suspended-clock separation, woke through the expected RTC path, and returned on the same boot. The report now has distinct lines for the AOP/RPM-maintained qcom_stats records and the Linux PSCI trace, avoiding the earlier ambiguity between a requested CPU/cluster state and firmware-recorded SoC residency.
+
+At the exact qcom_stats boundaries, AOSD, CXSD, and scalar DDR count/duration remained zero and their last-entered/exited fields remained zero. In the trace, one CPU0 `psci_cpu_suspend_enter` for `0x4100c344` returned 0; there were also seven s2idle domain-idle event pairs for `0x40000004` across CPUs 1–7. This confirms the kernel exercised those CPU/domain idle paths and the cluster PSCI call returned successfully. It does not prove physical cluster/SoC rail state. The firmware stats separately say no AOSD/CXSD/scalar-DDR entry was recorded in this window.
+
+The detailed DDR table's `0xd0` duration increased by 609,126,359 ticks, while its frequency buckets differed from that delta by only 41 ticks; other LPM rows stayed at zero. The awake-only control already showed the same accounting relationship, so this remains aggregate DDR/frequency accounting, not residency evidence. The generated report and retrieved archive checksum manifest both validate. No drain test or device policy change was part of this run.
+
+### 2026-09-18 14:18 UTC — AOP disassembly and SSH transfer limitation narrow the next safe step
+
+Read-only inspection of the exact Nova `aop_a` ELF found address literals `0x0c320000`, `0x0c360000`, `0x0c3f0000`, `0x0c400000`, `0x0c300000`, and `0x0c310000` in an unlabeled packed table. The firmware is stripped and has no symbol/section metadata; neither the table fields nor the apparent `lpm_mon` strings connect `0x0c320000` to a CXPC sink, buffer bounds, or row schema. DDR LPM IDs remain unmapped. This strengthens the lead that AOP firmware knows several related physical addresses but does not supply the Nova resource/layout authority needed to safely read them. Keep direct access and experimental QMP disabled pending that mapping.
+
+A fresh harness preflight failed at its `scp` bootstrap even though batch-mode SSH remained live on the same boot. A one-file test showed OpenSSH's default SFTP-based `scp` closes, while legacy `scp -O` transfers successfully to this image. Added `-O` to the lab host bootstrap so the existing read-only preflight and bounded diagnostics can run again; this changes only file transfer protocol selection, not device state. Re-run preflight and validate checks before another suspend test.
+
+### 2026-09-18 14:19 UTC — correct the bootstrap diagnosis; no SCP code change is needed
+
+Follow-up isolated the preflight failure to the supplied SSH target: this host has alias `armada` (`armada@192.168.0.20`), not `retroid-nova`. SSH worked through the valid alias; both default `scp` and `scp -O` transfer successfully to `armada`. Reverted the unnecessary `-O` change. The prior 14:18 note's attribution to an SFTP incompatibility was incorrect; it is retained here as a correction. No test file or other device state is being left behind.
+
+### 2026-09-18 14:22 UTC — current-image `deep` also records no AOSD/CXSD/scalar-DDR entry
+
+Run `20260918T142021Z-883484904299` tested the deeper path on the live, plugged-in Nova using the current Armada `20260915.feca679` / kernel `7.2.3` image. The harness selected and observed `deep`, completed a 30-second RTC-woken suspend window (28.961247 seconds reported suspend-clock separation), returned on the same boot, and cleaned up its trace instance.
+
+The exact before/after AOP/RPM boundaries again show AOSD, CXSD, and scalar DDR at count 0 with zero accumulated duration and no last-entry/exit timestamps. This is now reproduced in both s2idle and `deep` on the current image: the firmware stats block recorded no entry for those named modes in either capture. It still does not tell us the physical cause or all other low-power states the firmware may use.
+
+The trace captured 1,388 RPMh sends (1,376 active, six wake-set, six sleep-set), 668 RPMh completion records, and zero AOSS QMP messages. Around suspend, Linux staged the same six-resource `apps_rsc` TCS 5 wake set and TCS 3 sleep set as in prior runs; the sleep writes were non-waiting (`complete=0`), so this trace proves programming/staging, not firmware execution or acceptance. The detailed DDR `0xd0` counter advanced 606,966,496 ticks and again nearly matched the frequency-bucket sum; the other numeric LPM rows stayed zero. No state ID is assigned to `0xd0`.
+
+This closes the simpler mode-selection question: merely selecting `deep` instead of `s2idle` does not make these AOP/RPM counters advance. To explain the absent firmware records or physical residency, next decode the staged RPMh resource addresses and find an authoritative Nova AOP/PMIC transition counter; the public AOP binary and Nova DT still do not provide a safe CXPC sink schema.
+
+### 2026-09-18 14:27 UTC — live RPMh addresses decode to BCM resources; PSCI system suspend is probeable
+
+The current image's read-only `/sys/kernel/debug/cmd-db` dump maps the six addresses in the deep run's staged sleep/wake TCS to named BCM records: `0x50000=MC0`, `0x50004=SH0`, `0x50010=SN0`, `0x50038=CN0`, `0x50048=QUP1`, and `0x50044=QUP0`. This removes the raw-address ambiguity. The trace contains sleep-set commands for those six resources, but their encoded values are still RPMh/BCM payloads; they are not PMIC rail measurements and the asynchronous sleep TCS write is not evidence firmware triggered it. No individual item is yet identified as the blocker.
+
+A fresh root preflight on the current image also read `/sys/kernel/debug/psci`: PSCI v1.1, OSI supported, and `SYSTEM_SUSPEND` supported. Both `psci_system_suspend_enter` and `psci_system_suspend` appear in `available_filter_functions` and are not listed in the kprobe blacklist. The current trace inventory lacks `rpmh:rpmh_rsc_snapshot` and `power:machine_suspend`. Therefore the most direct remaining no-build path test is a run-scoped return probe on `psci_system_suspend_enter` during `deep`; that can establish whether the PSCI SYSTEM_SUSPEND wrapper was reached and what Linux return code it got, while qcom_stats remains the independent firmware-record layer. The device returned awake on the same boot after the previous test; no arbitrary QMP or debugfs control was written.
+
+### 2026-09-18 14:30 UTC — direct deep suspend reaches PSCI SYSTEM_SUSPEND and returns success
+
+Run `20260918T142856Z-ed25240db22b` used the current plugged-in Nova image (`20260915.feca679`, kernel `7.2.3`), explicitly selected and observed `deep`, and completed a 29.059135-second suspend interval before the expected RTC wake. A run-scoped kretprobe on `psci_system_suspend_enter` captured exactly one return (`retval=0`) on CPU0 from the path `suspend_devices_and_enter -> psci_system_suspend_enter`. PSCI v1.1 and the debugfs feature inventory had independently reported `SYSTEM_SUSPEND` support. This proves Linux entered the PSCI platform system-suspend callback and it returned success after resume; it does not identify electrical rails or exact DDR residency.
+
+During the same exact before/after boundary, firmware AOSD, CXSD, and scalar DDR remained count 0, accumulated duration 0, with no last-entry/exit timestamps. Detailed DDR `0xd0` advanced 611,293,330 ticks, within 146 ticks of the summed frequency buckets; its three other numeric LPM rows stayed zero. This is the strongest current separation of layers: `deep` was selected, the PSCI SYSTEM_SUSPEND path returned success, yet the AOP/RPM stats block recorded no entry into its named AOSD/CXSD/DDR modes. The next root cause cannot be fixed by merely adding the missing Linux system-genpd description; we need the Nova firmware's accepted-state or residency telemetry, or authoritative mapping of these stats.
+
+The dynamic probe definition was recorded as run-owned, enabled only in its private trace instance, and cleanup reports it absent after removing the instance; the summary marks run success and kprobe cleanup success. The retrieved evidence archive is `../sm8550-suspend-lab-runs/20260918T142856Z-ed25240db22b/`. No arbitrary AOP request, power policy write, or drain analysis occurred.
+
+### 2026-09-18 14:32 UTC — PSCI standard residency counters are not advertised by this firmware
+
+The current read-only `/sys/kernel/debug/psci` output lists PSCI v1.1, OSI, `SYSTEM_SUSPEND`, `SET_SUSPEND_MODE`, and `SYSTEM_RESET2`, but does not list `STAT_RESIDENCY`, `STAT_COUNT`, or `NODE_HW_STATE`. Linux's PSCI debugfs implementation enumerates optional calls and prints only those the firmware reports as supported, so this image does not offer those standard PSCI state/counter queries through that interface. This closes another plausible no-build route to per-state residency. Evidence: `current-sleep-focus-system-psci/preflight-20260918T142613Z-e88a431e1e46.json`; implementation: [Linux v7.2 PSCI debugfs](https://github.com/torvalds/linux/blob/v7.2/drivers/firmware/psci/psci.c#L350-L430).
+
+### 2026-09-18 14:37 UTC — ADSP qcom_stats advances in the deep-run archive, but does not validate AOSD/CXSD/DDR
+
+The already archived `20260918T142856Z-ed25240db22b` run's broad `pre/audio.json` and `post/audio.json` snapshots show `/sys/kernel/debug/qcom_stats/adsp` count increasing from 20,164 to 20,363 (+199) and accumulated duration from 128,352,121,441 to 129,083,153,631 (+731,032,190 ticks). In the same run, the separately captured exact-boundary AOSD, CXSD, and scalar DDR records remained all-zero; detailed DDR `0xd0` continued to match the frequency-bucket total. This is a new ancillary observation, not evidence that the named AOSD/CXSD/DDR records are advancing or that the ADSP activity occurred during the suspended portion: the audio snapshots bracket the wider run and include awake setup/resume work. ADSP counters use a distinct record and cannot validate the other records' wiring, semantics, or physical residency. The raw values are preserved in the run archive's `device/pre/audio.json`, `device/post/audio.json`, and `device/meta/qcom-sleep-{before-suspend,after-resume}.json`. No new device action or drain measurement was performed. Next, inspect the exact live ADSP debugfs provider and its source/DT binding before deciding whether an aligned awake control would clarify anything; do not treat this as a residency result.
+
+Source audit now confirms the provider distinction: in the v7.2.3 `qcom_stats.c`, subsystem `adsp` is fetched from SMEM item 606 / host 2 with `qcom_smem_get()`, while SoC sleep-mode records such as AOSD/CXSD/DDR are read separately from the platform's mapped stats SRAM. They share `/sys/kernel/debug/qcom_stats`, not a backing record or writer. Thus ADSP's +199 count does not validate the AOSD/CXSD/DDR SRAM path. A boundary-aligned ADSP sample would answer only whether the separate ADSP subsystem record changed over the suspend bracket; it still would not tell us whether a named SoC mode or DDR state physically entered. Source: [Linux v7.2.3 qcom_stats.c](https://github.com/gregkh/linux/blob/v7.2.3/drivers/soc/qcom/qcom_stats.c#L1123-L1250) and [Qualcomm subsystem sleep stats](https://android.googlesource.com/kernel/msm.git/+/9671bc00773d7f73172f1cf38a7cd638091d0214/drivers/soc/qcom/subsystem_sleep_stats.c#L81-L144).
+
+### 2026-09-18 14:42 UTC — public CXPC monitor still lacks Nova-bound and parser-safety proof
+
+Offline comparison of the exact Nova AOP ELF with Qualcomm's SM8550-family Waipio DTS and OnePlus's public `sys_pm_vx.c` did not establish a safe Nova monitor read. Waipio declares `sys-pm-vx@c320000` with a 0x400 resource and AOP mailbox, separate from the 0x400 `soc-sleep-stats@c3f0000` block. OnePlus maps its DT resource, sends `{class:lpm_mon,type:cxpc,...}`, then reads a header plus timestamped per-driver vote rows and interprets asserted votes as blockers. But the reader trusts firmware `logsize` without bounding reads to the declared resource length; the exact Nova ELF only contains `lpm_mon`/`cxpc` strings and an unreferenced address literal, with no cross-reference proving that `0xc320000` is its sink. Nova's active FDT/IOMEM still does not claim the resource. So neither the family DTS nor that reader is sufficient authority to map/read Nova memory; even a correctly bounded blocker trace would explain possible collapse prevention, not prove a state was entered. Sources: [Qualcomm Waipio DTS](https://android.googlesource.com/kernel/msm-extra/devicetree/+/refs/heads/android-msm-eos-android13-wear-kr3-pixel-watch/qcom/waipio.dtsi#L2633-L2645), [OnePlus CXPC mailbox and parser](https://github.com/OnePlusOSS/android_kernel_oneplus_sm8550/blob/c462ef8ffab7a58e035ee04705b16cdfced494b1/drivers/soc/qcom/sys_pm_vx.c#L1677-L1796), and [vote interpretation](https://github.com/OnePlusOSS/android_kernel_oneplus_sm8550/blob/c462ef8ffab7a58e035ee04705b16cdfced494b1/drivers/soc/qcom/sys_pm_vx.c#L1812-L1923). No firmware request or memory read was attempted.
+
+### 2026-09-18 14:47 UTC — exact-boundary ADSP counter shows subsystem sleep across an s2idle window
+
+Run `20260918T144444Z-985f246d6f69` completed a 30-second s2idle capture on the same boot; selected and observed mode matched, 28.706584 seconds of suspend-clock separation were measured, RTC wake succeeded, and the harness restored its RTC alarm and temporary debug settings. ADSP SMEM count increased from 21,251 to 21,259 (+8) across the exact qcom_stats boundary; its accumulated sleep duration increased 600,897,673 counter ticks over a 31.305051-second boundary read window. `last_entered_at` was newer than `last_exited_at` at both boundaries, so firmware reported the ADSP subsystem asleep at both reads. The duration delta is about 19.195 million ticks per second, close to the whole read window. This supports that ADSP's own subsystem sleep accounting is live and records it asleep through almost all of this bracket. It says nothing about AOSD/CXSD/DDR acceptance or the APSS/SoC electrical state.
+
+The exact AOSD, CXSD, and scalar DDR records remained count 0 / duration 0, with unchanged entry/exit fields; detailed DDR `0xd4`, `0xd3`, and `0x11` also stayed at zero while `0xd0` tracked the frequency-bin sum within 472 ticks. This validates the new separately labeled boundary ADSP output on-device and distinguishes subsystem sleep from the unchanged SoC-mode records. Because other subsystem SMEM files are also present, next low-cost capture should include all of them rather than only ADSP; this can map which subsystem counters record sleep, while preserving the limit that none proves whole-SoC or DDR physical residency. Evidence: `../sm8550-suspend-lab-runs/20260918T144444Z-985f246d6f69/device/meta/qcom-sleep-{before-suspend,after-resume}.json` and `device/derived/summary.json`.
+
+### 2026-09-18 14:52 UTC — exact all-subsystem capture shows APSS sleep matching the s2idle interval
+
+Run `20260918T145032Z-684bbecf7947` validated schema v5's dynamic capture of all 17 files under `/sys/kernel/debug/qcom_stats` on the same boot. It requested and observed s2idle, measured 29.290142 seconds of suspend-clock separation, woke by RTC, returned on the original boot, and restored its RTC alarm and temporary debug settings.
+
+New strongest subsystem-level evidence: the SMEM `apss` record changed count 15→16 and accumulated duration +562,313,765 ticks. Dividing by the measured suspend interval gives about 19.198 million ticks/s; at the independently observed ~19.2 MHz counter scale, that represents ~29.287 seconds, essentially the measured 29.290-second s2idle window. Its last-entry and last-exit timestamps both advanced, showing one APSS-recorded sleep interval occurred in the capture. This indicates the APSS subsystem's own firmware sleep record spans almost the entire s2idle interval. It is materially stronger than the prior cluster PSCI return alone, but remains subsystem SMEM evidence: it does not prove AOSD/CXSD acceptance, DDR low-power mode, or the exact physical APSS/SoC rails.
+
+ADSP changed by +7 entries and +612,277,985 duration ticks; CDSP kept count 8 but its duration advanced +612,436,413 with `last_entered_at > last_exited_at` at both samples. Both durations match nearly all of the 31.898484-second complete qcom-stats read window, so those subsystem records were also asleep for nearly the full observation. `adsp_island` was readable but unchanged; the remaining named SMEM files returned empty data on this image and are reported unavailable rather than as zero. Meanwhile AOSD, CXSD, and scalar DDR count/duration remained all zero; detailed DDR `0xd4`, `0xd3`, and `0x11` stayed zero, while `0xd0` again followed frequency-bin time. Thus we can now say *APSS, ADSP, and CDSP subsystem sleep was recorded during s2idle*, while the firmware's named AOSD/CXSD/scalar-DDR counters recorded no entry. The physical whole-SoC/DDR state remains unresolved. Raw boundary data and checksum receipt are in `../sm8550-suspend-lab-runs/20260918T145032Z-684bbecf7947/device/`.
+
+### 2026-09-18 15:02 UTC — direct `deep` suspend returns successfully through PSCI, but named SoC counters stay opaque
+
+Run `20260918T145721Z-47b15190af1a` requested `deep`, the kernel log recorded `deep`, and the requested/observed modes matched. BOOTTIME advanced 31.598017 seconds while MONOTONIC advanced 2.937757 seconds, giving 28.660260 seconds of suspend-clock separation; the RTC woke the device, its boot ID remained unchanged, and the run restored the original `[s2idle] deep` selection. A run-scoped kretprobe on `psci_system_suspend_enter` recorded one return with `retval=0`. Linux v7.2 implements this callback by calling PSCI `SYSTEM_SUSPEND` through `cpu_suspend()`, so this is evidence the direct deep system-suspend path returned successfully after the observed suspend interval, not just a userspace request that failed immediately. It still does not identify physical rails or the precise firmware low-power state. Source: [Linux v7.2 PSCI system-suspend path](https://github.com/torvalds/linux/blob/v7.2/drivers/firmware/psci/psci.c#L530-L545).
+
+The APSS SMEM record advanced from count 16 to 17 and accumulated duration by 550,193,548 ticks across a 31.596064-second stats read window; at the observed ~19.2 MHz scale this is about 28.66 seconds, matching the measured suspend-clock separation. ADSP count advanced by 26 and duration by 606,274,911 ticks; CDSP count stayed at 8 while duration advanced 606,625,170 ticks. In contrast, AOSD, CXSD, and scalar DDR count/duration and entry/exit fields remained zero. Detailed DDR LPM IDs `0xd4`, `0xd3`, and `0x11` remained zero; `0xd0` tracked the sum of frequency-bin time (difference 307 ticks), so it remains excluded as a low-power residency signal.
+
+The generic `power-domain-cluster/idle_states` row changed S1 Usage 64→65 and its `S2idle` column 112→113 during this direct-deep run. This is a Linux genpd accounting correlate; its `S2idle` label appears surprising for a deep run and is not evidence of SoC electrical residency. Keep the raw before/after rows and resolve that column's exact provider/callback semantics before using it to classify suspend mode. The key opaque boundary remains: Linux successfully returned from PSCI system suspend and APSS firmware recorded a matching sleep interval, while AOSD/CXSD/scalar-DDR firmware records logged no named-mode entry. Raw boundary and trace evidence are in `../sm8550-suspend-lab-runs/20260918T145721Z-47b15190af1a/device/`.
+
+### 2026-09-18 15:04 UTC — genpd `S2idle` is callback-tagged accounting, not a sleep-mode detector
+
+Stable Linux v7.2.3 source explains the direct-deep run's genpd `S2idle` delta. `genpd_sync_power_off()` increments Usage only after the genpd power-off callback succeeds; it also increments `usage_s2idle` whenever `system_power_down_ok` is present. The source comment says that callback is currently used only for s2idle, but the increment itself does not check the selected `mem_sleep` mode. The PSCI cpuidle-domain provider assigns that governor to CPU power domains. Thus the observed S1 Usage +1 / S2idle +1 during direct deep is consistent with Linux's successful synchronized power-off accounting; it is not evidence that the run selected s2idle or that physical collapse occurred. `Rejected` increments when `_genpd_power_off()` fails, so an unchanged value only says no such counted callback rejection was recorded. Sources: [genpd sync power-off accounting](https://github.com/gregkh/linux/blob/v7.2.3/drivers/pmdomain/core.c#L1391-L1445), [debugfs column output](https://github.com/gregkh/linux/blob/v7.2.3/drivers/pmdomain/core.c#L3944-L3975), [PSCI genpd governor assignment](https://github.com/gregkh/linux/blob/v7.2.3/drivers/cpuidle/cpuidle-psci-domain.c#L78-L81).
+
+### 2026-09-18 15:10 UTC — exact-boundary genpd capture validated on s2idle
+
+The updated runner's short s2idle run `20260918T150858Z-22033088fb46` requested and observed s2idle, measured 28.827661 seconds of suspend-clock separation, woke by RTC on the same boot, restored settings, and cleaned up the scoped trace. Its new timestamped boundary read of `/sys/kernel/debug/pm_genpd/power-domain-cluster/idle_states` shows state S1 Usage +1, Rejected +0, and S2idle +1; state S0 counters did not move. This confirms the new capture/parse path and ties the Linux genpd callback counters to the same suspend bracket as qcom_stats. Its state description is `N/A`, so the runtime table does not name the underlying power-domain state.
+
+The trace recorded the s2idle PSCI state `0x4100c344` entering and exiting once on CPU2, with `retval=0`. The APSS SMEM count advanced +1 and duration +553,445,126 ticks; at the observed ~19.2 MHz scale this corresponds to about 28.825 seconds, matching the suspend-clock interval. AOSD, CXSD, scalar DDR, and detailed DDR LPM IDs `0xd4`, `0xd3`, and `0x11` again had zero deltas. ADSP and CDSP duration advanced across nearly the whole read window, while ADSP count advanced +7. The direct-deep run also had S1 Usage +1 / S2idle +1, confirming these genpd columns do not distinguish the selected mode. As before, firmware-recorded subsystem sleep and successful Linux/PSCI callbacks do not certify physical AOSD/CXSD/DDR residency.
+
+This runner change only adds exact-boundary cluster genpd snapshots, their separate deltas, and an explicit evidence caveat in result output; it changes no kernel, image, firmware, device policy, or suspend selection. Targeted self-test, `py_compile`, shell syntax, and whitespace checks passed before deployment. Raw evidence and checksums are in `../sm8550-suspend-lab-runs/20260918T150858Z-22033088fb46/device/`.
+
+### 2026-09-18 15:12 UTC — exact-boundary direct-deep run matches the s2idle genpd/APSS pattern
+
+Run `20260918T151128Z-c37641215f54` requested and observed direct `deep`, recorded 28.886978 seconds of suspend-clock separation, woke by RTC on the same boot, and restored the original suspend selection and run-scoped tracing. Its exact-boundary cluster genpd counters again showed S1 Usage +1, Rejected +0, S2idle +1. The `psci_system_suspend_enter` kretprobe captured one `retval=0`; no `0x4100c344` cluster-state event is reported for this direct-deep path. In the preceding exact-boundary s2idle run, the same S1 genpd counters changed by the same amounts, while PSCI recorded one `0x4100c344` enter/exit pair with return 0. This confirms genpd callback counters alone cannot distinguish these two suspend paths.
+
+APSS count advanced +1 with +554,568,879 duration ticks, approximately 28.884 seconds at the observed ~19.2 MHz scale, close to the 28.887-second suspend-clock interval. ADSP advanced +8 and CDSP duration advanced across most of the full read window. AOSD, CXSD, scalar DDR, and detailed DDR LPM IDs `0xd4`, `0xd3`, and `0x11` again showed no firmware-recorded entry; `0xd0` followed frequency-bin accounting. Thus both s2idle and direct deep now have matching evidence at the exact qcom/genpd boundaries: APSS subsystem sleep and a successful Linux suspend path, with no entries in the exposed named AOSD/CXSD/scalar-DDR or recognized detailed DDR-LPM counters. The physical state represented by the remaining undocumented firmware modes is still unknown. Evidence is in `../sm8550-suspend-lab-runs/20260918T151128Z-c37641215f54/device/` and the paired s2idle run `../sm8550-suspend-lab-runs/20260918T150858Z-22033088fb46/device/`.
+
+### 2026-09-18 15:17 UTC — live Nova device tree resolves the s2idle PSCI ID to its exact domain node
+
+Read-only SSH traversal of `/sys/firmware/devicetree/base/cpus/{idle-states,domain-idle-states}` decoded each `arm,psci-suspend-param` as big-endian cells. The trace-observed `0x4100c344` is the parameter on the live Nova node `cpus/domain-idle-states/cluster-sleep-1` (`compatible=domain-idle-state`); the sibling `cluster-sleep-0` is `0x41000044`. Neither domain node has an `idle-state-name` property, which explains why `power-domain-cluster/idle_states_desc` displays `N/A` for S1. Thus the PSCI trace can now be named precisely as a request for Nova's `cluster-sleep-1` domain state rather than an anonymous hex value. The DT provides no human firmware state label or physical rail/residency guarantee for that node.
+
+The CPU-local parameter `0x40000004` maps to three live FDT nodes: `cpu-sleep-0-0` / `silver-rail-power-collapse`, `cpu-sleep-1-0` / `gold-rail-power-collapse`, and `cpu-sleep-2-0` / `goldplus-rail-power-collapse`. Those are CPU idle-state labels, distinct from the cluster domain state's missing name. This closes the state-ID-to-live-DT-node ambiguity and confirms the trace matches the exact running Nova tree, not only another SM8550 board's downstream DTS. It does not tell us whether AOP accepted the target electrical state; qcom_stats still records zero named AOSD/CXSD/DDR entries. No MMIO, AOP/QMP, power policy, or firmware operation was performed.
+
+### 2026-09-18 15:22 UTC — schema 6 state-map receipt validated on the Nova
+
+Run `20260918T152059Z-84e958e01abf` used the updated schema-6 runner, whose local SHA-256 matched the device's recorded runner SHA. It requested/observed s2idle, measured 28.961012 seconds of suspend-clock separation, woke by RTC on the same boot, and completed trace cleanup. The new report line maps the actual trace parameter `0x4100c344` to `domain/cluster-sleep-1 (name unspecified)` and `0x40000004` to the three named CPU idle-state nodes. The raw pre/post `psci-state-map.json` also preserves compatible strings and latency/residency values. This validated the end-to-end mapping capture and report, not just the earlier manual SSH read.
+
+In the same run, trace recorded one `cluster-sleep-1` enter/exit pair and `psci_cpu_suspend_enter` returned 0. APSS SMEM count advanced +1 and duration +555,992,481 ticks, about 28.958 seconds at the ~19.2 MHz scale. Cluster genpd S1 Usage/S2idle both advanced +1 with no Rejected delta. AOSD, CXSD, scalar DDR, and detailed DDR LPM IDs `0xd4`, `0xd3`, and `0x11` again had zero deltas. This makes the Linux requested state and firmware-recorded APSS sleep legible in one receipt while leaving the physical AOP/CXSD/DDR state unresolved. No kernel/image/config change or drain analysis was performed. Evidence: `../sm8550-suspend-lab-runs/20260918T152059Z-84e958e01abf/device/`.
+
+### 2026-09-18 15:44 UTC — new live checks rule out a missing PCIe suspend OPP; RPMh state policy remains a candidate
+
+User clarified that the current goal is to resolve suspend-state observability and opaque sleep behavior, not measure battery drain. No drain test was run.
+
+Fresh read-only inspection of the awake Nova found all enumerated `qcom-rpmh-regulator` devices report `suspend_mem_state=disabled`. The only `regulator-state-mem` node in the live FDT is the fixed fan regulator; the Nova's qcom RPMh rails have no suspend-memory constraints. Public Thorch/Pocknix patches add suspend-state handling to the RPMh regulator driver/core, and Pocknix's current shared AYN DTS adds BOB2-off and L15-LPM constraints. This is a possible policy/build delta to audit, not proof that absent constraints cause the zero named-mode counters; changing rail policy without validating the board requirements would be unsafe. The related regulator patches alone would not create constraints for the live Nova tree.
+
+Correction to the earlier missing-PCIe-OPP lead: the live FDT already contains PCIe0 `opp-suspend` with `opp-hz=1` and a 1000 kB/s peak bandwidth floor, matching Armada patches 0513/0520. Therefore “Armada lacks a PCIe suspend OPP” is ruled out. Its presence does not prove Linux staged or firmware accepted the OPP during the captured interval; it only closes the missing-node hypothesis.
+
+The same fresh root-only check confirms `qcom_aoss` prevent-sleep/collapse controls are write-only debugfs files (mode 0200; reads return `EINVAL`) and `/proc/iomem` has no Nova claim for the community-referenced `0x0c320000` CXPC monitor. Do not treat a family-level address or blocker log as proof of Nova layout or successful state entry. Existing paired short s2idle/deep receipts remain: Linux suspend paths return successfully, APSS SMEM records a sleep interval matching the suspended window, and exposed AOSD/CXSD/scalar-DDR plus recognized DDR-LPM counters do not advance. That bounds the opaque gap but does not identify a firmware-accepted physical state.
+
+Next useful work is to finish authoritative RP6/Nova `sys_pm_vx` DT/resource lineage, determine whether a vendor-supported status/trace interface exists, and map which source-controlled RPMh/OPP requests actually reach the platform suspend path. Any new read-only conclusion will be journaled here before further tests. No QMP writes, MMIO reads, persistent power-policy change, kernel/image build, deployment, or drain measurement was performed.
+
+### 2026-09-18 15:49 UTC — Android family source defines CXPC monitor format, but not Nova ownership; Linux has no sleep-vote acknowledgement
+
+Public AYN/LineageOS Kalama-family DTS declares a separate `sys-pm-vx@c320000` resource at `0x0c320000/0x400`, wired to the AOP QMP mailbox, alongside (not inside) the `0x0c3f0000/0x400` sleep-stats resource. Its binding identifies `reg` as AOP message RAM. This is useful family-level resource/layout authority, but the actual common board DTS is supplied externally and no public RP6/Nova merged runtime tree proves this node is present for this device. The current Armada Nova FDT and its device resource inventory still omit it. The family address is therefore not authorization to map or read it on Nova.
+
+The AYN `sys_pm_vx` driver confirms the buffer is a blocker trace, not a residency counter: it sends `{class:lpm_mon, type:cxpc, ...}` only when its debug interface is enabled, and prints driver vote rows; its all-zero row annotation means entry/exit of a low-power interval. The public parser trusts firmware `logsize` without bounding reads to the declared resource length, so copying that reader unchanged would also create an out-of-range read risk. Even a Nova-validated dump could identify votes blocking collapse but could not certify which state was physically entered. Sources: [AYN Kalama DTS](https://github.com/LineageOS/android_kernel_ayn_qcs8550-devicetrees/blob/a345661c01d7e18b7dfa04dd27690655ff36bd5d/qcom/kalama.dtsi#L2344-L2370), [sys-pm-violators binding](https://github.com/LineageOS/android_kernel_ayn_qcs8550-devicetrees/blob/a345661c01d7e18b7dfa04dd27690655ff36bd5d/bindings/arm/msm/sys-pm-violators.txt#L3-L39), [AYN driver](https://github.com/Ayn8550Dev/android_kernel_ayn_qcs8550/blob/93c5cc6ad1d0b807510cfa0fb1d06f47407881f9/drivers/soc/qcom/sys_pm_vx.c#L178-L201).
+
+Source audit also closes the meaning of the remaining Linux evidence. `qcom_stats` only reads firmware-owned scalar records and a separate DDR table; it has no attempt/rejection counter or writer. DDR frequency-bin changes show that table reader and its refresh path work, but do not validate the separate scalar record area or decode numeric LPM IDs. The three zero scalar counts therefore mean only that no successful dwell was recorded by those named records (or that this firmware does not populate them); they cannot distinguish denial from unreported state. Linux RPMh SLEEP/WAKE writes are staged as non-waiting TCS commands; tracepoint `rpmh_send_msg` can show the intended messages, but those messages have no firmware-application acknowledgement. PSCI SYSTEM_SUSPEND return 0 has the same boundary: it validates the suspend call returned after wake, not the physical substate. PSCI residency/count functions are optional and absent from the Nova firmware's exposed feature list.
+
+The next potentially useful low-cost source/evidence check is to inspect the installed stock Android boot/DTBO artifacts for the exact Nova merged resource declaration. If that does not establish the Nova buffer's owner, size, and parser schema, CXPC remains unavailable as a safe diagnostic. If available, a bounded parser could safely surface blockers; residency still needs documented AOP/PMIC counters, a PSCI stats implementation with topology, or an equivalent firmware/hardware trace. No device partition was read, no firmware request or memory read was made, and no drain test or power-policy change occurred.
+
+### 2026-09-18 15:55 UTC — live Nova gamepad holds BOB2 on, a plausible collapse blocker worth a controlled test
+
+Read-only inspection of the running device's active FDT and sysfs found `soc@0/geniqup@8c0000/serial@89c000/gamepad` is present, and its live `serial1-0` child is bound to Armada's `rsinput` driver. The device reports `power/runtime_status=unsupported`. Its supplier symlink resolves to regulator 17, `vreg_bob2`, which is currently enabled with `suspend_mem_state=disabled` and two users. This agrees with the Armada DTS, where the UART gamepad's `vdd-supply` references `vreg_bob2`, and driver source calls `regulator_enable()` in probe and `regulator_disable()` only on remove; the driver declares no suspend/resume PM callbacks. Sources: [Armada shared Nova/QCS8550 DTS](/Users/danhimebauch/Developer/.external-research/armada-packages/kernel/dts/qcs8550-ayn-common.dtsi:1698), [rsinput driver patch](/Users/danhimebauch/Developer/.external-research/armada-packages/kernel/patches/0031_input--Add-driver-for-RSInput-Gamepad.patch:450).
+
+This aligns with two independent leads: Pocknix's current shared AYN DTS adds `regulator-off-in-suspend` for BOB2, and the public RP6 LineageOS sleep issue reports `suspend_stats/success` stayed zero while its `moorechip-joystick` driver was bound, then incremented after unbinding `serial0-0`. The Nova Armada driver is `rsinput`, not that Android driver, so this is a hardware-path analogy rather than a reproduced cause. Pocknix's rail constraint also requires actual qcom RPMh suspend support to reach firmware; Armada has neither on the live Nova rails.
+
+Important limit: our prior short direct-deep runs still returned success through PSCI and APSS firmware recorded sleep across nearly the full RTC interval. The gamepad therefore does not explain a failure to enter the Linux suspend path. It could still keep BOB2/UART resources active and affect which AOP collapse level is possible; current evidence cannot show that. A reversible unbind/rebind comparison or a short boundary-aligned serial wake/IRQ trace is the smallest test of this lead. No driver was unbound, no rail or policy was changed, no suspend/drain test was run, and device input remains live.
+
+Follow-up analysis of the already captured exact-boundary archives `20260918T150858Z-22033088fb46` (s2idle), `20260918T151128Z-c37641215f54` (deep), and `20260918T152059Z-84e958e01abf` (s2idle) lowers the UART-wake hypothesis: the live-mapped `qcom_geni_serial_uart1` IRQ count was unchanged in all three runs, and among parsed wake sources only the RTC advanced by one event per run. This shows the gamepad UART did not generate a handled IRQ or recorded wake-source event during these short tests. It does not show whether its enabled BOB2 regulator vote inhibits a firmware collapse state; no rail-acceptance telemetry is exposed. Evidence is preserved in each run's `device/pre|post/interrupts.json` and `wakeup_sources.json`.
+
+The same pre-run regulator summary shows why blindly copying Pocknix's BOB2-off-in-suspend setting is not a safe test: Armada reports two BOB2 consumers, `serial1-0-vdd` (the gamepad) and `vreg_l17b_2p5`, whose consumer is `1d84000.ufshc-vcc` (UFS VCC). Its regulator tree shows L17 is parented by BOB2. The current image keeps both users enabled while awake. We have not established that UFS reliably disables L17 before the BOB2 suspend vote, or that the QCS8550 suspend callbacks will program that constraint in this kernel. Changing BOB2 in isolation could interrupt the storage supply or fail constraint propagation. This makes a BOB2 policy patch less minimal/safe than it first appeared; inspect UFS suspend behavior and all downstream load requirements before any A/B.
+
+### 2026-09-18 16:10 UTC — focus narrowed to sleep-state observability; stock DTBO does not expose CXPC monitor
+
+User explicitly redirected this work away from drain-rate measurements and toward answering the remaining state-acceptance questions and reducing sleep opacity. No battery-drain run was started.
+
+A read-only root stream of the Nova's internal `dtbo_a` partition produced a 24 MiB Android DT table: header magic `0xd7b7ab1e`, 56 entries, 13 MiB table payload. The entries are generic Qualcomm Crow overlays. Searching the entire image's printable strings found no `retroid`, `nova`, `qcs8550`, `sys-pm-vx`, `cxpc`, `lpm_mon`, `qmp_aop`, `0xc320000`, or `0x0c3f0000` identifiers. The currently selected Android slot was not established, and a DTBO table alone does not contain/validate the base Nova tree; `vendor_boot_a` remains the next read-only artifact to inspect. No partition was written or flashed. The raw temporary copy is `/tmp/nova-dtbo-a.img`, SHA-256 `1bd16dd02a532121fa1b1b3f5d3aa23c7916e880b40ae43678574c381fd3b1a5`.
+
+Two existing diagnostic facts make another broad RPMh run unnecessary for the immediate software-request question. Archived run `20260918T002946Z-d404cb093fb9` already recorded six WAKE and six SLEEP `rpmh_send_msg` TCS rows, with the SLEEP rows at the same trace timestamp as `psci_domain_idle_enter state=0x4100c344`. That shows Linux staged the sleep vote set immediately before entering the mapped `cluster-sleep-1` state. It does not report an AOP apply acknowledgement or prove physical residency. The current trace profile is noisy because it also records active TCS traffic; a future focused profile can filter `rpmh_send_msg` to `state < 2` and add the suspend marker if a receipt is needed. Source enum: Linux v7.2 `include/soc/qcom/tcs.h` (`SLEEP_STATE=0`, `WAKE_ONLY=1`, `ACTIVE_ONLY=2`).
+
+Likewise, saved `available_events.txt` from current-image traces includes `ufs:ufshcd_system_suspend`, `ufs:ufshcd_system_resume`, `ufs:ufshcd_wl_suspend`, and `ufs:ufshcd_wl_resume`, but the `ufs-irq` profile does not select these events; its candidate-name filter selects runtime suspend/resume but not system/WL suspend. Thus existing captures cannot answer whether UFS enters its low-power device/link state before PSCI. Adding these four event names to the research-only profile is a no-kernel-build diagnostic improvement. The kernel trace format captures callback result and software device/link state, not rail residency. No files were changed in the lab runner yet, and no device suspend or power-policy change was made in this update.
+
+### 2026-09-18 16:13 UTC — stock vendor_boot has CXPC layout only in Kalama trees, not Crow trees
+
+Read-only extraction of internal `/dev/disk/by-partlabel/vendor_boot_a` returned 100,663,296 bytes (SHA-256 `89a73c967f6305932fac5e397628e07b4c81c24bf08723f72538c48be054eec4`). The Android vendor_boot image contains ten valid appended FDTs. A bounded local parser decoded their root compatible and node properties:
+
+- FDT entries 0–1 identify `qcom,crow` SoC trees. Neither has `sys-pm-vx@c320000`; they contain only the separate `soc-sleep-stats@c3f0000` (`qcom,rpmh-sleep-stats`, `reg=<0x0c3f0000 0x400>`).
+- FDT entries 2–9 identify `qcom,kalama` or `qcom,kalamap` variants. Each includes `sys-pm-vx@c320000` with compatible `qcom,sys-pm-violators` / `qcom,sys-pm-kalama` and `reg=<0x0c320000 0x400>`, plus the same `0x0c3f0000/0x400` sleep-stats node.
+
+The currently running Armada FDT identifies the board as `retroidpocket,rpnova`, `qcom,qcs8550`, `qcom,sm8550` and still has no sys-pm-vx node or memory claim for `0x0c320000`. The vendor_boot partition therefore strengthens the family-level layout evidence but does not establish that the Nova's selected Android base tree is one of the Kalama variants or that Armada may safely access this region. The Crow DTBs most closely match the QCS8550 product family and omit the monitor. The Android slot and final board/SoC DT selection remain unknown; `boot_a`/`dtbo_b` or vendor_boot_b may be needed to identify them. This validates the annotation's constraint: a monitor buffer read needs the exact active resource/layout owner, not an address inferred from a sibling SoC DTB. No firmware mailbox request or memory read was attempted; only boot metadata was streamed out of the read-only partition, with no write/flash.
+
+The `vendor_boot_a` raw copy is at `/tmp/nova-vendor-boot-a.img`; only parser output/hash is intended as durable evidence. `dtbo_a` is a separate generic Crow overlay table and contains none of the monitor identifiers; its current-slot applicability is unverified.
+
+### 2026-09-18 16:15 UTC — A/B slot comparison removes image-slot ambiguity; UFS suspend capture added to recorder
+
+Follow-up to the 16:13 stock-image inspection: internal `vendor_boot_a` and `vendor_boot_b` have identical SHA-256 `89a73c967f6305932fac5e397628e07b4c81c24bf08723f72538c48be054eec4`; `dtbo_a` and `dtbo_b` are also identical at `1bd16dd02a532121fa1b1b3f5d3aa23c7916e880b40ae43678574c381fd3b1a5`. So the active Android A/B slot cannot change whether these two image classes contain the CXPC node. `boot_a` is an Android boot image with a kernel and small ramdisk but no valid appended FDT header; the SoC DTBs reside in vendor_boot. The only stock vendor_boot FDTs with the CXPC node identify as `qcom,kalama` / `qcom,kalamap`; its two `qcom,crow` SoC trees omit it. None is a board-specific Nova tree, and the running Nova DT still lacks the resource. Thus the family node is proven in bundled sibling-SoC firmware metadata but not safe for the Nova's active QCS8550 tree; no monitor query/read is warranted.
+
+A minimal recorder-only change now includes four already-available UFS tracepoints in the `ufs-irq` profile's candidate selection: system suspend/resume and well-known-LUN suspend/resume. These events were present in archived `available_events.txt` but absent from captured trace formats because earlier profiles did not enable them. They should provide the UFS callback result plus the driver's reported current UFS device/link state, which can settle whether the driver reaches a low-power software state before PSCI; this is not physical rail-residency proof. Host `py_compile`, `host self-test`, and `git diff --check` pass. The runner has not yet been deployed for this profile test; no kernel build, policy edit, partition write, suspend run, or drain measurement occurred in this update.
+
+### 2026-09-18 16:24 UTC — UFS system suspend succeeds in POWERDOWN with link off before PSCI
+
+The updated research-only recorder was deployed by SCP to `/tmp` with SHA-256 `fb862b566196e39c9246e7cb34a8bf9c22f60ed4350a1de5fa6cfb900386733b`, then launched through a one-shot `sudo -S` command. Run `20260918T162030Z-e4eb3cc40e76` completed on the same boot, with a 45-second RTC-woken s2idle request, Wi-Fi/Bluetooth preserved, no kernel or policy change, and all 4,616 archive checksums valid. The device returned to SSH after Wi-Fi resumed.
+
+The new tracepoints closed the UFS callback gap. `ufshcd_wl_suspend` at 13516.990013 reports 21,495 us, `dev_state=UFS_POWERDOWN_PWR_MODE`, `link_state=UIC_LINK_OFF_STATE`, `err=0`. `ufshcd_system_suspend` at 13517.007096 reports 15,208 us with the same powerdown/link-off state and `err=0`. Resume tracepoints also show the expected path back to `UFS_ACTIVE_PWR_MODE` / `UIC_LINK_ACTIVE_STATE`. This proves the Linux UFS callbacks succeeded and the driver reported its device in POWERDOWN with the UniPro link off before the suspend window. It does not, by itself, prove the UFS VCC rail or its parent BOB2 regulator was physically disabled, but it substantially lowers the hypothesis that an active UFS device/link prevents deeper sleep. The existing regulator summary still shows BOB2 shared with the gamepad and UFS VCC, so no BOB2 suspend vote was applied.
+
+The harness addition is intentionally small: four existing tracepoint names were added to the existing UFS profile selection. `py_compile`, host self-test, and `git diff --check` passed before deployment. Raw trace, event format files, status, and integrity receipt are preserved under `../sm8550-suspend-lab-runs/20260918T162030Z-e4eb3cc40e76/device/`. No drain estimate was analyzed; this was a callback-state diagnostic only.
+
+Follow-up from the same run after parsing its exact suspend markers and qcom_stats boundary: UFS `system_suspend` completed at trace time 13517.007096; Linux's `machine_suspend` began at 13517.219404 and `timekeeping_freeze` began at 13517.220853, so the successful UFS POWERDOWN/link-OFF state precedes the core suspend window by about 0.21 seconds. The RTC wake completed a 44.125-second proven s2idle interval on the same boot. APSS SMEM recorded +1 entry and +847,143,016 ticks over the 46.56-second read bracket; ADSP recorded +8 entries. AOSD, CXSD, scalar DDR, and detailed DDR LPM `0xd4`, `0xd3`, `0x11` remained at zero delta; `0xd0` again tracked frequency-bucket accounting. This repeats the central opacity under the exact callback order: UFS has moved to its successful powerdown/off-link state, Linux enters and exits s2idle, APSS firmware records the matching sleep window, yet the named SoC/DDR records show no entry. This rules out UFS failing its system-suspend callback as the explanation for those zero records, but does not prove its regulator tree or the physical SoC state.
+
+### 2026-09-18 16:35 UTC — AOSS QMP trace confirms only a DDR frequency-sync acknowledgement, not a residency query
+
+Run `20260918T163315Z-66531ace129a` used the existing `rpmh-aoss` trace profile during a 30-second RTC-woken s2idle cycle. Armada's normal suspend dispatcher returned successfully, the device resumed on the same boot, the measured suspend-clock separation was 29.130364 seconds, and the private trace instance was removed. The live state request was again `cluster-sleep-1` (`0x4100c344`). Full archive: `../sm8550-suspend-lab-runs/20260918T163315Z-66531ace129a/device/`.
+
+The boot-clock trace contains exactly one AOSS message pair: `{class: ddr, action: freqsync}` at 14268.234068 and `aoss_send_done ...: 0` at 14268.234334. It precedes the PSCI cluster-state entry at 14269.189479. No AOSS message appears during the suspended interval, and none requests `lpm_mon`, CXPC, AOSD, CXSD, or residency readback. This proves a DDR frequency-sync message reached the AOSS mailbox and was acknowledged before PSCI entry; it does not prove the sleep TCS set was applied or identify the physical low-power state. Linux v7.2's `qmp_send()` waits for the AOSS mailbox message to be consumed/cleared and returns zero on that transport acknowledgement. The `qcom_aoss` debugfs entries remain write-only controls, not readback interfaces: [qmp_send implementation](https://github.com/torvalds/linux/blob/v7.2/drivers/soc/qcom/qcom_aoss.c#L1860-L1951), [debugfs implementation](https://github.com/torvalds/linux/blob/v7.2/drivers/soc/qcom/qcom_aoss.c#L2301-L2418).
+
+Boundary qcom_stats again recorded no AOSD, CXSD, or scalar DDR entry; APSS recorded one interval matching the suspend window. Combined with the earlier exact RPMh trace, Linux's staged sleep TCS requests and AOSS mailbox transport are visible, but neither interface reports a firmware acceptance/readback status. This does not close the physical residency question. No battery-drain interpretation, QMP query/write, MMIO access, kernel build, image change, or persistent device-policy change was performed.
+
+Source audit further narrows BOB2. Linux v7.2 UFS suspend follows the observed `UFS_POWERDOWN_PWR_MODE` plus `UIC_LINK_OFF_STATE` with `ufshcd_vreg_set_lpm()`. Its power-off branch disables the UFS device regulators; its fallback still disables VCC when the device is not active. Nova routes UFS VCC through PM8550 L17, whose parent is BOB2, while the UART gamepad consumes BOB2 directly and its RSInput driver has no suspend callback. So UFS can release its own BOB2-backed vote during suspend, but the gamepad retains a direct vote. Existing regulator summaries are taken after resume and cannot prove the physical rail changed while suspended. Source: [UFS LPM regulator path](https://github.com/torvalds/linux/blob/v7.2/drivers/ufs/core/ufshcd.c#L10103-L10143), [UFS system suspend](https://github.com/torvalds/linux/blob/v7.2/drivers/ufs/core/ufshcd.c#L10599-L10624), [Armada kernel DTS tree](https://github.com/armada-os/armada-packages/tree/main/kernel/dts).
+
+### 2026-09-18 19:47 UTC — stock Android ADB can test whether its active Nova tree binds the vendor CXPC blocker driver
+
+A fresh source review found a practical Android-mode diagnostic that is not available in the current Armada FDT. The public AYN QCS8550 Android kernel's `sys_pm_vx.c` binds to `qcom,sys-pm-violators`; when paired with its `sys-pm-vx@c320000` resource and AOP mailbox it exposes `/sys/kernel/debug/sys_pm_violators` plus platform sysfs `debug_enable` and `debug_time_ms`. Its debug path asks AOP for `{class: lpm_mon, type: cxpc, ...}`, then reports the driver votes associated with blocked collapse. Source: [AYN QCS8550 sys_pm_vx driver](https://raw.githubusercontent.com/Ayn8550Dev/android_kernel_ayn_qcs8550/93c5cc6ad1d0b807510cfa0fb1d06f47407881f9/drivers/soc/qcom/sys_pm_vx.c#L167-L190), [debug interfaces and parser](https://raw.githubusercontent.com/Ayn8550Dev/android_kernel_ayn_qcs8550/93c5cc6ad1d0b807510cfa0fb1d06f47407881f9/drivers/soc/qcom/sys_pm_vx.c#L191-L363), [suspend/resume monitor flow](https://raw.githubusercontent.com/Ayn8550Dev/android_kernel_ayn_qcs8550/93c5cc6ad1d0b807510cfa0fb1d06f47407881f9/drivers/soc/qcom/sys_pm_vx.c#L461-L509).
+
+This makes ADB worthwhile for one targeted, read-only check: capture Android's actual runtime FDT identity and search for a bound `sys_pm_vx` platform device, its sysfs attributes, and an existing `sys_pm_violators` debugfs file/log. The vendor_boot Crow FDTs already extracted from both slots omit the node, so the result is uncertain rather than expected; runtime inspection would settle whether Android adds a board overlay or uses another boot tree. ADB shell may read the tree and sysfs without root; reading debugfs or enabling the monitor may require root. Do not write `debug_enable` until the live tree confirms that exact driver/resource is bound and its endpoint is the documented one.
+
+Even if available, this driver is a blocker-vote diagnostic, not a physical AOSD/CXSD/DDR residency counter. Its own logic uses subsystem/system sleep-stat deltas and can identify votes associated with collapse being blocked; it cannot by itself certify which electrical state was reached. The QCS8550 `subsystem_sleep_stats` implementation decides “system slept” from changes in firmware-owned counter values, so the known zero-counter interpretation still matters: [system sleep counter check](https://android.googlesource.com/kernel/msm.git/+/9671bc00773d7f73172f1cf38a7cd638091d0214/drivers/soc/qcom/subsystem_sleep_stats.c).
+
+Local Mac has Android platform-tools installed at `/Users/danhimebauch/Library/Android/sdk/platform-tools/adb`; `adb devices -l` currently shows no attached device. No Android-mode access or device change has been performed.
+
+### 2026-09-18 19:51 UTC — Rooted Android helps inspect debugfs but does not make the CXPC reader safe by itself
+
+Closer review of the public `sys_pm_vx.c` parser shows a safety condition for any future rooted test: `read_vx_data()` trusts firmware-provided `logsize` and iterates that many records without first checking that the records fit inside the declared resource buffer. Therefore, root access alone is not a reason to `cat /sys/kernel/debug/sys_pm_violators` or set `debug_enable`. First identify the exact Android kernel/driver version, active runtime DT resource size, bound device and attribute modes; then audit that version's parser bounds. If it is the same unbounded implementation, do not invoke its reader/monitor; Android remains useful for read-only DT, bind, sysfs, debugfs-presence and kernel-log inspection. If a bounded implementation is present, its staged monitor may take multiple suspend/resume cycles and provides collapse-blocker votes, not definitive physical residency proof. No device command or change occurred while recording this caveat.
+
+### 2026-09-18 20:00 UTC — Android runtime confirms the CXPC driver and exact buffer, but keep its parser disabled
+
+The Nova is connected over USB ADB and already authorized (`adb devices -l` reports serial `675a2365` as `device`, not `unauthorized`). The Mac's existing `~/.android/adbkey` and `.pub` are present, so reconnects using this host key should not need a new device approval unless ADB authorizations are revoked, USB debugging is disabled, or the device is reset. No Android settings were changed.
+
+Read-only ADB reports Android 13 build `qti/kalama/kalama:13/TKQ1.231222.001/eng.RPN.20260722.081626:user/release-keys`, kernel `5.15.123-android13-8-g697b78910a71-dirty`, runtime model `Qualcomm Technologies, Inc. KalamaP HDK`, and active DT compatible `qcom,kalamap-hdk`, `qcom,kalamap`, `qcom,hdk`. The active node `/sys/firmware/devicetree/base/soc/sys-pm-vx@c320000` is compatible with `qcom,sys-pm-violators` and `qcom,sys-pm-kalama`; its `reg` bytes decode to base `0x0c320000`, size `0x400`. Platform device `c320000.sys-pm-vx` is bound to `sys-pm-violators`; the loaded module exposes `debug_enable=0` and `debug_time_ms=10000`. The debugfs endpoint exists but is root-readable only; shell did not read it. Neither control was written.
+
+The exact loaded module was copied read-only from `/vendor_dlkm/lib/modules/sys_pm_vx.ko` to `/tmp/nova-sys_pm_vx.ko` (SHA-256 `60783c435d0ac12b778579541b8c717b222406d4e0d43698c3fd7fece8870d57`, ELF BuildID `37fcfd0060c49bc219338f1151128aec0aa115f4`). Its SCM version is `g697b78910a71-dirty`; that abbreviated commit is not resolvable in the public AYN repository, so source-version identity is not exact. The unstripped ARM64 module contains `read_vx_data`, `logsize`, and the same `lpm_mon/cxpc` messages as the public driver. Disassembly shows `read_vx_data` using the firmware count for record allocation/iteration and no apparent comparison with the `0x400` mapping length. This matches the public source's uncapped `kcalloc(logsize, ...)` and loop at [sys_pm_vx.c lines 191–237](https://raw.githubusercontent.com/Ayn8550Dev/android_kernel_ayn_qcs8550/93c5cc6ad1d0b807510cfa0fb1d06f47407881f9/drivers/soc/qcom/sys_pm_vx.c#L191-L237), but the module was not invoked to read the firmware buffer. Since its suspend callback can call this parser automatically after staged monitoring, do not set `debug_enable` until a reliable bound is established or the driver is fixed. This is a meaningful Android-side finding: the monitor is actually present on Android despite absent Armada runtime DT, but its result path is not safe to trigger yet. ADB emitted only permissive SELinux audit records for shell metadata reads; no policy was changed and no sleep test ran.
+
+### 2026-09-18 20:10 UTC — Quantifying the sys_pm_vx buffer overrun condition
+
+The active Kalama driver has 22 vote columns. Each firmware record is one 32-bit timestamp plus six 32-bit vote words (ceil(22/4)), or 28 bytes; the two-word header adds 8 bytes. In the active 0x400-byte resource, at most 36 complete records fit (8 + 36*28 = 1016 bytes); 37 records require 1044 bytes. The public parser stops early on a zero timestamp, but otherwise trusts the 8-bit logsize and does not validate this limit. Therefore the concern is a possible out-of-range MMIO read and kernel fault/reboot if a nonzero log exceeds the mapped resource, not a flash/persistent-data write. The normal monitor may produce far fewer records, but its actual firmware logsize has not been observed safely. No monitor was enabled and no debugfs data was read.
+
+### 2026-09-18 20:24 UTC — Rooted Android baseline counters expose the same zero-residency records
+
+After the Nova rebooted back to Android, root access survived: `/debug_ramdisk/su -c id` returned uid 0 without another authorization dialog. Magisk's database reports shell uid 2000 policy=2 (allow), until=0 (permanent). No bootloader unlock, image flash, or wipe was needed; only that persistent ADB-shell grant was saved.
+
+A read-only baseline from `/sys/kernel/debug/qcom_sleep_stats` shows Android currently selects `[s2idle] deep`. APSS has count 226 and accumulated duration 3,555,280; DDR, CXSD, and AOSD each have count 0 and all-zero timestamps/duration. Detailed DDR LPM counters `0xd4`, `0xd3`, `0x11`, `0xd0` and frequency buckets are all zero. ADSP has count 2,434 and ADSP island count 2,316; CPUSS reports per-core C4 counts plus L3 D4 count 298 / residency 4,881,333. These are boot-lifetime values, not a new test delta. No suspend test ran, no battery/drain measurement was taken, and the CXPC monitor/debugfs reader was not enabled or read.
+
+The kernel also provides `/system/bin/devmem`, but its usage was not yet established; `/dev/mem` and `/dev/kmem` nodes are absent. The baseline command stalled when reading `/sys/power/wakeup_count`, so avoid that blocking read in subsequent collection. Next useful diagnostic is one short Android s2idle cycle with before/after snapshots of the existing qcom_sleep_stats counters, while leaving sys_pm_vx debug_enable at 0; this can establish Android's regular counter delta without entering the unbounded CXPC parser.
+
+### 2026-09-18 20:27 UTC — Android test path and fresh pre-test counter snapshot
+
+A fresh read before any deliberate suspend shows APSS count 771, last-entered 6,161,892,064, last-exited 6,161,903,547, accumulated 12,764,973; DDR/CXSD/AOSD remain all zero; sys_pm_vx debug_enable remains 0 and debug_time_ms remains 10000. These are a live pre-test snapshot, not a controlled delta. The interval since the earlier post-reboot snapshot included normal user/ADB activity and must not be interpreted as a sleep measurement.
+
+The PMIC RTC is rtc-pm8xxx and Toybox provides rtcwake with mem mode; /sys/power/mem_sleep still selects s2idle. This allows a short RTC-woken s2idle check. /dev/mem and /dev/kmem are absent; Toybox devmem fails opening /dev/mem, so no raw buffer address was read and no /dev/mem node was created. The prior combined inventory stalled on the blocking /sys/power/wakeup_count read; that process was terminated. Skip wakeup_count and use rtcwake for the short controlled cycle.
+
+### 2026-09-18 20:28 UTC — Android RTC wake is available but direct suspend is blocked while attached
+
+One short, RTC-woken `rtcwake -u -m mem -s 15 -d /dev/rtc0` attempt did not enter suspend: Toybox reported `xwrite: Device or resource busy` when writing the selected mem state. The command returned immediately. qcom_sleep_stats snapshots immediately before and after are identical: APSS count 1163, last-entered 8,298,885,037, last-exited 8,298,901,776, accumulated 19,015,214; DDR, CXSD, AOSD, and all detailed DDR LPM/frequency counters remain zero. sys_pm_vx debug_enable stayed 0. No sleep interval or battery/drain measurement occurred. The earlier APSS count 771 was a separate snapshot before the attempt and had already advanced during ordinary Android activity; it is not the test delta. Next inspect Android kernel wakeup_sources and PowerManager blockers to explain EBUSY before retrying; do not read /sys/power/wakeup_count, which blocked the earlier shell command.
+
+### 2026-09-18 20:31 UTC — USB SSUSB remains the likely Android direct-suspend blocker
+
+Android's stay-awake-while-plugged-in global setting was confirmed as 15, temporarily set to 0, and the screen was explicitly put to sleep. PowerManager then reported mWakefulness=Asleep, mStayOn=false, and mHoldingDisplaySuspendBlocker=false. With that display blocker released, a second 15-second RTC-woken mem/s2idle attempt still failed immediately with EBUSY. The original setting was restored to 15 in the same command.
+
+The nearby read-only wakeup_sources snapshot had PowerManager wake-lock count 0 but showed a600000.ssusb active_since/total_time 563,308 ms while the USB cable remained attached; the separate usb source had no active_since. Counters immediately before/after the failed attempt stayed identical (APSS 1845; DDR/CXSD/AOSD and detailed DDR counters zero), confirming the kernel did not enter the requested state. This points toward the SSUSB controller/gadget path as the remaining likely blocker, but it is still an inference until testing without the cable. No battery drain comparison or successful suspend cycle occurred. Next, use existing authorized Wi-Fi ADB (temporary port 5555) and ask the user to unplug USB so we can repeat the short RTC-woken s2idle test with control retained over Wi-Fi.
+
+### 2026-09-18 20:32 UTC — Persistent ADB root and Wi-Fi transport are established
+
+The device was already bootloader-unlocked and Magisk 30.7 was installed/running; no boot image, partition, or user data was changed. After the user accepted Magisk's root dialog and the device rebooted, ADB root returned uid 0 in the Magisk SELinux domain. Magisk policy now contains uid 2000, policy 2 (allow), until 0 (permanent); a second post-reboot request succeeded without another prompt. The Mac's persistent ADB key also remains trusted.
+
+To isolate USB as a possible suspend inhibitor without losing control, adbd was switched to TCP port 5555 for this boot and the authorized Mac connected to 192.168.0.163:5555. Root over that link works without an additional prompt. This is temporary to the current boot and can be returned to USB mode after the test. The saved Android stay-awake setting is restored to 15. While the cable is still attached, wakeup_sources shows a600000.ssusb active_since=652375 ms; next test depends on disconnecting USB while retaining Wi-Fi ADB. No sleep was entered in this step.
+
+### 2026-09-18 20:34 UTC — after USB removal, Android qcom sleep counters are now nonzero
+
+The user physically disconnected USB while the authorized Wi-Fi ADB connection remained live. Root still works (`uid=0`, Magisk SELinux domain); Android reports `stay_on_while_plugged_in=15`, `mWakefulness=Asleep`, `mStayOn=false`, and `mHoldingDisplaySuspendBlocker=false`. The wakeup_sources row for `a600000.ssusb` now shows `active_since=0`, unlike the attached-cable snapshot, so the SSUSB source is inactive at this capture.
+
+A fresh boot-lifetime qcom_sleep_stats read now reports APSS count 1953, DDR count 311, CXSD count 310, and AOSD count 1949; DDR LPM `0xd4` count is 311, while `0xd3` and `0x11` are zero and `0xd0` has 311 frequency-accounting samples. This differs sharply from earlier snapshots in this boot where DDR/CXSD/AOSD showed zero. It is not a matched before/after RTC test and the counter increase cannot be attributed solely to unplugging USB or to a deliberate suspend attempt. Still, it shows those Android firmware counters can become nonzero in normal device operation; they are not absent from the runtime tree. Preserve this as a lead and first capture boot ID/uptime plus immediate pre/post snapshots around one 15-second RTC-woken s2idle attempt before drawing a controlled conclusion. No battery drain measurement or sys_pm_vx parser access occurred.
+
+### 2026-09-18 20:35 UTC — one Android RTC/mem attempt records APSS, DDR, CXSD, and AOSD entry
+
+With USB physically disconnected, root over Wi-Fi ADB, display already asleep, original `stay_on_while_plugged_in=15` restored, and `a600000.ssusb` inactive, ran one `/system/bin/rtcwake -u -m mem -s 15 -d /dev/rtc0` attempt. It returned status 0 and kept the same boot ID (`45c48211-b345-477c-b1bb-ef163dce7b73`). Fresh before/after qcom_sleep_stats deltas were APSS +1 count / +20,935,752 duration ticks; DDR +4 / +20,008,806; CXSD +4 / +19,944,416; AOSD +31 / +19,744,656; DDR LPM `0xd4` +4 / +20,015,012 ticks. The `0xd3` and `0x11` DDR LPM counts stayed zero. This is the first controlled Android suspend request that demonstrably advanced all the named records, proving Android's runtime firmware counters are observable and at least those shallow/collapsed records can register on this device.
+
+Limit: `/proc/uptime` advanced only from 925.11 to 926.61 seconds (about 1.5 seconds) around a requested 15-second RTC alarm, and Toybox printed an RTC date in 1970. Thus this run proves a successful suspend/resume callback and counter delta, but not a 15-second residency; an early wake or clock-domain issue remains to explain. Next inspect wakeup-source/IRQ deltas and RTC state to identify why it returned early. No battery/drain data, sys_pm_vx parser/MMIO read, kernel build, or persistent Android setting change occurred.
+
+### 2026-09-18 20:36 UTC — Android early wake/abort evidence points to timerfd plus WLAN activity
+
+After the short RTC/mem run, read-only inspection of `dmesg`, `/sys/kernel/debug/wakeup_sources`, RTC sysfs, and `/proc/interrupts` found repeated Android `PM: suspend entry (s2idle)` / `PM: suspend exit` cycles. The kernel logged `PM: Pending Wakeup Sources: [timerfd]` and `Abort: Pending Wakeup Sources: [timerfd]`; adjacent Qualcomm WLAN messages said `pmo_core_psoc_send_host_wakeup_ind_to_fw` and `WLAN triggered wakeup: BPF_ALLOW (39)`. The wakeup-source table currently records `alarmtimer.0.auto` with wakeup_count=1 and expire_count=1, and the PM8550 RTC alarm IRQ count is 3, consistent with the RTC path having fired at least once (the IRQ count is not a before/after delta). The kernel log and qcom counters therefore support actual s2idle attempts and firmware counter advancement, but repeated pending timerfd wake events prevent treating the requested 15 seconds as sustained residency. The current debugfs wakeup_sources rows do not map generic `timerfd` back to a particular Android process; next use read-only `dumpsys alarm`/suspend diagnostics to identify the owner or alarm source. No Android power policy was changed, no battery delta was examined, and Wi-Fi stayed enabled so ADB control remains available.
+
+### 2026-09-18 20:37 UTC — correction: RTC alarm delivery was not demonstrated
+
+Correction to the 20:36 note: the `alarmtimer.0.auto` and PM8550 RTC IRQ numbers were read only after the attempt and are cumulative; there was no pre-attempt value, so they cannot establish that this attempt's RTC alarm fired. The command returned status 0, but its short elapsed time and the kernel's repeated `timerfd`-pending suspend aborts make an early non-RTC wake more plausible. `/sys/class/rtc/rtc0/date` reports 1970-01-01, so the displayed Toybox alarm date is also not a sound wall-clock receipt. Accurate statement: qcom firmware counters advanced during the `rtcwake`-requested interval; the request did not prove a 15-second RTC-controlled residency or prove that the RTC alarm caused the resume. Keep the `alarmtimer`/IRQ values as cumulative context only. Next correlate an explicit before/after RTC wakeup-source/IRQ delta and inspect the generic timerfd owner; do not call this a clean timer-woken test.
+
+### 2026-09-18 20:45 UTC — a process-level candidate for Android's generic timerfd blocker
+
+A read-only `/proc/*/fdinfo` correlation found an epoll descriptor in `/vendor/bin/hw/android.hardware.health-service.qti` watching timerfd fd 6 with event mask `0x20000019`; this includes EPOLLWAKEUP (`0x20000000`). The watched timerfd is `CLOCK_BOOTTIME_ALARM` (`clockid=9`), periodic 600 seconds, with roughly 479 seconds remaining at this snapshot. A GNSS service also has a watched timerfd, but its event mask is `0x19` without EPOLLWAKEUP and its clock is ordinary `CLOCK_BOOTTIME` (`7`). This makes the Qualcomm health service timer a plausible owner for one generic `[timerfd]` epoll wake source, but it does not prove that this exact descriptor caused the earlier suspend abort; the timer was not captured while the source was active. The proc-wide scan was stopped after 30 seconds to avoid keeping a long diagnostic running. No process was signaled and no setting changed.
+
+The Android device tree exposes a `qcom,rpmh-sleep-stats` node at `/sys/firmware/devicetree/base/soc/soc-sleep-stats@c3f0000`, alongside separate subsystem and CPUSS stats nodes. This confirms the counters are backed by a distinct firmware stats resource, but raw MMIO pointer words were not read. Previous source review indicates Android's private reader discovers subrecord offsets from firmware pointer words while Armada's mainline driver uses fixed offsets; comparing those values remains an attractive explanation for Android-populated versus Armada-zero records, but is not validated yet. References and source/counter semantics are being checked before we treat it as root cause.
+
+Counter interpretation from source review: the Android records are raw architectural-timer ticks (~19.2 MHz from prior exact-boundary traces). Thus this attempt's ~20.0 million tick increases are around 1.0-1.1 seconds each, consistent with a brief s2idle residence, not 15 seconds. The rows identify firmware-recorded low-power buckets but do not map `0xd4` to a named physical DDR mode. Matching scalar DDR and `0xd4` entry counts are correlation, not proof of the same transition. No battery data was collected.
+
+### 2026-09-18 20:48 UTC — Android stats use two bound drivers over the same 0xc3f0000 resource
+
+Runtime sysfs confirms `/sys/bus/platform/devices/c3f0000.soc-sleep-stats` binds to `soc_sleep_stats` with compatible `qcom,rpmh-sleep-stats`, and `/sys/bus/platform/devices/c3f0000.subsystem-sleep-stats` binds to `subsystem_sleep_stats` with compatible `qcom,subsystem-sleep-stats`; both declare the same `0xc3f0000/0x400` resource. The former creates `/sys/kernel/debug/qcom_sleep_stats/{aosd,cxsd,ddr,...}`; the latter creates `/dev/stats` (root-only), whose Qualcomm driver source supports AOSD/CXSD/DDR and detailed DDR ioctls. Public Android `subsystem_sleep_stats.c` discovers the stats SRAM address by reading a firmware pointer at resource+0x4 and the DDR table pointer at resource+0x1c, then maps the discovered addresses. The exact active `soc_sleep_stats` source and pointer values still need confirmation. This provides a concrete, safe userspace-facing Android stats API, but does not by itself show whether Armada's fixed-offset parser is wrong. No ioctl was issued and no raw MMIO was read.
+
+Timerfd attribution refinement: Linux's generic suspend-abort label `[timerfd]` can be an epoll wakeup-source name for a watched timerfd, not proof of a kernel-created timerfd wake source. The scan found the Qualcomm health service watching a `CLOCK_BOOTTIME_ALARM` timerfd through epoll with `EPOLLWAKEUP`; GNSS's timerfd was ordinary boottime without that flag. This is a plausible attribution path, not proof of the specific aborting epoll item; the broad `/proc` scan was terminated after 30 seconds and did not guarantee an exhaustive process inventory. Next inspect exact Android `soc_sleep_stats.c` source and determine whether qcom_stats pointer values are obtainable through the already-bound `/dev/stats` API or another safe existing interface.
+
+### 2026-09-18 20:49 UTC — exact AYN Android stats reader source confirms dynamic pointer lookup
+
+Fetched the current public `Ayn8550Dev/android_kernel_ayn_qcs8550` `lineage-23.2` source with `gh`. Its active `soc_sleep_stats.c` matches the runtime platform binding: `soc_sleep_stats_probe()` reads a 32-bit firmware offset pointer at the mapped resource plus `config->offset_addr`, computes `stats_base = res->start | readl_relaxed(offset_addr)`, and maps the resulting records (lines 514–566). For `qcom,rpmh-sleep-stats`, the config uses `offset_addr=0x4`, `ddr_offset_addr=0x1c`, three scalar records, and the same driver exposes `/sys/kernel/debug/qcom_sleep_stats` plus `ddr_stats` (lines 661–679 and 471–507). The Nova runtime confirms this driver is bound to the `0xc3f0000/0x400` node and reports nonzero values through its files. Therefore Android's counters are genuinely read from firmware-populated stats SRAM using firmware-provided addresses, not inferred from application state.
+
+The exact pointer values at resource+0x4/+0x1c remain unobservable through this driver’s public debugfs or `/dev/stats` output. Mainline Armada `qcom_stats` uses fixed offsets 0x48 and 0xb8 for its scalar and DDR records, so a layout mismatch remains a testable hypothesis, not a conclusion. The next low-effort source/data check is to inspect whether the Nova driver exports a safe raw pointer/offset attribute or whether its ioctl only returns decoded records; do not create `/dev/mem` or issue arbitrary MMIO reads to obtain these values.
+
+### 2026-09-18 20:51 UTC — no safe Android interface found for the literal pointer values; Wi-Fi control remains intact
+
+The exact public Qualcomm/Ayn `subsystem_sleep_stats.c` ioctl path reads AOSD/CXSD/DDR from the firmware-selected mapped records and copies the decoded `struct sleep_stats` to userspace; it does not return the pointer words or resolved physical/relative offsets. The `soc_sleep_stats` debugfs path likewise exposes decoded counters, not its internal `reg` pointers. Runtime access confirms `/dev/stats` is present but root-only. Thus the currently available no-build interfaces cannot answer whether Android's pointer words equal Armada's fixed 0x48/0xb8 values. `/dev/mem` remains absent; no device node was created and no arbitrary MMIO read was attempted. Exact pointer comparison would require a deliberately bounded kernel-side diagnostic or a trusted vendor-provided offset interface.
+
+After the user warned not to strand the diagnostic session, no Wi-Fi toggle was attempted. Final check: ADB over `192.168.0.163:5555` still returns persistent Magisk root; Wi-Fi remains connected and `stay_on_while_plugged_in` remains the original value 15. No Android policy, radio, boot image, or partition was changed.
+
+### 2026-09-18 20:55 UTC — a five-second RTC request was aborted almost immediately, not RTC-woken
+
+To preserve Wi-Fi ADB, repeated one instrumented test with Wi-Fi left enabled: captured boot ID, uptime, the PM8550 RTC alarm IRQ, `alarmtimer.0.auto`, and APSS/AOSD/CXSD/DDR/DDR-LPM counters before and after `/system/bin/rtcwake -u -m mem -s 5 -d /dev/rtc0`. The command returned status 0 in under one second; boot ID stayed `45c48211-b345-477c-b1bb-ef163dce7b73`, host-reported UTC advanced about one second, and `/proc/uptime` advanced 0.51 seconds. Crucially, the RTC IRQ stayed at 3 and both RTC/alarmtimer wakeup-source rows were byte-for-byte unchanged, so the RTC alarm did not fire and this was not a five-second RTC wake.
+
+During the same bracket, counters advanced only briefly: APSS +1 / +1,380,753 ticks; DDR +1 / +996,730; CXSD +1 / +980,650; AOSD +2 / +955,776; DDR LPM 0xd4 +1 / +998,280. At ~19.2 MHz these are roughly 50–72 ms of recorded residency. This proves a short firmware-recorded transition occurred during the request, not sustained 5-second sleep. It also directly demonstrates the `rtcwake` command returned on an earlier wake/abort before its RTC deadline. Wi-Fi stayed enabled/connected, persistent root remained available, no radio or device settings changed, and no battery measurement was taken. Next read only the fresh kernel-log tail to tie this exact attempt to the active suspend-abort source.
+
+### 2026-09-18 20:56 UTC — the same timerfd abort pattern continues with Wi-Fi kept connected
+
+A fresh `dmesg` tail from the screen-off Android session shows repeated `PM: suspend entry (s2idle)` followed roughly 150–200 ms later by `Wakeup pending, aborting suspend`, active source `[timerfd]`, and `PM: Pending Wakeup Sources: [timerfd]`. Nearby Qualcomm WLAN logs repeatedly send the host-wakeup indication and report `WLAN triggered wakeup: BPF_ALLOW (39)`. This confirms the timerfd blocker remains active in the same period as the short RTC request; the WLAN event follows it, but the log does not prove WLAN is the original cause. The exact five-second command's RTC/IRQ before-after equality already proves its alarm did not cause return. No radio toggles were used; Wi-Fi ADB/root remains available.
+
+### 2026-09-18 20:59 UTC — timerfd epoll owners broaden beyond Qualcomm Health
+
+A second read-only `/proc/*/fdinfo` scan was stopped after it had enumerated timerfds watched by epoll with `EPOLLWAKEUP`; it did not change device state. In addition to the Qualcomm Health service CLOCK_BOOTTIME_ALARM timer (600-second period, roughly 332 seconds remaining in its earlier snapshot), the scan found `system_server` epoll fd 167 watching CLOCK_BOOTTIME_ALARM timerfd 170 (about 653.97 seconds to expiry) and CLOCK_BOOTTIME timerfd 171 (about 627.13 seconds to expiry), both with event mask `0x20000019` including EPOLLWAKEUP. `vendor.dpmd` had a CLOCK_BOOTTIME_ALARM timerfd watched with EPOLLWAKEUP but disarmed (`it_value=0`). GNSS, surfaceflinger, qcrosvm, and service managers also had timerfds without EPOLLWAKEUP. These are owners of potentially wake-capable epoll timers, not evidence any one caused the repeated ~200 ms suspend aborts: the sampled timers were not due soon, and the kernel's generic `[timerfd]` wakeup-source label carries no PID. Next use a bounded trace of the active timer and wakeup tracepoints, if tracefs is idle and supports an isolated instance, to correlate expiry and suspend abort without changing Wi-Fi or Android power policy.
+
+### 2026-09-18 21:01 UTC — isolated tracefs capture is blocked by Android policy
+
+Tracefs was confirmed idle (`tracing_on=0`, `current_tracer=nop`) and supports instances. Created a temporary empty `nova_diag` trace instance, but Magisk-root attempts to enable its wakeup-source and suspend events were denied with `Permission denied`; Android's SELinux policy restricts tracefs writes even in the `u:r:magisk:s0` root shell. Removed the empty instance immediately and re-read the global trace state (`tracing_on=0`); no global tracing config or event was changed, no trace was captured, and Wi-Fi ADB was not touched. Do not relax SELinux or change policy for this diagnostic. This closes the safe tracefs route on the current build unless an already-authorized vendor interface exists.
+
+### 2026-09-18 21:03 UTC — Android exposes cumulative suspend failures and live AOP logs, but not a safe CXPC readback
+
+Read-only Android debugfs snapshot while USB remained unplugged: `sleep_time` showed 1,489 recorded intervals in the 0–1 s bucket and 44 in 1–2 s; `/sys/kernel/debug/suspend_stats` showed success=1,529, fail=15, failed_suspend=12, last_failed_dev=`alarmtimer.0.auto`, errno=-16 (`EBUSY`). These are cumulative/runtime diagnostics, not counters bracketed around a controlled RTC interval. The last-failed-device field names a device whose suspend callback failed; it does not override the separate dmesg evidence that `pm_wakeup_pending()` repeatedly reports `[timerfd]`, nor identify the timerfd PID.
+
+The same live Qualcomm stats snapshot had AOSD count 29,542, CXSD 2,795, scalar DDR 2,801; detailed DDR `0xd4` count was 2,857 (duration 19,604,306,156 ticks, shown as ~39%), while `0xd3` and `0x11` were zero. Scalar DDR and `0xd4` no longer have matching counts in this snapshot, so earlier count equality must be treated as coincidence/correlation, not evidence those records are the same transition. No DDR-state name was inferred.
+
+`/sys/kernel/debug/ipc_logging/aop` exists. The static `log` read returned no data; a bounded read from `log_cont` produced old QMP shim traffic (including WLAN power-resource votes around 1.6–3.6 seconds in its trace clock), not a current suspend acceptance/result. A `tail -c` attempt on this continuous endpoint waited; it was interrupted and the read session ended. I also read `/sys/kernel/debug/sys_pm_violators` once and got a mode/violator table, despite the earlier source-audit warning that its firmware-sized log parser is uncapped. Treat this as an accidental single diagnostic read only: no crash/reboot or connection loss followed, but its content is not relied upon and the endpoint will not be read or enabled again. The temporary tracefs instance was already removed; global tracing stayed off. Final check confirmed Magisk root and Wi-Fi ADB at `192.168.0.163` still available, with Wi-Fi connected; no Android setting or radio state changed.
+
+### 2026-09-18 21:08 UTC — Android short-sleep histogram and kernel wake-lock snapshot are not physical-state proof
+
+Source-check correction for the 21:03 snapshot: Linux v5.15 `sleep_time` bins the elapsed suspend interval injected into timekeeping by integer `tv_sec`; the 0–1 s bin means `tv_sec=0`, and 1–2 s means `tv_sec=1`. It is elapsed host time, not AOSD/CXSD/DDR residency. Its 1,533 total bucket entries need not exactly equal `suspend_stats.success` because they update at different points and have different inclusion rules. The latest SystemSuspend dump showed success=1,811, fail=16, failed_freeze=4, last_failed_step=`freeze`; the debugfs failure fields independently name `alarmtimer.0.auto` and `-16`. Linux alarmtimer can return `-EBUSY` when the next alarm is under two seconds away, so this is a plausible explanation for some freeze/suspend failures, not proof it caused each `[timerfd]` wakeup-pending abort.
+
+A read-only `dumpsys suspend_control_internal --wakelocks` snapshot showed all `[timerfd]` rows inactive. One row had 3,760 events / 1,878 wakeups and last-change time close to the current kernel uptime, matching recent repeated activity, but kernel wake-lock rows expose no PID. Targeted fdinfo reads showed the sampled `system_server` CLOCK_BOOTTIME_ALARM timer at ~29 s, its CLOCK_BOOTTIME timer at ~419 s, QTI Health at ~258 s, and `vendor.dpmd` disarmed; all had `ticks=0`. Thus none of the sampled watched timerfds was ready, weakening these specific descriptors as the cause, while leaving an ephemeral/other owner possible. AOSP `dumpsys` corroborates counts only; it cannot attribute the generic source.
+
+The single prior `sys_pm_violators` output reported an empty mode label and `Max Log Entries:27`. Public `sys_pm_vx.c` only labels mode IDs `0xaa` AOSS, `0xcc` CXPC, and `0xdd` DDR. Given the unknown mode and non-identical dirty runtime module, that table cannot be presented as a validated CXPC capture. The reported 27 entries are below the public driver's 36-record capacity for a 0x400 map if the layout matches, but the parser still lacks a general bound; do not read or enable it again. No tracefs writes, process signals, radio/policy changes, or battery measurements occurred; Magisk root and Wi-Fi ADB remained available.
+
+### 2026-09-18 21:13 UTC — Android marks the device asleep while firmware sleep records continue advancing
+
+With USB unplugged, `dumpsys power` reported `mWakefulness=Asleep` and `mIsPowered=false`; Wi-Fi ADB remained connected. `/proc/uptime` was 3,096.33 s. Compared with the earlier unbracketed Android snapshot (AOSD 29,542; CXSD 2,795; scalar DDR 2,801; DDR `0xd4` 2,857), the live firmware records now read AOSD 39,414, CXSD 3,433, scalar DDR 3,439, and `0xd4` 3,439. Thus these Android firmware-owned records continued to advance while the framework considered the device asleep. This supports that Android is exercising the recorded low-power paths over its screen-off period; because the interval was not bracketed around one verified suspend and AOSD/CXSD/DDR numeric records are not a voltage readback, it still cannot name the exact electrical state or map every increment to a successful system-suspend entry. `0xd3` and `0x11` remained zero; current `0xd0` count also equals 3,439, which remains a count coincidence without a source-level equality contract.
+
+### 2026-09-18 21:14 UTC — paired natural-idle snapshot confirms AOSD/CXSD/DDR records advance on Android
+
+Took a second read-only counter snapshot after the device had naturally remained screen-off; USB stayed unplugged and no suspend request or power-policy change was issued. Android reported `mWakefulness=Asleep` at both boundaries, Wi-Fi stayed connected, and root ADB remained available. `/proc/uptime` advanced 87.05 seconds between snapshots. Firmware-record deltas were AOSD +1,430 counts / +920,816,768 ticks (~47.96 s at the independently established ~19.2 MHz scale), CXSD +93 / +928,724,249 ticks (~48.37 s), scalar DDR +93 / +930,191,013 ticks (~48.45 s), and detailed DDR `0xd4` +93 / +930,335,043 ticks (~48.45 s). `0xd3` and `0x11` stayed zero. This is the cleanest Android-side evidence so far that its firmware reports repeated AOSD, CXSD, and DDR-recorded intervals during screen-off idle, totaling about 48 seconds across this 87-second BOOTTIME bracket.
+
+Limits: boundaries were not placed around one controlled suspend entry, so this shows cumulative firmware-recorded activity while Android was asleep, not the exact residency of each kernel suspend attempt. The matching +93 DDR/`0xd4` counts and near-equal durations in this particular bracket do not create a mapping contract; the earlier live snapshot had counts 2,801 vs 2,857. No physical rail/state name can be assigned from numeric firmware record IDs alone. Wi-Fi ADB/root remained connected after the observation; no battery/drain measurement was made.
+
+### 2026-09-18 21:15 UTC — same Android boot and Wi-Fi ADB survived the idle observation
+
+Post-observation check confirmed the original boot ID `45c48211-b345-477c-b1bb-ef163dce7b73` is unchanged, `su -c id` still returns Magisk root, and Wi-Fi remains connected at `192.168.0.163`; no USB cable is attached. `/proc/driver/rtc` still reports its hardware calendar as 1970-01-01, with no alarm IRQ/pending at this check. This preserves the exact-boot provenance of the 21:13→21:14 counter comparison and confirms the bounded natural-idle observation did not strand ADB or leave an RTC alarm pending.
+
+### 2026-09-18 21:18 UTC — successful Linux suspend cycles correlate with firmware state counts, but not one-to-one
+
+On the same Android boot, captured a second natural screen-off interval without issuing a suspend command. `/proc/uptime` advanced 33.93 seconds; `dumpsys suspend_control_internal --kernel_suspends` success increased 2,275→2,304 (+29) while fail stayed 20. Over that same read bracket AOSD advanced +579 counts / 363,861,296 ticks (~18.95 s); CXSD +38 / 367,073,604 ticks (~19.12 s); scalar DDR +39 / 367,683,013 ticks (~19.15 s); detailed `0xd4` +39 / 367,743,330 ticks (~19.15 s). `0xd3` and `0x11` remained zero. This is positive correlation between completed Linux suspend cycles and AOSD/CXSD/DDR firmware records during Android idle, but the count deltas are not 1:1 (AOSD is much more frequent; CXSD/DDR exceed kernel successes), so these counters can include additional firmware transitions and cannot identify a specific electrical state per suspend.
+
+The failure snapshot changed to `last_failed_step=prepare`, `last_failed_dev=3da0000.kgsl-smmu`, errno `-115` (`EINPROGRESS`), while the cumulative fail count did not change in this bracket. This differs from the earlier `alarmtimer.0.auto/-EBUSY/freeze` result and reinforces that sampled PM failures have multiple paths; neither should be conflated with the separate dmesg `[timerfd]` pending-wakeup abort. Same boot ID `45c48211-b345-477c-b1bb-ef163dce7b73`, root remained available, and Wi-Fi stayed connected after the interval.
+
+### 2026-09-18 21:22 UTC — bounded AOP IPC log read yielded no current sleep/CXPC messages
+
+Used Android Toybox `timeout` to bound a read-only two-second sample of `/sys/kernel/debug/ipc_logging/aop/log_cont`, filtering for `lpm_mon`, `cxpc`, AOSS, sleep, and DDR text. It emitted no matching records and returned without leaving a reader running; ADB stayed connected. This is only a no-data result for that brief live stream window, not evidence that AOP receives no sleep votes or that the persistent log has no relevant records. The interface still does not provide an authoritative state-acceptance readback.
+
+### 2026-09-18 21:25 UTC — Android atrace works where direct tracefs writes are denied
+
+A three-second `adb shell atrace -b 2048 -t 3 power` completed without changing SELinux or leaving tracing active. It returned 60 readable events. The trace showed repeated `swrm_device_suspend` and `lpi_pinctrl_suspend` callbacks on thread 8272, TGID 940; `/proc/940/cmdline` identifies that process as `/system/bin/hw/android.system.suspend@1.0-service`. It also showed native PID 1818 acquiring/releasing `qms_event_Handler_wakeLock_` about every 1–1.5 seconds, with BatteryStats updates in between. This confirms Android's suspend HAL repeatedly enters device-suspend callbacks and identifies a periodic QTI power-manager wake-lock activity during the same trace window. It does not show `power:wakeup_source_activate` or map the generic kernel `[timerfd]` source to PID 1818; that remains a candidate only.
+
+This exposes a viable bounded trace route: Android's `atrace` client can collect `power` events even though direct tracefs writes from the Magisk shell are SELinux-denied. A further trace limited to eventpoll/timerfd functions may identify the timerfd source. Post-trace checks confirmed same boot, root, and Wi-Fi ADB remained available; no device policy, radio, or RTC state changed.
+
+### 2026-09-18 21:29 UTC — tracefs is mounted in the tracing service namespace; targeted event tracing may be available
+
+Read-only mountinfo comparison for PID 1 and `traced_probes` (PID 23370 at this check) shows both share the same mounted tracefs at `/sys/kernel/tracing` and `/sys/kernel/debug/tracing`. The expected directories `/sys/kernel/tracing/events/power` and `/sys/kernel/tracing/events/sched` are present, including `wakeup_source_activate`, `sched_waking`, and `sched_wakeup` event directories. This corrects the earlier mistaken conclusion that tracefs itself was absent: the earlier lookup failed because `available_filter_functions` is not present, not because tracefs is unmounted. `CONFIG_FTRACE=y` and relevant function symbols are present, but the missing filter file means function-graph tracing via `atrace -k` is not established and should not be attempted.
+
+A short Perfetto `linux.ftrace` capture may still request these named events through the tracing service without direct Magisk-shell writes. Next inspect its help and the event `format` files read-only, then use a narrowly scoped capture only if Perfetto confirms support. A `wakeup_source_activate` event alone may execute in callback/interrupt context and does not identify the timerfd creator; pair it with `sched_waking`/`sched_wakeup` to identify a woken thread candidate. No tracing setting was changed in this check; no trace was started. The device stayed on the same boot, rooted, with Wi-Fi ADB and USB-unplugged status intact.
+
+### 2026-09-18 21:31 UTC — Perfetto can collect targeted ftrace events with no existing tracing session
+
+Read-only Perfetto service query reports version 25.0, zero active tracing sessions, and a registered `linux.ftrace` data source produced by `perfetto.traced_probes` (PID 23370). Tracefs event format files exist for `power/wakeup_source_activate`, `power/wakeup_source_deactivate`, `power/suspend_resume`, `sched/sched_waking`, and `sched/sched_wakeup`; the scheduler payloads include woken thread `pid` and `comm`. Before any new capture, each selected event's `enable` file read `0`, global `tracing_on` read `0`, and `current_tracer` was `nop`. The available tracer list contains only `nop`; no function-graph tracer is available. This supports a short Perfetto tracepoint-only test without writing tracefs directly or leaving global tracing enabled. No trace has started yet.
+
+### 2026-09-18 21:34 UTC — first bounded Perfetto attempt contained metadata but no kernel events
+
+Ran a 12-second trace with only five `linux.ftrace` events (`wakeup_source_activate/deactivate`, `suspend_resume`, `sched_waking`, and `sched_wakeup`) to a temporary device file. Perfetto reported a completed write (1,145 bytes); host Trace Processor parsed the file and returned zero `ftrace_event` rows. Its `ftrace_setup_errors` stat was zero, so the config was accepted, but the short run did not capture a wake or suspend event. The device-side trace session returned to zero active sessions; post-run tracefs state was `tracing_on=0`, `current_tracer=nop`. The read-only audit log recorded `traced_probes` opening a tracefs event format file with an AVC marked `permissive=1`; no policy or SELinux setting was changed. This is an inconclusive no-event sample, not proof the source does not occur. Repeat only with a longer bounded interval if ADB and root remain available, then compare kernel suspend counters over that interval.
+
+### 2026-09-18 21:38 UTC — longer background Perfetto run also produced no ftrace stream
+
+Started a 30-second background Perfetto trace with the same power/scheduler events plus frequent `sched/sched_switch`. While it ran, Wi-Fi ADB and root stayed available on boot `45c48211-b345-477c-b1bb-ef163dce7b73`; `/sys/power/suspend_stats/success` rose 3,219→3,254 during the first ~32 seconds and later read 3,297 before trace cleanup. The trace query showed one STARTED session with zero data sources and an empty output file, so I sent SIGTERM only to the trace CLI PID that this test itself had printed. It completed on its own between the status check and signal; Perfetto then reported zero sessions, the final file was 1,280 bytes, and tracefs returned to `tracing_on=0`, `current_tracer=nop`. Host Trace Processor confirmed zero scheduler rows and no per-CPU ftrace read counters in the file. This confirms suspend successes continued during the bracket but this Perfetto attempt did not collect them. Next isolate Perfetto collection with its built-in five-second `sched/sched_switch` smoke configuration before another sleep-window attempt; do not infer anything about timerfd ownership from these empty traces.
+
+### 2026-09-18 21:40 UTC — five-second Perfetto scheduler smoke test also recorded no ftrace events
+
+Used Perfetto's documented light-config mode for a frequent `sched/sched_switch` event while the tracing service was idle. The five-second session finished normally and wrote a 983-byte metadata-only trace; Trace Processor found zero `sched` rows and no per-CPU ftrace read counters (`ftrace_setup_errors=0`). Post-capture `tracing_on=0`, `current_tracer=nop`, and the event's enable value was 0. `traced_probes` emitted audit records for reading tracefs event format files with `permissive=1`; there was no observed SELinux mode/policy change. Thus this host's Perfetto ftrace source is registered but is not delivering a trace stream in these tests, even for scheduler switches. Do not extend Perfetto sleep captures until that mismatch is explained. The next low-risk route is a short `atrace` `sched`/`power` capture, which had previously returned readable events, to see whether Android's atrace client can expose the needed kernel tracepoints.
+
+### 2026-09-18 21:41 UTC — power-only atrace repeatedly shows the Android suspend HAL callbacks
+
+A narrowed five-second `atrace -b 2048 -t 5 power` trace returned repeated `swrm_device_suspend` events (`swrm state: 3`) followed by `lpi_pinctrl_suspend: system suspend` on TID 8272 / TGID 940, spaced roughly 1.0–1.5 seconds across the captured timestamps. This is the same Android suspend HAL process previously identified as `/system/bin/hw/android.system.suspend@1.0-service`. Filtering for `wakeup_source`, `timerfd`, generic `suspend_resume`, and kernel pending-wakeup text found none in this `power`-category dump. Thus atrace is a working way to observe suspend-HAL/device callback attempts, but this category does not expose the missing generic wake-source ownership event. The sample does not prove which kernel suspend attempts completed or why they woke. No persistent trace settings remained enabled; root/Wi-Fi ADB remained connected.
+
+### 2026-09-18 21:44 UTC — combined atrace exposes suspend cadence but scheduler tracing is too noisy to attribute wakes
+
+Captured `sched` plus `power` through atrace to a host-only temporary text file. The sample contained 88,204 scheduler/power event lines (13.4 MB) and 11 `lpi_pinctrl_suspend` callbacks over the recorded ~12-second timestamp span. There were zero `wakeup_source_activate/deactivate` events and no `timerfd` text. More than 800 scheduler wake/wakeup records fell within 50 ms before each LPI marker, with recurring targets including `qseecomd`, `ssgtzd`, `perfetto_hprof_`, and kernel workers; the volume and the tracing workload itself make this unsuitable for assigning a wake owner or causal blocker. Keep this as evidence of frequent HAL callback attempts and an overly noisy route, not as an attribution result. Post-capture check: same boot, Wi-Fi ADB/root intact, `suspend_stats.success=3660`, no Perfetto sessions, `tracing_on=0`, `current_tracer=nop`, and Android still reports asleep. No persistent trace setting changed.
+
+### 2026-09-18 21:48 UTC — Android firmware and CPU-idle records all advanced during a bounded asleep interval
+
+Took paired read-only snapshots around a 30-second host sleep while `dumpsys power` reported `mWakefulness=Asleep` at both boundaries. Same boot ID `45c48211-b345-477c-b1bb-ef163dce7b73`; Wi-Fi ADB and Magisk root remained available. Linux `suspend_stats.success` rose 3,750→3,787 (+37). Qualcomm firmware records advanced: AOSD +702 counts / +451,787,664 duration ticks (~23.53 s at the previously established ~19.2 MHz scale), CXSD +45 / +455,662,820 ticks (~23.73 s), and DDR +45 / +456,369,769 ticks (~23.77 s). The L3 `D4` sleep-stat record rose +37 counts / +472,744,327 raw residency units (unit not yet verified). Per-core records also advanced: CPU0 `C4_count` +108 and CPU7 +79; their raw `C4_residency` deltas were +478,956,417 and +800,052,725. `cpu0/cpuidle` exposes `WFI` and `silver-c4` states. The CPUSS counter unit/state mapping still needs source confirmation, so these two residency values remain raw.
+
+This independently confirms that the Android image records repeated AOSD/CXSD/DDR residency during screen-off idle and also accumulates per-CPU C4 and L3 D4 activity. The deltas are not 1:1 with Linux suspend success (AOSD +702, CXSD/DDR +45, L3 D4 +37), so do not equate each count to one kernel suspend attempt or assign a physical rail state. No battery metric or power setting was changed.
+
+### 2026-09-18 21:51 UTC — Qualcomm source identifies C4 and L3 D4 as separate hardware counters
+
+Source follow-up mapped the additional debugfs interface. Qualcomm's downstream `qcom_cpuss_sleep_stats` driver reads and prints raw CPUSS sequencer values: per-CPU C4 count/residency and cluster L3 D4 count/residency. The Kalama device tree labels C4 as `rail-pc` with PSCI parameter `0x40000004`, and cluster D4 as `l3-off` with parameter `0x41000044` ([driver](https://android.googlesource.com/kernel/msm/%2B/refs/heads/android-msm-p11-5.15-tm-wear-kr3-dr-p11-qpr3-release/drivers/soc/qcom/qcom_cpuss_sleep_stats.c#L86), [Kalama state definitions](https://android.googlesource.com/kernel/msm-extra/devicetree/%2B/refs/heads/android-msm-eos-android13-wear-kr3-pixel-watch/qcom/kalama.dtsi#L283)). In the paired asleep snapshot, CPU0 and CPU7 C4 counts rose +108 and +79, while L3 D4 rose +37. That is direct evidence these core/cluster modes were entered during the interval, but C4 can happen during ordinary idle and the public driver does not document residency units. These records are separate from qcom sleep-stats AOSD/CXSD/DDR records, and do not establish those system-level states by themselves.
+
+Correction applied to the paired-snapshot entry above: the L3 D4 residency delta remains raw (`+472,744,327`); I withdrew the earlier ~24.62-second conversion because the CPUSS driver does not establish a 19.2-MHz unit. The established ~19.2-MHz conversion applies to the separate AOSD/CXSD/DDR sleep-stat counters only.
+
+### 2026-09-18 21:53 UTC — wakeup-source deltas differ from the earlier timerfd abort samples
+
+Compared the read-only `/sys/kernel/debug/wakeup_sources` table across another 30-second host sleep while Android remained `Asleep`. All 73 rows parsed at both boundaries and the boot ID stayed `45c48211-b345-477c-b1bb-ef163dce7b73`. Linux suspend success rose 4,075→4,113 (+38). Only three wake-source rows changed: `gh_vcpu_ws_45_0` and `_45_1` each had active/event counts +38; `qcom_rx_wakelock` had active_count +37, event_count +104, expire_count +37, with no `wakeup_count` increase and no `prevent_suspend_time` increase. No `timerfd` row delta appeared. This interval therefore did not record a timerfd wakeup; the recurring Qualcomm receive wakelock and guest-vCPU source events were not counted as wakeups or suspend-prevention time in this sample. They correlate with the period but do not establish causation. This also shows the earlier dmesg `[timerfd]` abort is intermittent rather than present in every screen-off interval. Device stayed online/rooted; no settings changed.
+
+### 2026-09-18 21:57 UTC — Nova live DT confirms the separate sys-pm-vx window
+
+Read-only Wi-Fi ADB inspection confirms the live platform device `/sys/bus/platform/devices/c320000.sys-pm-vx` is bound to `sys-pm-violators`, with compatible strings `qcom,sys-pm-violators` and `qcom,sys-pm-kalama`. Its device-tree `reg` decodes to `0x0c320000/0x400`. This corrects earlier notes that no Nova sys-pm-vx node had been found. The `soc_sleep_stats` and `subsystem_sleep_stats` devices separately both declare `0x0c3f0000/0x400`; neither platform device exposes a `resource` attribute, and `/dev/mem` is absent. The distinct window makes the vendor driver’s mapping plausible but gives userspace no bounded raw-register interface.
+
+Do not read `/sys/kernel/debug/sys_pm_violators` again: the earlier one-time output had an unknown/empty mode, and the public parser trusts a firmware log size without a general bound. Do not infer that the device-tree span validates that parser or manually map/read the area. At this check, Magisk root and Wi-Fi ADB remained available with USB unplugged; the boot ID was unchanged, Android reported `Asleep` and `mIsPowered=false`, and the battery reported `Discharging`. No power, radio, or SELinux settings were changed.
+
+### 2026-09-18 21:58 UTC — stock atrace cannot select the exposed RPMh event group
+
+Read-only tracefs enumeration confirms this kernel has event formats for `rpmh:rpmh_send_msg`, `rpmh:rpmh_solver_set`, `rpmh:rpmh_tx_done`, and related tracepoints. However, `atrace --list_categories` has no `rpmh` category. The device's `atrace --help` says `-k` selects kernel *functions*, not trace events; its available tracer list was already limited to `nop`, and `available_filter_functions` is absent. Thus the working Android `atrace` path cannot be pointed at the RPMh tracepoint, while direct tracefs writes from Magisk root were denied by SELinux and Perfetto's ftrace producer produced no event stream in three bounded trials. Do not try `-k rpmh/rpmh_send_msg` as a workaround: it is the wrong interface. A useful RPMh command trace now requires fixing/using an authorized ftrace producer or adding a small kernel-side diagnostic; no runtime trace settings were changed in this check.
+
+### 2026-09-18 21:59 UTC — an ADSP sleep-monitor debugfs directory exists but remains unqueried
+
+Read-only directory metadata shows `/sys/kernel/debug/adspsleepmon` contains `master_stats`, `adsp_panic_state`, and `read_adsp_panic_state`; the first and third are mode `0444`, while `adsp_panic_state` is `0644`. No file contents were read. The name suggests another potential firmware/master sleep counter path, but semantics and read-side effects are not yet established. Identify the bound driver and source for its debugfs callbacks before querying any entry, especially the apparently writeable `adsp_panic_state` control. No device state or trace setting changed.
+
+### 2026-09-18 22:02 UTC — ADSP master_stats contains sleep counters but reading it requests live DSPPM data
+
+The public OnePlus SM8550 `adsp_sleepmon.c` reference identifies `master_stats` as a combined view of SysMon, DSPPM, ADSP LPM, and ADSP LPI information. Its show callback reads LPM/LPI count and accumulated-duration records from shared memory, but also sends an RPMsg request for the active DSPPM client list and waits for a completion before printing. Thus it may wake or otherwise perturb the ADSP and is not just a passive memory dump. This is promising for understanding ADSP-local sleep and active clients, but it cannot prove APSS AOSD/CXSD/DDR residency. The matching source is a close SM8550 reference, not yet verified byte-for-byte against Nova's vendor module. No `master_stats` or panic-state contents have been read; first check whether the live driver reports a negotiated ADSP version and whether the query path is available. Source: [OnePlus SM8550 adsp_sleepmon.c](https://github.com/OnePlusOSS/android_kernel_oneplus_sm8550/blob/c462ef8ffab7a58e035ee04705b16cdfced494b1/drivers/soc/qcom/adsp_sleepmon.c#L358-L376) and [master_stats output](https://github.com/OnePlusOSS/android_kernel_oneplus_sm8550/blob/c462ef8ffab7a58e035ee04705b16cdfced494b1/drivers/soc/qcom/adsp_sleepmon.c#L861-L945).
+
+### 2026-09-18 22:04 UTC — one bounded ADSP stats query completed while Android remained asleep
+
+Before the single `timeout 10 cat /sys/kernel/debug/adspsleepmon/master_stats` read, boot ID was `45c48211-b345-477c-b1bb-ef163dce7b73`, suspend success/fail were 4,647/46, and Android reported `Asleep`, `mIsPowered=false`. The query completed in about a second. It returned SysMon core clock 595,200, AB vote 0, IB vote 799,000,000, sleep-latency sentinel `4294967295`; DSPPM version 1 and five rows with PID 0 / zero active clients; ADSP LPM count 98,538 with raw last-enter/last-exit/accumulated values `118621839892 / 118621845931 / 115917978458`; and ADSP LPI count 2,691 with raw values `13476032934 / 13476192388 / 10457922794`. Kept the shared-memory time values raw pending device-specific unit validation. The driver source says the request fetches active DSPPM clients and waits for the response, so this result also confirms that request path returned successfully on Nova. Post-check preserved root Wi-Fi ADB and the same boot; Android still reported asleep. These are ADSP-local records, not proof of APSS AOSD/CXSD/DDR rail state. A source comment says the monitor expects ADSP power-collapse when no audio use case is active, or LPI for an active LPI use case; that is monitor policy, not a direct rail measurement. No panic flag, setting, or trace configuration was changed.
+
+### 2026-09-18 22:06 UTC — ADSP LPM advanced across a natural screen-off interval while LPI stayed flat
+
+Repeated the same bounded `master_stats` read after the screen-off interval. LPM count rose 98,538→100,539 (+2,001); accumulated duration rose 115,917,978,458→118,105,869,835 (+2,187,891,377 raw ticks). Its last-enter and last-exit timestamps advanced by about 2.235 billion ticks. The source constant is 19.2 MHz for this driver's elapsed-time comparisons; if that applies to these LPM deltas, it is about 116.4 seconds elapsed and 114.0 seconds accumulated in LPM (roughly 98% of that timestamp span). Keep this conversion qualified until the exact Nova build's counter clock is verified. LPI count and accumulated duration stayed exactly 2,691 and 10,457,922,794, respectively. This fits the source's expectation that, with no active DSPPM clients, ADSP LPM/power-collapse activity can accrue without LPI audio use, but it does not identify the APSS's AOSD/CXSD/DDR state. Linux suspend success rose 4,647→4,765 over the broader bracket, so ADSP LPM count is not one-for-one with AP suspend successes. The SysMon and DSPPM timestamps were unchanged from the first read; treat those snapshots as stale rather than current votes. Same boot, root Wi-Fi ADB, and Android `Asleep` state persisted after the second query; the `dumpsys` pipeline emitted a harmless broken-pipe message after the requested lines. No persistent settings changed.
+
+### 2026-09-18 22:07 UTC — cross-check supports 19.2 MHz units for the changing ADSP LPM record
+
+Compared the raw ADSP LPM timestamp delta between the two reads with the approximately two-minute host interval: `2,234,800,782 / 19,200,000` is about 116.4 seconds. The accumulated-duration delta converts to about 114.0 seconds, close to that span and consistent with the source's 19.2-MHz counter constant. This empirically supports using that scale for the changing LPM record on this device; the LPI record did not change, so its clock remains untested. One read-only capacity check showed 98% / `Discharging`; this was only to ensure the unplugged device had ample charge for the diagnostic, not a drain-rate measurement. No additional device settings were changed.
+
+Source refinement: Qualcomm's public Android 5.15 driver confirms the LPM and LPI values come from ADSP-owned SMEM IDs 606 and 613, and uses its 19.2-MHz timer constant when converting duration deltas to milliseconds ([record/clock definitions](https://android.googlesource.com/kernel/msm/+/refs/heads/android-msm-p11-5.15-tm-wear-kr3-dr-p11-qpr3-release/drivers/soc/qcom/adsp_sleepmon.c#L46), [SMEM lookup](https://android.googlesource.com/kernel/msm/+/refs/heads/android-msm-p11-5.15-tm-wear-kr3-dr-p11-qpr3-release/drivers/soc/qcom/adsp_sleepmon.c#L488), [conversion](https://android.googlesource.com/kernel/msm/+/refs/heads/android-msm-p11-5.15-tm-wear-kr3-dr-p11-qpr3-release/drivers/soc/qcom/adsp_sleepmon.c#L1012)). It also confirms each `master_stats` read sends a DSPPM client-info RPMsg request and waits for its reply; no source evidence says that leaves a persistent wake lock ([request](https://android.googlesource.com/kernel/msm/+/refs/heads/android-msm-p11-5.15-tm-wear-kr3-dr-p11-qpr3-release/drivers/soc/qcom/adsp_sleepmon.c#L325), [show callback](https://android.googlesource.com/kernel/msm/+/refs/heads/android-msm-p11-5.15-tm-wear-kr3-dr-p11-qpr3-release/drivers/soc/qcom/adsp_sleepmon.c#L785)). This source supports the timebase interpretation but is still a related public Android build, not the exact Nova `-dirty` module source.
+
+### 2026-09-18 22:13 UTC — independent source audit closes the Android no-build offset lookup
+
+An independent review of Nova-matched AYN Android `soc_sleep_stats.c` and `subsystem_sleep_stats.c` confirms there is no decoded-output or ioctl path that returns the raw pointer words at SRAM offsets `+0x4` and `+0x1c`, and the probe does not log them. The existing debugfs and `/dev/stats` interfaces return decoded records only. Armada's upstream `qcom_stats` likewise emits decoded counters after using fixed `0x48`/`0xb8` offsets. Therefore userspace cannot safely compare Android's firmware-selected offsets against Armada's constants; do not use devmem, `/proc/kcore`, arbitrary MMIO, or a second mapping to retrieve them. The smallest exact probe is to add a bounded diagnostic log of the two already-read `u32` words inside the existing Android `soc_sleep_stats_probe()` (or log them from Armada's owned qcom_stats mapping), then compare the raw values and computed bases. This requires rebuilding the relevant kernel/module; no such build or device change was started. Sources: [Android probe and pointer use](https://github.com/Ayn8550Dev/android_kernel_ayn_qcs8550/blob/93c5cc6ad1d0b807510cfa0fb1d06f47407881f9/drivers/soc/qcom/soc_sleep_stats.c#L479-L543), [decoded subsystem ioctl path](https://github.com/Ayn8550Dev/android_kernel_ayn_qcs8550/blob/93c5cc6ad1d0b807510cfa0fb1d06f47407881f9/drivers/soc/qcom/subsystem_sleep_stats.c#L265-L356), [Armada qcom_stats offsets](https://codebrowser.dev/linux/linux/drivers/soc/qcom/qcom_stats.c.html#250).
+
+### 2026-09-18 22:18 UTC — passive Android debugfs exposes subsystem SMEM sleep records
+
+The live `/sys/kernel/debug/qcom_sleep_stats` directory also contains `adsp` and `adsp_island` files. The Nova-matched Android `soc_sleep_stats.c` source confirms these are passive `.show` reads: it calls `qcom_smem_get(pid, smem_item)` and prints the `sleep_stats` struct. The mapping is ADSP owner 2 / SMEM item 606 for `adsp` and item 613 for `adsp_island`; unlike `adspsleepmon/master_stats`, this callback sends no RPMsg request. This gives a lower-perturbation route to bracket ADSP LPM and LPI alongside the memory-mapped APSS/AOSD/CXSD/DDR records. Initial snapshot at the same boot while Android reported `Asleep`: suspend success/fail 5,345/53; `adsp` count 112,417 / accumulated 131,048,009,734 ticks; `adsp_island` 2,691 / 10,457,922,794; APSS 7,194 / 69,077,998,479; AOSD 103,378 / 65,801,342,240; CXSD 7,498 / 66,386,293,581; DDR 7,505 / 66,504,805,871. Detailed DDR rows showed `0xd4` and `0xd0` each at count 7,505; `0xd3` and `0x11` zero. These are cumulative baselines; next take one short paired snapshot through the passive path. Source: [subsystem SMEM mapping and passive debugfs show](https://github.com/Ayn8550Dev/android_kernel_ayn_qcs8550/blob/93c5cc6ad1d0b807510cfa0fb1d06f47407881f9/drivers/soc/qcom/soc_sleep_stats.c#L56-L60) and [show callback](https://github.com/Ayn8550Dev/android_kernel_ayn_qcs8550/blob/93c5cc6ad1d0b807510cfa0fb1d06f47407881f9/drivers/soc/qcom/soc_sleep_stats.c#L149-L179).
+
+### 2026-09-18 22:20 UTC — passive paired snapshot ties APSS count to kernel suspend successes
+
+Compared the above passive baseline with a second snapshot about 110 seconds later, while Android reported `Asleep` at both ends and the boot ID stayed `45c48211-b345-477c-b1bb-ef163dce7b73`. Linux suspend success rose 5,345→5,443 (+98); APSS count also rose 7,194→7,292 (+98), with APSS accumulated duration +1,246,164,434 ticks (~64.90 seconds at 19.2 MHz). This is an exact count match over this bracket, strong evidence that the APSS record tracks completed suspend cycles here; it is not a per-cycle trace of the requested physical state.
+
+Over the same bracket ADSP SMEM `adsp` rose +2,027 counts and +2,127,140,058 ticks (~110.79 seconds), while `adsp_island`/LPI stayed unchanged. AOSD rose +1,851 counts / +1,188,922,992 ticks (~61.92 seconds); CXSD +126 / +1,199,248,890 (~62.46 seconds); scalar DDR +126 / +1,201,228,729 (~62.56 seconds). Detailed DDR `0xd4` and `0xd0` also each rose +126; `0xd3` and `0x11` remained zero. The AOSD/CXSD/DDR durations agree closely, while their counts are not 1:1 with APSS/Linux suspend success (AOSD is much more frequent; CXSD/DDR exceed it). These firmware-owned records continue to establish that Android records those named modes during natural screen-off idle, without establishing their exact rail mapping or AOP request-acceptance semantics. No `master_stats` query was used for this pair, no battery trend was measured, and root Wi-Fi ADB remained connected on the same boot.
+
+### 2026-09-18 22:22 UTC — comparable vendor sys-pm-vx parsers also lack a resource bound
+
+Inspected `read_vx_data()` in public Motorola, Sony, Xiaomi SM8550, OnePlus SM8550/SM8650/SM8850, Oppo SM8550, and Realme GT5pro Android-U driver sources. The versions checked extract firmware `logsize`, allocate by that value, and iterate it without comparing the byte cursor or per-record reads against the mapped resource length. This matches the already inspected loaded Nova module's unbounded parser pattern; no ready-made bounded downstream implementation was found in these comparable sources. With Nova's mapped window only `0x400` bytes, the sys-pm-violators file remains unsafe to invoke even though the runtime node exists. A future kernel-only fix needs a full cursor/remaining-length check for the header, timestamp, and all vote words before every read, then can collect the blocker log; merely limiting allocation does not bound MMIO accesses. This would still produce blocker/vote information, not authoritative physical residency. Source examples: [OnePlus SM8550](https://github.com/OnePlusOSS/android_kernel_oneplus_sm8550/blob/c462ef8ffab7a58e035ee04705b16cdfced494b1/drivers/soc/qcom/sys_pm_vx.c#L1677-L1796), [OnePlus SM8850](https://github.com/OnePlusOSS/android_kernel_oneplus_sm8850/blob/fc30e54174d254ff7f33622a9278e4435f6718d2/drivers/soc/qcom/sys_pm_vx.c#L332-L380), [Realme GT5pro Android U](https://github.com/realme-kernel-opensource/realme_GT5pro-AndroidU-kernel-source/blob/ec3fa33ce1c3dbf68c6161d057b04158340ba465/drivers/soc/qcom/sys_pm_vx.c#L276-L324).
+
+### 2026-09-18 22:26 UTC — SM8850 variant confirms `sys_pm_violators` is not a safer read path
+
+An additional immutable-source check found that Oppo's newer SM8850 `sys_pm_violators` debugfs file still routes through the same unbounded `read_vx_data()` parser. Its new `trigger_dump` control is writable and sends a QMP dump request, so it is not a passive alternative. The checked SM8550 and SM8850 implementations both trust firmware `logsize`; no bounded public implementation was found. One earlier Nova output showed 27 entries; under the assumed Kalama 22-counter row layout this would be about 764 bytes within the 0x400 mapping, but the blank mode and unverified header make that a one-sample size estimate, not a safety guarantee. Do not reread it. Sources: [SM8550 parser](https://github.com/oppo-source/android_kernel_oppo_sm8550/blob/43de4a0d7c608e9c41e1f0bfcf5a52d6d449be98/drivers/soc/qcom/sys_pm_vx.c#L204-L253), [SM8850 parser and mode dispatch](https://github.com/oppo-source/android_kernel_oppo_sm8850/blob/6e9dd7c9bc953b000eca61447debd4ac1350fae1/drivers/soc/qcom/sys_pm_vx.c#L319-L402), [SM8850 debugfs wiring and permissions](https://github.com/oppo-source/android_kernel_oppo_sm8850/blob/6e9dd7c9bc953b000eca61447debd4ac1350fae1/drivers/soc/qcom/sys_pm_vx.c#L493-L528).
+
+At 22:26 UTC the Wi-Fi ADB transport was still live, `su -c id` confirmed UID 0, boot ID remained `45c48211-b345-477c-b1bb-ef163dce7b73`, Android reported `mWakefulness=Asleep` and `mIsPowered=false`, and Linux suspend success/fail were 5,817/57. No device setting or kernel interface was written during this check.
+
+### 2026-09-18 22:44 UTC — repeated 36-row monitor samples are not a hard parser bound
+
+Further exact-firmware review found three public CXPC/RBSC captures from the AOP image matching Nova all report 36 rows, across 1,000–24,464 ms monitor intervals. This suggests a fixed logger capacity, but no firmware code or metadata proves a hard `logsize <= 36`. The AOP ELF is stripped and exposes no max-entry constant. The Android `sys_pm_vx.c` parser trusts an 8-bit firmware logsize; with 22 drivers each 28-byte row, 36 rows plus the 8-byte header fit in 0x400 (1,016 bytes), while 37 would read beyond the mapping. `debug_time_ms=10000` is only a resume eligibility threshold: the AYN driver ignores intervals at or below that threshold, and the QMP templates still request a fixed 1,000-ms monitor, so 10,000 does not prove a longer log cannot overflow. A public experimental patch assumes a 0x1000 buffer, not Nova's 0x400 mapping. Keep `sys_pm_violators` unread until the firmware count is bounded or a bounded parser exists. Sources: [AYN parser/QMP templates](https://github.com/Ayn8550Dev/android_kernel_ayn_qcs8550/blob/93c5cc6ad1d0b807510cfa0fb1d06f47407881f9/drivers/soc/qcom/sys_pm_vx.c#L182-L250), [threshold/resume logic](https://github.com/Ayn8550Dev/android_kernel_ayn_qcs8550/blob/93c5cc6ad1d0b807510cfa0fb1d06f47407881f9/drivers/soc/qcom/sys_pm_vx.c#L536-L570), and [matching-hash public captures](https://github.com/jaewun/qcom-aop-debug/tree/89a19b70f554e17ddcf64c3e84037b6532202137/examples/sm8550-6aceb38f).
+
+Artifact cross-check: `/private/tmp/nova-sys_pm_vx.ko` (BuildID `37fcfd0060c49bc219338f1151128aec0aa115f4`) is an ARM64, unstripped copy of the exact Nova module. Its strings contain both CXPC QMP templates with `dur: 1000` and `debug_time_ms_store`, consistent with the source-level interpretation above; its disassembly sets the default threshold to 10,000 ms. No module or device file was changed.
+
+### 2026-09-18 22:28 UTC — DDR LPM IDs are opaque mode identifiers, not frequency buckets
+
+An audit of the Nova-matched Android formatter and Qualcomm-authored Linux `qcom_stats.c` resolves the record-format question: `name[15:8] == 0` marks a DDR low-power record and the low byte (`0xd4`, `0xd3`, `0x11`, `0xd0`) is an opaque DDR LPM name; type `1` is a separate frequency record whose fields encode CP index and MHz. Public source does not map the four LPM IDs to named electrical, DDR self-refresh, or LLCC states. In particular, do not label an observed `0xd4` increment as a specific physical state. Existing control receipts show `0xd0` duration can track aggregate frequency-bin duration, so its residency meaning is especially uncertain. Sources: [Nova-matched Android formatter](https://github.com/Ayn8550Dev/android_kernel_ayn_qcs8550/blob/93c5cc6ad1d0b807510cfa0fb1d06f47407881f9/drivers/soc/qcom/soc_sleep_stats.c#L217-L233) and [Qualcomm-authored Linux formatter](https://github.com/gregkh/linux/blob/v7.2.3/drivers/soc/qcom/qcom_stats.c#L152-L176).
+
+### 2026-09-18 22:30 UTC — distinguish Armada PSCI feature dump from current Android kernel
+
+A live root check caught a platform mismatch in the PSCI research: the archived `/sys/kernel/debug/psci` feature list cited earlier was collected on Armada's 7.2.3 image, not the currently rooted Android 13 kernel (`5.15.123-android13-8-g697b78910a71-dirty`). The Android runtime has no `/sys/kernel/debug/psci` node, and its active DT only identifies `arm,psci-1.0` with `method=smc`; that does not reveal optional PSCI statistics support. Do not apply the Armada feature list to Android. A source/config audit of the matching Android 5.15 kernel remains pending. The live passive `/sys/kernel/debug/qcom_cpuss_sleep_stats/stats` read returned cumulative per-CPU C4 counters and cluster L3 D4 counters; it is separate from AOSD/CXSD/DDR and was not reset. Current same-boot ID remains `45c48211-b345-477c-b1bb-ef163dce7b73`; no device settings or controls were written.
+
+### 2026-09-18 22:33 UTC — Android PSCI stats are unprobed, while a short s2idle bracket advances firmware records
+
+The matching AYN Android 5.15 source audit confirms the live PSCI correction: this kernel has no PSCI debugfs implementation, probes ordinary `SYSTEM_SUSPEND`, `CPU_SUSPEND`, and `SYSTEM_RESET2`, and its UAPI header lacks IDs for `STAT_RESIDENCY`, `STAT_COUNT`, and `NODE_HW_STATE`. That means Android firmware support for those optional calls is unknown, not proven absent, and there is no stock userspace/debugfs route to query them. The smallest exact test would be a diagnostic inside the kernel invoking `PSCI_FEATURES`; sources: [Android PSCI driver](https://github.com/Ayn8550Dev/android_kernel_ayn_qcs8550/blob/93c5cc6ad1d0b807510cfa0fb1d06f47407881f9/drivers/firmware/psci/psci.c#L339-L420) and [Android PSCI UAPI IDs](https://github.com/Ayn8550Dev/android_kernel_ayn_qcs8550/blob/93c5cc6ad1d0b807510cfa0fb1d06f47407881f9/include/uapi/linux/psci.h#L48-L60).
+
+Paired passive qcom counter reads bracketed a successful `/system/bin/rtcwake -u -m mem -s 30 -d /dev/rtc0` while `mem_sleep` was `[s2idle] deep`. The same boot returned, Android remained `Asleep`/unplugged, and Linux suspend success advanced 6,051→6,068 (+17), exactly matching APSS count +17. AOSD advanced +323; CXSD and scalar DDR each +20; detailed DDR LPM `0xd4` and `0xd0` each advanced +20, while `0xd3` and `0x11` remained zero. APSS duration advanced +213,218,394 ticks (~11.105s at the validated 19.2-MHz scale); AOSD +203,544,016 (~10.601s); CXSD +205,320,437 (~10.694s); DDR +205,635,160 (~10.710s); `0xd4` +205,666,132 (~10.712s). `0xd0` advanced 165,941,100 ticks, within 364 ticks of the summed frequency-row delta (165,940,736), so it continues to behave as frequency accounting here. CPUSS L3 D4 count also advanced +17 and raw residency +213,315,433; its tick scale is not established. The counts clearly use different granularities, especially AOSD, and must not be treated as one-to-one suspend events. This adds controlled evidence that Android's selected s2idle interval advances the firmware AOSD/CXSD/DDR records; it still does not reveal which physical state each opaque bucket names or prove AOP accepted a specific request. No drain trend, parser read, QMP request, or persistent setting change occurred.
+
+### 2026-09-18 22:34 UTC — root cannot select Android `deep` under current SELinux policy
+
+Attempted a temporary `deep` selection by writing `/sys/power/mem_sleep` as UID 0 through Magisk, then intended to restore `s2idle` after a 30-second RTC wake. The sysfs write was denied before selection; a live follow-up still reads `[s2idle] deep`, on the same boot, with Android `Asleep` and unplugged. No test ran in `deep`, and no setting changed. The file is owned by root with mode `0644` and SELinux label `vendor_sysfs_suspend`; the Magisk root context is `u:r:magisk:s0`. A targeted Android-policy/source check is now in progress to see if a supported privileged service can select it without weakening SELinux or rebooting. Do not infer Android deep behavior from the successful s2idle test.
+
+After the s2idle bracket, bounded reads of `/sys/kernel/debug/ipc_logging/aop/{log,log_cont}` returned no text. This did not produce an AOP sleep/vote trace or an acknowledgement; the existing AOP logging endpoint remains unhelpful for this question in its current runtime configuration. No logging control was written.
+
+### 2026-09-18 22:43 UTC — exact Nova AOP image has a public 36-row CXPC sample
+
+Rechecked the local 32-bit ARM AOP ELF at `/private/tmp/sm8550-aop-live.elf`: its SHA-256 is `6aceb38f5ef10663ac5c29ffc4e9ee27b6339e8746ff3490485f8cf2640ef687`, matching both Nova A/B AOP partitions recorded earlier. The public `qcom-aop-debug` sanitized raw sample for that hash begins at `0x0c320000` with header word `0x000024cc`: type `0xcc`/CXPC and `logsize=36`. Public OnePlus SM8550 `sys_pm_vx.c` corroborates the 8-byte header and 28-byte rows for 22 named driver bytes (timestamp plus packed votes). Thus 8 + 36×28 = 1,016 bytes, which fits Nova Android's separate `0x0c320000/0x400` sys-pm-vx mapping with only 8 bytes spare. The published capture was from AYN Thor/Retroid Pocket 6 work, not a Nova live capture; firmware hash identity makes its format highly relevant but does not prove every runtime `logsize` is capped at 36. The loaded vendor parser still lacks a resource bound, and the prior Nova read showed 27 entries with an empty mode. Do not treat a sample size as a hard cap; a source/firmware bound check is still pending before any further `sys_pm_violators` read. Sources: [raw CXPC header sample](https://github.com/jaewun/qcom-aop-debug/blob/89a19b70f554e17ddcf64c3e84037b6532202137/examples/sm8550-6aceb38f/cxpc-raw-head.txt), [sample provenance and scope](https://github.com/jaewun/qcom-aop-debug/blob/89a19b70f554e17ddcf64c3e84037b6532202137/examples/sm8550-6aceb38f/README.md), and [row parser](https://github.com/OnePlusOSS/android_kernel_oneplus_sm8550/blob/c462ef8ffab7a58e035ee04705b16cdfced494b1/drivers/soc/qcom/sys_pm_vx.c#L1677-L1796). The matching ELF remains stripped and provides no DDR state-name table; `0xd4` stays an opaque LPM identifier.
+
+
+### 2026-09-18 22:52 UTC — bounded deep-selection attempt returned; counters do not prove requested physical state
+
+Computed deltas from the snapshots bracketing the one 30-second `rtcwake -m mem` attempt made while `[deep]` was selected (selection was then restored to `[s2idle]`). Linux suspend success/fail changed by +26/+8 and APSS count by +26. AOSD changed +606 counts / +882,473,360 ticks (~45.96 s at 19.2 MHz); CXSD +101 / +886,617,510 (~46.18 s); DDR +101 / +888,203,584 (~46.26 s); DDR `0xd4` +101 / +888,359,996 (~46.27 s). DDR `0xd3` and `0x11` remained zero. These bracket totals include the Android wake/reconnect and sampling period after the timed attempt, so they are not a 30-second deep-only interval. The rtcwake command session exited 255 when Wi-Fi ADB dropped, then the same boot returned; this is evidence of a suspend/disconnect/recovery cycle, not proof that the platform reached a particular AOP/CXPC or electrical low-power state.
+
+DDR `0xd0` duration increased by 1,298,027,090 ticks (~67.606 s), within 942 ticks of the summed frequency-row increase (1,298,028,032 ticks, also ~67.606 s). This reinforces that `0xd0` tracks frequency accounting in this capture and should not be interpreted as low-power residency. The differing counter granularities (AOSD +606, CXSD/DDR +101, APSS +26) prevent mapping one counter increment to one suspend event. Device is again reachable on the same boot, Android reports `Asleep`, `mem_sleep` reads `[s2idle] deep`, and no further suspend attempt was started. No power/drain metric was taken.
+
+### 2026-09-18 22:53 UTC — AOSS debug endpoint is a write-only control, not safe telemetry
+
+Rooted Android exposes `/sys/kernel/debug/aoss_send_message`, but it is write-only (`--w--w----`). The matching upstream Qualcomm AOSS driver implements its debugfs operation as a QMP sender, not a readback function; its documentation warns that AOP debug commands can hold floor votes or prevent power collapse. This cannot answer whether CXPC/AOP accepted a sleep request through passive observation, and writing speculative requests would perturb the state under investigation. No command was written. The Android image has no generic `/sys/kernel/debug/qcom_stats`; it does expose the previously sampled `qcom_sleep_stats` and CPUSS statistics. The unbounded `sys_pm_violators` parser remains unsafe to reread, leaving no known safe userspace CXPC response interface. Source citation pending a final source-line cross-check.
+
+### 2026-09-18 22:55 UTC — source confirms AOSS debugfs only sends QMP commands
+
+Follow-up against the Nova-family Android source confirms `/sys/kernel/debug/aoss_send_message` is created mode `0220`; its `aoss_dbg_write()` copies text and calls `qmp_send()`, with no read callback: [matched qcom_aoss.c write handler](https://github.com/Ayn8550Dev/android_kernel_ayn_qcs8550/blob/93c5cc6ad1d0b807510cfa0fb1d06f47407881f9/drivers/soc/qcom/qcom_aoss.c#L2950-L2985), [debugfs mode/creation](https://github.com/Ayn8550Dev/android_kernel_ayn_qcs8550/blob/93c5cc6ad1d0b807510cfa0fb1d06f47407881f9/drivers/soc/qcom/qcom_aoss.c#L3077-L3083). The Qualcomm QMP debug-interface patch explicitly gives examples of commands that prevent power collapse or place floor votes: [patch rationale and handler](https://lkml.rescloud.iu.edu/2307.3/09394.html). Therefore it is a power-control input, not an observational channel, and remains untouched.
+
+No safe passive CXPC/AOP blocker readback has been found on Nova. Readable qcom sleep-stat and CPUSS records are cumulative counters; AOP/AOSS IPC logs were empty in prior bounded reads; the visible CXPC `sys_pm_violators` file is backed by an unbounded parser and remains unread. RPMh/qcom_lpm tracepoints, if captured, can show Linux-side requests/governor decisions but cannot establish AOP acceptance or physical rail residency.
+
+### 2026-09-18 22:56 UTC — counters prove firmware-recorded mode entries, not exact rails
+
+Clarification from the Qualcomm sleep-stats binding and Nova-matched Android parser: AOP/RPM sleep-stat records maintain counters/timestamps/accumulated durations for SoC sleep modes associated with rail/XO power-down. Thus increasing AOSD/CXSD records are positive evidence that firmware recorded entries under those named mode buckets; that is stronger than inferring success from a PSCI call alone. It still does not identify the exact rail level/voltage at pins or prove which electrical state each firmware label represents. Sources: [Qualcomm qcom-stats binding](https://github.com/torvalds/linux/blob/master/Documentation/devicetree/bindings/soc/qcom/qcom-stats.yaml), [Nova-matched DDR mode-count clamp](https://github.com/Ayn8550Dev/android_kernel_ayn_qcs8550/blob/93c5cc6ad1d0b807510cfa0fb1d06f47407881f9/drivers/soc/qcom/subsystem_sleep_stats.c#L1648-L1660), [bounded DDR record loop](https://github.com/Ayn8550Dev/android_kernel_ayn_qcs8550/blob/93c5cc6ad1d0b807510cfa0fb1d06f47407881f9/drivers/soc/qcom/subsystem_sleep_stats.c#L1893-L1904), [DDR record-count validation](https://github.com/Ayn8550Dev/android_kernel_ayn_qcs8550/blob/93c5cc6ad1d0b807510cfa0fb1d06f47407881f9/drivers/soc/qcom/subsystem_sleep_stats.c#L2509-L2517). The exposed `ddr_stats` reader is bounded by a probe-time maximum (`0x14`) and firmware `ddr_entry_count`; this makes that file safe to read, but the printed LPM IDs remain raw/unmapped. This bounded interface is separate from the unsafe `sys_pm_violators` parser.
+
+### 2026-09-18 23:09 UTC — first passive LPM/RPMh trace proves request traffic, but the ring lost suspend phases
+
+On the same rooted Android boot, `mem_sleep` was `[s2idle] deep` before and after. A detached trace job wrapped `/system/bin/rtcwake -u -m mem -s 12 -d /dev/rtc0`; it returned `rtcwake_rc=0`, boot ID stayed `45c48211-b345-477c-b1bb-ef163dce7b73`, and a 60-second watchdog plus normal cleanup restored `tracing_on=0`, all selected events disabled, the original 1-KiB buffer, and `[s2idle]`. Wi-Fi ADB/root recovered without user action.
+
+The trace recorded 329 `qcom_lpm:lpm_gov_select` decisions at state index 0 and 14 at index 1; live CPU idle names are index 0 `WFI` and index 1 `silver-c4`, so these are governor selections, not proof each selected core state executed. It recorded 35 RPMh `send_msg` events and 10 `tx_done` acknowledgements, showing Linux/RPMh request and completion traffic but not AOP low-power acceptance. `power:suspend_resume` retained only `sync_filesystems end` and `freeze_processes begin`. The trace header reports 734 events in buffer versus 2,356 written, so this 1-KiB-per-CPU capture overran and cannot establish whether later suspend phases completed.
+
+Paired firmware counter reads across the short wrapper window changed APSS +1 / +15,595,993 ticks (~0.812 s), AOSD +23 / +15,082,528 (~0.785 s), CXSD +1 / +15,202,283 (~0.792 s), DDR +1 / +15,218,011 (~0.793 s), and DDR `0xd4` +1 / +15,218,557 (~0.793 s). DDR `0xd0` advanced +8,374,596 ticks; the frequency rows summed to +8,374,784 (188 ticks apart), again matching frequency accounting. This is not evidence of 12 seconds in those buckets; the trace/counters cover background s2idle attempts too.
+
+At the later live check the device was still online, same boot, and `[s2idle]`. Kernel logs showed repeated `PM: suspend entry (s2idle)` attempts with `Wakeup pending` / `Abort` and active `timerfd` sources; some also report `eventpoll`. `/sys/power/suspend_stats` then showed success 7,715, fail 88, most recent failure `3da0000.kgsl-smmu`, errno `-115`, step `prepare`. A read-only `/proc/*/fdinfo` scan found future timerfds in `system_server`, `android.hardware.health-service.qti`, and GNSS, plus 3-second/5-second periodic timerfds in service managers; it did not map any specific fd to the `timerfd` wakeup source. These observations identify repeated AP-side abort/prepare activity to investigate, but do not prove the timerfd/GPU failures explain battery drain.
+
+### 2026-09-18 23:12 UTC — larger trace captures timerfd churn immediately before an EBUSY suspend attempt
+
+Ran a second detached trace with a 64-KiB-per-CPU buffer and `power:wakeup_source_activate/deactivate`, `power:suspend_resume`, nonzero device-PM callback ends, `qcom_lpm:lpm_gov_select`, and RPMh send/ack events. The 60-second watchdog again restored all events off, tracing off, the original 1-KiB buffer, and `[s2idle]`; same boot and Wi-Fi ADB/root remained available. The trace was complete for its 137 recorded events (`137/137`, no buffer overwrite).
+
+The explicit `rtcwake -u -m mem -s 12 -d /dev/rtc0` now returned `rtcwake: xwrite: Device or resource busy` (`rc=1`), so this attempt did not complete. Immediately before a `suspend_resume: suspend_enter[1] begin`, the trace records repeated `[timerfd]` and `eventpoll` wakeup-source activate/deactivate events within about 1.5 ms. No matching `suspend_enter end` was captured. `suspend_stats` success/fail rose 7,998/89 to 7,999/90 in the one-second bracket; the stored last-failure tuple remained `3da0000.kgsl-smmu`, `-16`, `freeze`. Thus the runtime is making system-suspend attempts while timerfd/eventpoll activity is present, and at least one request returned `EBUSY`; do not treat the RTC return code or the nearby `suspend_enter begin` as proof of a completed 12-second sleep.
+
+The same bracket's firmware counters changed APSS +1 / +17,368,125 ticks (~0.9046 s), AOSD +26 / +16,838,128 (~0.8770 s), CXSD +1 / +16,974,933 (~0.8841 s), DDR +1 / +16,990,314 (~0.8849 s), and `0xd4` +1 / +16,991,862 (~0.8850 s). `0xd0` duration grew 85,683,404 ticks while frequency rows grew 85,683,200 (204 apart), again matching frequency accounting. These remain short mixed-window firmware counters, not a full RTC sleep duration or a decoded rail state. Trace recorded 89 state-0 and 5 state-1 qcom_lpm selections, 23 RPMh sends and 7 `tx_done` acknowledgements; there were no nonzero device-PM callback-end records and no solver-set records. Requests/acks still do not expose an AOP acceptance decision.
+
+### 2026-09-18 23:13 UTC — traced wakeup sources are threads inside Android system_server
+
+Mapped the task IDs from the complete trace through `/proc/<tid>/status` and `ps -AT`: TID 2142 (`android.fg`) and TID 2389 (`AlarmManager`) both have TGID 2123 (`system_server`). The `[timerfd]` activation was attributed to `android.fg`; the adjacent `eventpoll` activity came from `AlarmManager`. This narrows the visible wakeup activity to Android's system-server alarm/event loop, but does not identify the specific alarm, callback, or timerfd file descriptor responsible. No process or alarm state was changed.
+
+The complete 64-KiB-buffer trace and paired counter snapshots are preserved under `research/sm8550-suspend-lab/receipts/2026-09-18-rooted-lpm-trace/` (`trace.txt`, `counters-before.txt`, `counters-after.txt`, and `rtcwake-output.txt`). The file is intentionally retained despite the RTC command's `EBUSY` result because the wakeup-source ordering and failed attempt are useful evidence.
+
+### 2026-09-18 23:14 UTC — Android AlarmManager had no scheduled wake alarm near the trace attempt
+
+Read-only `dumpsys alarm` reported its next `ELAPSED_WAKEUP` alarm from `com.google.android.gms` about 4m08s in the future, with the next network-stack wakeup several minutes later. That is not a scheduled app wakeup inside the 12-second RTC window. This narrows the trace's rapid system_server `timerfd`/`eventpoll` events to internal service timing or another source, but does not identify a specific fd/callback or rule out non-AlarmManager kernel wake causes. No alarm schedule or app state was changed.
+
+### 2026-09-18 23:15 UTC — source audit corrects `[timerfd]` label and raises a competing-suspend explanation
+
+Correction to the preceding task attribution: Linux `eventpoll` creates an `EPOLLWAKEUP` source named from the watched file's dentry, so `[timerfd]` is likely the name of an epoll-watched timerfd file, not proof that its timer expired or that it owns the wake lock. `eventpoll` is a separate epoll-instance source; the trace task PID is the callback context, not necessarily the logical timer owner. Matched source: [eventpoll wake-source creation/callback/delivery](https://github.com/Ayn8550Dev/android_kernel_ayn_qcs8550/blob/93c5cc6ad1d0b807510cfa0fb1d06f47407881f9/fs/eventpoll.c#L597-L605), [timerfd only signals its wait queue](https://github.com/Ayn8550Dev/android_kernel_ayn_qcs8550/blob/93c5cc6ad1d0b807510cfa0fb1d06f47407881f9/fs/timerfd.c#L63-L89).
+
+A stronger explanation for the unmatched `suspend_enter[1] begin` plus `rtcwake` `EBUSY` is contention with Android's concurrent autosuspend: matched `kernel/power/suspend.c` emits that trace at the start of `enter_state()`, then `mutex_trylock(&system_transition_mutex)` can fail and return `-EBUSY` before freezer preparation, with no matching end event. Source: [enter_state transition lock and trace](https://github.com/Ayn8550Dev/android_kernel_ayn_qcs8550/blob/93c5cc6ad1d0b807510cfa0fb1d06f47407881f9/kernel/power/suspend.c#L561-L600), [failure accounting](https://github.com/Ayn8550Dev/android_kernel_ayn_qcs8550/blob/93c5cc6ad1d0b807510cfa0fb1d06f47407881f9/kernel/power/suspend.c#L625-L635). This is consistent with the trace but not yet proven: per-stage `failed_freeze`/`failed_prepare` deltas were not captured around the RTC attempt, and a freeze failure can also return before a matching trace end. Next discriminator is a short before/after read of those stage counters around one attempt; do not infer causation from the wakeup-source name or task comm alone.
+
+### 2026-09-18 23:20 UTC — Wi-Fi/root access remains intact; cumulative stats show multiple failure stages
+
+After the user removed USB, Wi-Fi ADB remained reachable on `192.168.0.163:5555`; the boot ID was still `45c48211-b345-477c-b1bb-ef163dce7b73`, Magisk `su` returned UID 0, `mem_sleep` remained `[s2idle] deep`, and tracing remained off. A fresh read-only `suspend_stats` snapshot showed success 8,496 / fail 92, with `failed_freeze=31`, `failed_prepare=5`, `failed_suspend=45`, `failed_suspend_late=2`, and `failed_suspend_noirq=0`. The two stored failure tuples were `alarmtimer.0.auto`, `-16`, `freeze` and `3da0000.kgsl-smmu`, `-16`, `suspend`. These are an unbracketed cumulative snapshot, not attributable to the prior explicit RTC attempt; they show that both freeze-stage and suspend-stage failures occur in the Android runtime, so a per-attempt bracket is still needed to distinguish the latest `EBUSY` path. No sleep, reboot, mode change, or trace configuration change was initiated. (Use `adb shell "su -c '...'"` to preserve quoting across the adb shell boundary; the prior compound command's trailing `id` ran outside `su`, but subsequent direct verification confirmed root.)
+
+### 2026-09-18 23:22 UTC — passive interval shows Android suspend attempts continue without a manual sleep
+
+Read-only tracepoint format and counter checks confirmed that `power:suspend_resume` and wakeup-source events are available, and that the per-stage files `/sys/power/suspend_stats/{failed_freeze,failed_prepare,failed_suspend}` can be sampled directly. Between the prior 23:20 snapshot and this check, counters moved from success/fail 8,496/92 to 8,618/96; `failed_freeze` rose 31 to 33 and `failed_suspend` 45 to 47. Both latest stored failures now name `alarmtimer.0.auto` with errno `-16`, at steps `suspend` and `freeze`. This is evidence that Android continues attempting and failing suspend paths while we only perform light reads; it is not proof of a specific transition's cause, and the bracket did not include trace events. Root, same boot, `[s2idle]`, and tracing-off state remain intact.
+
+### 2026-09-18 23:28 UTC — sleep-stat drivers are loadable modules on the live Android boot
+
+Read-only inspection over the still-live Wi-Fi ADB link confirms the Nova kernel is `5.15.123-android13-8-g697b78910a71-dirty` (built with Android clang 14). Both `soc_sleep_stats` and `subsystem_sleep_stats` appear in `/proc/modules`, so the diagnostic reader is not built into the kernel. The dependency chain is `soc_sleep_stats` → `subsystem_sleep_stats` → `sys_pm_vx`; replacing the middle module may therefore require unloading/reloading its `sys_pm_vx` consumer in reverse order, which must be checked before any live deployment. The device is rooted; slot `_a`, boot state `orange`, flash unlocked, SELinux permissive. These properties do not by themselves establish a safe recovery path. The same boot remains on Wi-Fi ADB, `[s2idle]` is selected, and tracing is off. No modules were unloaded, files replaced, or boot controls changed. This materially improves feasibility: a matching diagnostic `.ko` may be tested without a full kernel rebuild or reboot if the exact build tree, ABI, module signature policy, and reload dependencies check out.
