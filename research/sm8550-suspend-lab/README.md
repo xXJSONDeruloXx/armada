@@ -1,5 +1,9 @@
 # SM8550 suspend lab
 
+Current objective, assumptions, closed questions, and ordered work checklist:
+[investigation-status.md](investigation-status.md). Read that first; use the
+notebook below for the full chronological record and corrections.
+
 This directory contains the Phase 1 experiment harness for a Retroid Pocket
 Nova running Armada. It is intentionally a userspace observation tool. It does
 not modify a kernel, firmware, ABL, boot image, storage controller, or radio

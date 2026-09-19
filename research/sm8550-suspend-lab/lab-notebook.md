@@ -5000,3 +5000,76 @@ The awake interconnect summary reports the PCIe consumer (`1c00000.pcie`) at `av
 The current regulator summary shows Armada's single `vreg_l1e_0p88` at `normal` / 880 mV and `vreg_l3e_1p2` at `idle` / 1200 mV. Android's separately captured SLEEP TCS instead sets LDOE1 low-power mode and disables LDOE1/LDOE3, with WAKE restoring them. The Linux regulator summary is an awake active-state view; it cannot establish what firmware applied during a later low-power interval. Together with the source audit showing mainline RPMh regulators submit ACTIVE_ONLY requests, this confirms a concrete request-policy mismatch worth addressing in a controlled experiment, but not a proven cause.
 
 No suspend was triggered and no kernel, boot, regulator, ICC, or power policy was changed. The least risky next step is to identify whether the live PCIe ICC request can be naturally removed by an already-supported system state transition without breaking Wi-Fi/resume, then capture the resulting SLEEP payload and counters. Do not manually lower the vote or disable LDOE rails: that would alter power policy without knowing its hardware safety requirements. If no reversible supported transition exposes a clean A/B, the smallest decisive implementation experiment is a temporary diagnostic kernel change that adds read-only visibility into SLEEP/Wake TCS buffer contents at the pre-suspend boundary; it still cannot prove AOP acceptance, so vendor AOP telemetry remains necessary for that final distinction.
+### 2026-09-19 20:45 UTC — canonical checklist and Android PCIe source lead
+
+The user reset the active investigation scope: do not repeat the closed stats-offset experiment; compare Android/vendor and Armada PCIe suspend paths first, then attribute the MC0/SH0 floor, then audit LDOE1/LDOE3 sleep contexts. Do not deploy a behavioral patch until source comparison supports a safe one-variable A/B. The new canonical checklist is [investigation-status.md](investigation-status.md); this notebook remains chronological so prior evidence and corrections are retained.
+
+Current Git branch is `feat/sm8550-suspend-lab` at pushed commit `334ef072b33b2392b75e03cb9594266163d825da`, later than the user's earlier `054766d5...` anchor.
+
+Initial comparison of the nearby public Android source snapshot (`Ayn8550Dev/android_kernel_ayn_qcs8550`, commit `93c5cc6ad1d0b807510cfa0fb1d06f47407881f9`) found `drivers/pci/controller/pci-msm.c::msm_pcie_pm_suspend_noirq()`. If its DT boolean `qcom,apss-based-l1ss-sleep` is enabled and PARF reports the link in L1SS, this path sets the host's internal suspended/power-off state, disables controller clocks and GDSC, removes the PCIe ICC request with `qcom_pcie_icc_bw_update(..., 0, 0)` (`icc_set_bw(..., 0, 0)`), and powers down analog rails. It does not call Linux's `pci_host_common_d3cold_possible()` in this function. If the L1SS property is absent/false, it instead calls the vendor PME_TURNOFF/L23 suspend helper. Source locations: `pci-msm.c` lines 3853–3891, 7598–7600, 8574–8720, 9419 onward.
+
+This makes the Android vendor path a plausible explanation for how its host can remove the ICC request despite Armada's root-port `PCI_UNKNOWN` D3cold veto. It is not yet a confirmed Nova runtime path: Android's available kernel is only a nearby public match, the running kernel hash `g697b78910a71-dirty` is not matched to it, and Nova's active DT property/driver binding and endpoint power-state ordering remain unknown. Android logs from an earlier run show WLAN suspend/WoW activity, but do not establish endpoint D3 state or that this specific host branch ran.
+
+No device setting, kernel, vote, regulator, or boot state changed during this source review. The source audit must now verify Android DT/property selection and resume flow, then compare mainline v7.2.3 and patches 0513/0520 before selecting any A/B. Keep the established constraints in the checklist: no manual ICC changes, forced D-state, `pcie_ports` changes, shared-rail shutdown, AOSS/QMP writes, or guessed MMIO. USB/ADB was absent in the last host check; the working Linux SSH route is Wi-Fi.
+### 2026-09-19 21:06 UTC — D3cold veto explains why patch 0513 leaves the deep OPP active
+
+Read the upstream v7.2.3 `qcom_pcie_suspend_noirq()` fallback together with Armada patches 0513/0520 and OPP-core semantics. The generic DesignWare callback returns success without setting `pci->suspended` when `pci_host_common_d3cold_possible()` is false. The Qualcomm driver then takes its fallback: in direct deep (`PM_SUSPEND_MEM`), it deliberately does not disable its CPU ICC path or alter the OPP, because late DBI accesses during S2RAM may require that path. Armada patch 0513's suspend-OPP helper call remains nested in the non-`PM_SUSPEND_MEM` branch for this fallback, so patch 0520's 1,000 kB/s suspend OPP is not selected in direct deep. Thus, if the running device is using the OPP path, its active PCIe OPP remains while the host is unsuspended. This resolves the apparent 0513 contradiction and is consistent with, but does not prove sole attribution of, the observed 500,000/1,000,000 kB/s pre-suspend PCIe request and 476/952 MC0/SH0 SLEEP values.
+
+The OPP core confirms that `dev_pm_opp_set_opp(dev, NULL)` would set every attached interconnect path to `avg=0, peak=0`; that operation is not reached in the D3cold-vetoed deep fallback. The 0513 change therefore does not itself force an unsafe floor or misrepresent PCI state. The branch choice is inherited from the upstream fallback safety model. Sources: [v7.2.3 qcom noirq callback](https://github.com/gregkh/linux/blob/v7.2.3/drivers/pci/controller/dwc/pcie-qcom.c#L2026-L2078), [DesignWare D3cold early return](https://github.com/gregkh/linux/blob/v7.2.3/drivers/pci/controller/dwc/pcie-designware-host.c#L1143-L1208), [OPP null bandwidth handling](https://github.com/gregkh/linux/blob/v7.2.3/drivers/opp/core.c#L1080-L1104), [Armada 0513](../../../armada-packages/kernel/patches/0513-PCI-qcom-honour-an-opp-suspend-opp-as-the-non-s2ram-memory-floor.patch), [Armada 0520](../../../armada-packages/kernel/patches/0520-arm64-dts-qcom-sm8550-add-a-pcie-suspend-opp.patch).
+
+Source comparison also found a public LineageOS Android DT overlay repository at commit `b2b4a398c40bde8642925eb475e3ebe66d9fe505`, including RP6/Nova Android overlay files. The RP6 overlay marks `hardware = "rp6"` and board ID but does not declare `qcom,apss-based-l1ss-sleep` itself. It includes a board base overlay outside that small repo, so this does not establish the merged Android DT property. A separate AYN vendor DT release sets the property in generic Kalama HDK files for AYN products; that is a nearby source, not evidence about Retroid's boot DT. Android kernel source remains a nearby match (`93c5cc6...`), not the observed `5.15.123-android13-8-g697b78910a71-dirty` build.
+
+The Armada RP6 DT rail map is now explicit: LDOE1 supplies PCIe PHY, DSI0 PHY, and USB HS PHY. LDOE3 supplies DSI0, PCIe PHY PLL, UFS PHY PLL, USB HS PHY, and USB/DP QMP PHY. RP6 disables DSI1. This explains why a sleep-only PMIC request may be safe only after each consumer's suspend/wake contract is accounted for; the current TCS capture does not identify those contracts. Mainline `qcom-rpmh-regulator` sends state changes as ACTIVE_ONLY and exposes no suspend callbacks. A proper mainline route would model a generic regulator suspend constraint and issue SLEEP-state RPMh commands through regulator ops, with request ownership and wake behavior validated, not copy downstream proxy flags wholesale.
+
+No source change or device behavior test occurred in this review. The existing harness already stores all awake per-client interconnect rows and `icc_set_bw` events; the kernel summary does not expose final per-client SLEEP-bucket contributions. Therefore we have not added an attribution calculator that would overstate what the data means. Next priority is to resolve the Android RP6 merged-DT/property/build source and inspect the exact RSC/bcm-voter aggregation and path-client mapping. Until then there is no safe behavioral A/B: dropping the deep OPP while the host stays unsuspended conflicts with the source's explicit late-DBI safety branch, while a vendor-style L1SS host-off path requires endpoint/WoW wake validation.
+
+### 2026-09-19 21:22 UTC — awake ICC rows do not explain the final SLEEP word
+
+Applied the Linux v7.2.3 interconnect and BCM-voter arithmetic to the saved
+19:03 awake `interconnect_summary` receipt (`20260919T190341Z-5a7c0e91bb3a`).
+If those requests were unchanged and tagged for SLEEP, MC0/SH0 would produce
+`vote_x=525`, `vote_y=2034`. The same run's staged SLEEP TCS is instead
+`0x600003b8` for both MC0 and SH0: `vote_x=0`, `vote_y=952`. Before the TCS,
+the trace shows GPU, UFS, and display request changes; the PCIe request has no
+matching update. Thus the awake calculation is a counterfactual, not exact
+SLEEP attribution. The PCIe request remains a strong candidate for the 952
+peak floor, but the TCS word alone does not prove it is the only contributor.
+
+The tracepoint exposes `icc_set_bw` values but not each request's tag/enabled
+state at final aggregation. Tiny QUP requests appear near staging, but their
+tag membership is not captured; the zero `vote_x` is evidence that the awake
+average set was not simply retained. Do not add a final-vote calculator based
+only on the awake summary. A useful read-only harness extension needs an exact
+observation of request tag/enabled state after suspend callbacks and before
+BCM aggregation.
+
+### 2026-09-19 21:57 UTC — Android DTBO contains APSS/L1SS property candidates
+
+The previous Android preflight captured `ro.boot.slot_suffix=_a` and the
+Retroid Pocket Nova/Kalama build fingerprint in
+`receipts/2026-09-19-android-deep-rpmh/android-root-live-preflight.txt`. While
+the device remained booted into Linux, I copied the 24 MiB Android
+`/dev/disk/by-partlabel/dtbo_a` partition over SSH using a read-only `dd` and
+saved its SHA-256 as
+`1bd16dd02a532121fa1b1b3f5d3aa23c7916e880b40ae43678574c381fd3b1a5`. The DTBO
+header reports magic `0xd7b7ab1e`, total size 13,039,432 bytes, 32 entries of
+56 bytes, and a 4 KiB page size. A bounded FDT-structure scan found seven
+actual zero-length `qcom,apss-based-l1ss-sleep` properties, at blob offsets
+`0xab90d9`, `0xb14610`, `0xb71079`, `0xbcd704`, `0xbde786`, `0xbf2d89`, and
+`0xc185b9`; they appear under `fragment@28`, `fragment@30`, or `fragment@42`
+overlay nodes. The raw summary is in
+`receipts/2026-09-19-android-dtbo-a-scan.txt`.
+
+This proves those candidate overlays exist in the Android A-slot image, not
+that ABL selected them for the Nova or that the APSS/L1SS callback ran. The
+slot's 56-byte vendor DTBO table is not the simple 32-byte entry layout, and
+the mapping from these FDTs to the Nova selection is still unresolved. The
+available public RP6 overlay source does not declare this property. I also
+found a separate `DECLARE_PCI_FIXUP_SUSPEND_LATE` in the nearby Android
+`pci-msm.c`; that root-bus fixup invokes `msm_pcie_pm_suspend()` for the
+PME_TURNOFF/L23 route, independently of the platform `suspend_noirq` hook.
+We need the exact PM-core ordering and actual selected property before saying
+which host power-down branch produced Android's residency.
+
+No device boot, PCIe state, ICC vote, regulator state, or Wi-Fi state changed.
+Linux remains reachable through SSH; USB ADB is still absent on the Mac.

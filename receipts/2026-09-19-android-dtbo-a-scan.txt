@@ -1,0 +1,41 @@
+Read-only Android DTBO A-slot scan
+==================================
+
+Prior Android runtime identity:
+  ro.product.device=kalama
+  ro.build.fingerprint=qti/kalama/kalama:13/TKQ1.231222.001/eng.RPN.20260722.081626:user/release-keys
+  ro.boot.slot_suffix=_a
+
+Partition read:
+  Source: /dev/disk/by-partlabel/dtbo_a on the Nova while booted into Linux
+  Method: read-only dd over SSH; no target partition or boot state was written
+  Partition bytes copied: 25,165,824
+  Local temporary copy: /tmp/nova-dtbo-a.img (not committed)
+  SHA-256: 1bd16dd02a532121fa1b1b3f5d3aa23c7916e880b40ae43678574c381fd3b1a5
+
+Header, decoded as big-endian Android DTBO header:
+  magic: 0xd7b7ab1e
+  total_size: 13,039,432
+  header_size: 32
+  dt_entry_count: 32
+  dt_entry_size: 56
+  dt_entries_offset: 0x20
+  page_size: 4096
+  version: 0
+
+A bounded scanner parsed the FDT structure blocks rather than merely grepping
+the image's strings table. It found a zero-length
+qcom,apss-based-l1ss-sleep property at these FDT starts and paths:
+
+  0x00ab90d9  fragment@28/__overlay__
+  0x00b14610  fragment@30/__overlay__
+  0x00b71079  fragment@30/__overlay__
+  0x00bcd704  fragment@30/__overlay__
+  0x00bde786  fragment@42/__overlay__
+  0x00bf2d89  fragment@42/__overlay__
+  0x00c185b9  fragment@42/__overlay__
+
+Interpretation limit: these are candidate FDT overlays present in dtbo_a.
+The 56-byte vendor entry format and bootloader's selected-overlay mapping have
+not been decoded, so this does not establish that any one of these overlays
+was applied to the Nova's Android base DT for the observed run.
