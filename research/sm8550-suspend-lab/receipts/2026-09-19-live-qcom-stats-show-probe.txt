@@ -20,7 +20,7 @@ Captured event:
   base=0xffff8000800e5048
 
 The captured base has low-page offset 0x048. The live RPMh resource begins at
-0xc3f00000, and the bound mainline qcom_stats driver uses resource + 0x48 for
+0x0c3f0000, and the bound mainline qcom_stats driver uses resource + 0x48 for
 the SoC sleep-stat records. Thus the in-memory pointer trace recovers the
 already-mapped record offset without adding an MMIO read. The existing
 memcpy_fromio() read in qcom_soc_sleep_stats_show() remains the only MMIO read
