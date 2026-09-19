@@ -1,0 +1,457 @@
+captured_utc=2026-09-19T20:32:12Z
+fedora
+Linux fedora 7.2.3 #1 SMP PREEMPT Sun Sep 13 16:15:44 UTC 2026 aarch64 GNU/Linux
+boot_id=4508b1ed-cfbd-43a1-a37e-ccee2a163a20
+mem_sleep=[s2idle] deep
+=== qcom_stats/aosd ===
+Count: 0
+Last Entered At: 0
+Last Exited At: 0
+Accumulated Duration: 0
+=== qcom_stats/cxsd ===
+Count: 0
+Last Entered At: 0
+Last Exited At: 0
+Accumulated Duration: 0
+=== qcom_stats/ddr ===
+Count: 0
+Last Entered At: 0
+Last Exited At: 0
+Accumulated Duration: 0
+=== interconnect_summary ===
+ node                                  tag          avg         peak
+--------------------------------------------------------------------
+epss_l3_master@17d90000.interconnect                  0     47308800
+  cpu7                                   0            0     47308800
+  cpu3                                   0            0     47308800
+  cpu0                                   0            0     47308800
+epss_l3_slave@17d90000.interconnect                   0     47308800
+  cpu7                                   0            0     47308800
+  cpu3                                   0            0     47308800
+  cpu0                                   0            0     47308800
+qup0_core_master@interconnect-0                       0            0
+  98c000.i2c                             7            0            0
+  988000.i2c                             7            0            0
+qup1_core_master@interconnect-0                       0            0
+  a9c000.serial                          7            0            0
+  a90000.i2c                             7            0            0
+  a80000.i2c                             7            0            0
+qup2_core_master@interconnect-0                       1            1
+  89c000.serial                          7            1            1
+  898000.serial                          7            0            0
+  890000.i2c                             7            0            0
+qup0_core_slave@interconnect-0                        0            0
+  98c000.i2c                             7            0            0
+  988000.i2c                             7            0            0
+qup1_core_slave@interconnect-0                        0            0
+  a9c000.serial                          7            0            0
+  a90000.i2c                             7            0            0
+  a80000.i2c                             7            0            0
+qup2_core_slave@interconnect-0                        1            1
+  89c000.serial                          7            1            1
+  898000.serial                          7            0            0
+  890000.i2c                             7            0            0
+llcc_mc@interconnect-1                          2207416     10944000
+  aa00000.video-codec                    7            0            0
+  32300000.remoteproc                    7            0            0
+  1c00000.pcie                           7            0       500000
+  6800000.remoteproc                     7            0            0
+  3d00000.gpu                            7            0      2136718
+  1dfa000.crypto                         7            0            0
+  1d84000.ufshc                          7            0            0
+  a600000.usb                            7            0            0
+  a90000.i2c                             7            0            0
+  a80000.i2c                             7            0            0
+  890000.i2c                             7            0            0
+  cpu7                                   3            0     10944000
+  cpu3                                   3            0     10944000
+  cpu0                                   3            0      3072000
+  ae00000.display-subsystem              7      2207416       800000
+  ae00000.display-subsystem              7            0       400000
+  24091000.pmu                           3            0      5931000
+  firmware:scm                           7            0            0
+ebi@interconnect-1                              2207416     10944000
+  aa00000.video-codec                    7            0            0
+  32300000.remoteproc                    7            0            0
+  1c00000.pcie                           7            0       500000
+  6800000.remoteproc                     7            0            0
+  3d00000.gpu                            7            0      2136718
+  1dfa000.crypto                         7            0            0
+  1d84000.ufshc                          7            0            0
+  a600000.usb                            7            0            0
+  a90000.i2c                             7            0            0
+  a80000.i2c                             7            0            0
+  890000.i2c                             7            0            0
+  cpu7                                   3            0     10944000
+  cpu3                                   3            0     10944000
+  cpu0                                   3            0      3072000
+  ae00000.display-subsystem              7      2207416       800000
+  ae00000.display-subsystem              7            0       400000
+  24091000.pmu                           3            0      5931000
+  firmware:scm                           7            0            0
+qnm_gemnoc_cnoc@1500000.interconnect                115        57000
+  aa00000.video-codec                    3            0            0
+  1d84000.ufshc                          3            0            0
+  a600000.usb                            3            0            0
+  a9c000.serial                          3            0            0
+  a90000.i2c                             3            0            0
+  a80000.i2c                             3            0            0
+  89c000.serial                          3          115          115
+  898000.serial                          3            0            0
+  890000.i2c                             3            0            0
+  98c000.i2c                             3            0            0
+  988000.i2c                             3            0            0
+  ae00000.display-subsystem              3            0        57000
+qnm_gemnoc_pcie@1500000.interconnect                  0            1
+  1c00000.pcie                           3            0            1
+qhs_aoss@1500000.interconnect                         0            0
+qhs_tme_cfg@1500000.interconnect                      0            0
+qss_cfg@1500000.interconnect                        115        57000
+  aa00000.video-codec                    3            0            0
+  1d84000.ufshc                          3            0            0
+  a600000.usb                            3            0            0
+  a9c000.serial                          3            0            0
+  a90000.i2c                             3            0            0
+  a80000.i2c                             3            0            0
+  89c000.serial                          3          115          115
+  898000.serial                          3            0            0
+  890000.i2c                             3            0            0
+  98c000.i2c                             3            0            0
+  988000.i2c                             3            0            0
+  ae00000.display-subsystem              3            0        57000
+qss_ddrss_cfg@1500000.interconnect                    0            0
+qxs_boot_imem@1500000.interconnect                    0            0
+qxs_imem@1500000.interconnect                         0            0
+xs_pcie_0@1500000.interconnect                        0            1
+  1c00000.pcie                           3            0            1
+xs_pcie_1@1500000.interconnect                        0            0
+qsm_cfg@1600000.interconnect                        115        57000
+  aa00000.video-codec                    3            0            0
+  1d84000.ufshc                          3            0            0
+  a600000.usb                            3            0            0
+  a9c000.serial                          3            0            0
+  a90000.i2c                             3            0            0
+  a80000.i2c                             3            0            0
+  89c000.serial                          3          115          115
+  898000.serial                          3            0            0
+  890000.i2c                             3            0            0
+  98c000.i2c                             3            0            0
+  988000.i2c                             3            0            0
+  ae00000.display-subsystem              3            0        57000
+qhs_ahb2phy0@1600000.interconnect                     0            0
+qhs_ahb2phy1@1600000.interconnect                     0            0
+qhs_apss@1600000.interconnect                         0            0
+qhs_camera_cfg@1600000.interconnect                   0            0
+qhs_clk_ctl@1600000.interconnect                      0            0
+qhs_cpr_cx@1600000.interconnect                       0            0
+qhs_cpr_mmcx@1600000.interconnect                     0            0
+qhs_cpr_mxa@1600000.interconnect                      0            0
+qhs_cpr_mxc@1600000.interconnect                      0            0
+qhs_cpr_nspcx@1600000.interconnect                    0            0
+qhs_crypto0_cfg@1600000.interconnect                  0            0
+qhs_cx_rdpm@1600000.interconnect                      0            0
+qhs_display_cfg@1600000.interconnect                  0        57000
+  ae00000.display-subsystem              3            0        57000
+qhs_gpuss_cfg@1600000.interconnect                    0            0
+qhs_i2c@1600000.interconnect                          0            0
+  98c000.i2c                             3            0            0
+  988000.i2c                             3            0            0
+qhs_imem_cfg@1600000.interconnect                     0            0
+qhs_ipa@1600000.interconnect                          0            0
+qhs_ipc_router@1600000.interconnect                   0            0
+qhs_mss_cfg@1600000.interconnect                      0            0
+qhs_mx_rdpm@1600000.interconnect                      0            0
+qhs_pcie0_cfg@1600000.interconnect                    0            0
+qhs_pcie1_cfg@1600000.interconnect                    0            0
+qhs_pdm@1600000.interconnect                          0            0
+qhs_pimem_cfg@1600000.interconnect                    0            0
+qhs_prng@1600000.interconnect                         0            0
+qhs_qdss_cfg@1600000.interconnect                     0            0
+qhs_qspi@1600000.interconnect                         0            0
+qhs_qup1@1600000.interconnect                         0            0
+  a9c000.serial                          3            0            0
+  a90000.i2c                             3            0            0
+  a80000.i2c                             3            0            0
+qhs_qup2@1600000.interconnect                       115          115
+  89c000.serial                          3          115          115
+  898000.serial                          3            0            0
+  890000.i2c                             3            0            0
+qhs_sdc2@1600000.interconnect                         0            0
+qhs_sdc4@1600000.interconnect                         0            0
+qhs_spss_cfg@1600000.interconnect                     0            0
+qhs_tcsr@1600000.interconnect                         0            0
+qhs_tlmm@1600000.interconnect                         0            0
+qhs_ufs_mem_cfg@1600000.interconnect                  0            0
+  1d84000.ufshc                          3            0            0
+qhs_usb3_0@1600000.interconnect                       0            0
+  a600000.usb                            3            0            0
+qhs_venus_cfg@1600000.interconnect                    0            0
+  aa00000.video-codec                    3            0            0
+qhs_vsense_ctrl_cfg@1600000.interconnect              0            0
+qss_lpass_qtb_cfg@1600000.interconnect                0            0
+qss_mnoc_cfg@1600000.interconnect                     0            0
+qss_nsp_qtb_cfg@1600000.interconnect                  0            0
+qss_pcie_anoc_cfg@1600000.interconnect                0            0
+xs_qdss_stm@1600000.interconnect                      0            0
+xs_sys_tcu_cfg@1600000.interconnect                   0            0
+qhm_gic@1680000.interconnect                          0            0
+qnm_aggre1_noc@1680000.interconnect                   0            0
+  1d84000.ufshc                          7            0            0
+  a600000.usb                            7            0            0
+  a90000.i2c                             7            0            0
+  a80000.i2c                             7            0            0
+qnm_aggre2_noc@1680000.interconnect                   0            0
+  1dfa000.crypto                         7            0            0
+  890000.i2c                             7            0            0
+  firmware:scm                           7            0            0
+xm_gic@1680000.interconnect                           0            0
+qns_gemnoc_gc@1680000.interconnect                    0            0
+qns_gemnoc_sf@1680000.interconnect                    0            0
+  1dfa000.crypto                         7            0            0
+  1d84000.ufshc                          7            0            0
+  a600000.usb                            7            0            0
+  a90000.i2c                             7            0            0
+  a80000.i2c                             7            0            0
+  890000.i2c                             7            0            0
+  firmware:scm                           7            0            0
+qsm_pcie_anoc_cfg@16c0000.interconnect                0            0
+xm_pcie3_0@16c0000.interconnect                       0       500000
+  1c00000.pcie                           7            0       500000
+xm_pcie3_1@16c0000.interconnect                       0            0
+qns_pcie_mem_noc@16c0000.interconnect                 0       500000
+  1c00000.pcie                           7            0       500000
+srvc_pcie_aggre_noc@16c0000.interconnect              0            0
+qhm_qspi@16e0000.interconnect                         0            0
+qhm_qup1@16e0000.interconnect                         0            0
+  a90000.i2c                             7            0            0
+  a80000.i2c                             7            0            0
+xm_sdc4@16e0000.interconnect                          0            0
+xm_ufs_mem@16e0000.interconnect                       0            0
+  1d84000.ufshc                          7            0            0
+xm_usb3_0@16e0000.interconnect                        0            0
+  a600000.usb                            7            0            0
+qns_a1noc_snoc@16e0000.interconnect                   0            0
+  1d84000.ufshc                          7            0            0
+  a600000.usb                            7            0            0
+  a90000.i2c                             7            0            0
+  a80000.i2c                             7            0            0
+qhm_qdss_bam@1700000.interconnect                     0            0
+qhm_qup2@1700000.interconnect                         0            0
+  890000.i2c                             7            0            0
+qxm_crypto@1700000.interconnect                       0            0
+  1dfa000.crypto                         7            0            0
+  firmware:scm                           7            0            0
+qxm_ipa@1700000.interconnect                          0            0
+qxm_sp@1700000.interconnect                           0            0
+xm_qdss_etr_0@1700000.interconnect                    0            0
+xm_qdss_etr_1@1700000.interconnect                    0            0
+xm_sdc2@1700000.interconnect                          0            0
+qns_a2noc_snoc@1700000.interconnect                   0            0
+  1dfa000.crypto                         7            0            0
+  890000.i2c                             7            0            0
+  firmware:scm                           7            0            0
+qnm_camnoc_hf@1780000.interconnect                    0            0
+qnm_camnoc_icp@1780000.interconnect                   0            0
+qnm_camnoc_sf@1780000.interconnect                    0            0
+qnm_mdp@1780000.interconnect                    2207416       800000
+  ae00000.display-subsystem              7      2207416       800000
+  ae00000.display-subsystem              7            0       400000
+qnm_vapss_hcp@1780000.interconnect                    0            0
+qnm_video@1780000.interconnect                        0            0
+  aa00000.video-codec                    7            0            0
+qnm_video_cv_cpu@1780000.interconnect                 0            0
+qnm_video_cvp@1780000.interconnect                    0            0
+qnm_video_v_cpu@1780000.interconnect                  0            0
+qsm_mnoc_cfg@1780000.interconnect                     0            0
+qns_mem_noc_hf@1780000.interconnect             2207416       800000
+  ae00000.display-subsystem              7      2207416       800000
+  ae00000.display-subsystem              7            0       400000
+qns_mem_noc_sf@1780000.interconnect                   0            0
+  aa00000.video-codec                    7            0            0
+srvc_mnoc@1780000.interconnect                        0            0
+qnm_lpass_lpinoc@7400000.interconnect                 0            0
+  6800000.remoteproc                     7            0            0
+qns_lpass_aggnoc@7400000.interconnect                 0            0
+  6800000.remoteproc                     7            0            0
+qxm_lpinoc_dsp_axim@7430000.interconnect              0            0
+  6800000.remoteproc                     7            0            0
+qns_lpi_aon_noc@7430000.interconnect                  0            0
+  6800000.remoteproc                     7            0            0
+qnm_lpiaon_noc@7e40000.interconnect                   0            0
+  6800000.remoteproc                     7            0            0
+qns_lpass_ag_noc_gemnoc@7e40000.interconnect            0            0
+  6800000.remoteproc                     7            0            0
+alm_gpu_tcu@24100000.interconnect                     0            0
+alm_sys_tcu@24100000.interconnect                     0            0
+chm_apps@24100000.interconnect                      115     12896000
+  aa00000.video-codec                    3            0            0
+  1c00000.pcie                           3            0            1
+  1d84000.ufshc                          3            0            0
+  a600000.usb                            3            0            0
+  a9c000.serial                          3            0            0
+  a90000.i2c                             3            0            0
+  a80000.i2c                             3            0            0
+  89c000.serial                          3          115          115
+  898000.serial                          3            0            0
+  890000.i2c                             3            0            0
+  cpu7                                   3            0     12896000
+  cpu3                                   3            0     12896000
+  cpu0                                   3            0      7456000
+  98c000.i2c                             3            0            0
+  988000.i2c                             3            0            0
+  ae00000.display-subsystem              3            0        57000
+  240b6400.pmu                           3            0      7110000
+qnm_gpu@24100000.interconnect                         0      2136718
+  3d00000.gpu                            7            0      2136718
+qnm_lpass_gemnoc@24100000.interconnect                0            0
+  6800000.remoteproc                     7            0            0
+qnm_mdsp@24100000.interconnect                        0            0
+qnm_mnoc_hf@24100000.interconnect               2207416       800000
+  ae00000.display-subsystem              7      2207416       800000
+  ae00000.display-subsystem              7            0       400000
+qnm_mnoc_sf@24100000.interconnect                     0            0
+  aa00000.video-codec                    7            0            0
+qnm_nsp_gemnoc@24100000.interconnect                  0            0
+  32300000.remoteproc                    7            0            0
+qnm_pcie@24100000.interconnect                        0       500000
+  1c00000.pcie                           7            0       500000
+qnm_snoc_gc@24100000.interconnect                     0            0
+qnm_snoc_sf@24100000.interconnect                     0            0
+  1dfa000.crypto                         7            0            0
+  1d84000.ufshc                          7            0            0
+  a600000.usb                            7            0            0
+  a90000.i2c                             7            0            0
+  a80000.i2c                             7            0            0
+  890000.i2c                             7            0            0
+  firmware:scm                           7            0            0
+qns_gem_noc_cnoc@24100000.interconnect              115        57000
+  aa00000.video-codec                    3            0            0
+  1d84000.ufshc                          3            0            0
+  a600000.usb                            3            0            0
+  a9c000.serial                          3            0            0
+  a90000.i2c                             3            0            0
+  a80000.i2c                             3            0            0
+  89c000.serial                          3          115          115
+  898000.serial                          3            0            0
+  890000.i2c                             3            0            0
+  98c000.i2c                             3            0            0
+  988000.i2c                             3            0            0
+  ae00000.display-subsystem              3            0        57000
+qns_llcc@24100000.interconnect                  2207416     12896000
+  aa00000.video-codec                    7            0            0
+  32300000.remoteproc                    7            0            0
+  1c00000.pcie                           7            0       500000
+  6800000.remoteproc                     7            0            0
+  3d00000.gpu                            7            0      2136718
+  1dfa000.crypto                         7            0            0
+  1d84000.ufshc                          7            0            0
+  a600000.usb                            7            0            0
+  a90000.i2c                             7            0            0
+  a80000.i2c                             7            0            0
+  890000.i2c                             7            0            0
+  cpu7                                   3            0     12896000
+  cpu3                                   3            0     12896000
+  cpu0                                   3            0      7456000
+  ae00000.display-subsystem              7      2207416       800000
+  ae00000.display-subsystem              7            0       400000
+  240b6400.pmu                           3            0      7110000
+  firmware:scm                           7            0            0
+qns_pcie@24100000.interconnect                        0            1
+  1c00000.pcie                           3            0            1
+qxm_nsp@320c0000.interconnect                         0            0
+  32300000.remoteproc                    7            0            0
+qns_nsp_gemnoc@320c0000.interconnect                  0            0
+  32300000.remoteproc                    7            0            0
+=== regulator_summary ===
+ regulator                      use open bypass  opmode voltage current     min     max
+---------------------------------------------------------------------------------------
+ regulator-dummy                  8    9      0 unknown     0mV     0mA     0mV     0mV 
+    1c00000.pcie-vddpe-3v3        1                                 0mA     0mV     0mV
+    1c00000.pcie-vdda             1                                 0mA     0mV     0mV
+    3d00000.gpu-vddcx             0                                 0mA     0mV     0mV
+    3d00000.gpu-vdd               0                                 0mA     0mV     0mV
+    ae94000.dsi.0-vdd28           1                                 0mA     0mV     0mV
+    ae94000.dsi.0-vdd18           1                                 0mA     0mV     0mV
+    ae94000.dsi.0-vci             1                                 0mA     0mV     0mV
+    ae94000.dsi.0-vdd             1                                 0mA     0mV     0mV
+    wcn7850-pmu-vddio1p2          1                                 0mA     0mV     0mV
+ vph_pwr                          8   12      0 unknown  3700mV     0mA  3700mV  3700mV 
+    backlight-power               0                                 0mA     0mV     0mV
+    vreg_s1g_1p2                  0    0      0    fast  1200mV     0mA  1200mV  1300mV 
+    vreg_s2g_0p8                  1    1      0    fast   800mV     0mA   800mV  1000mV 
+       wcn7850-pmu-vddaon         1                                 0mA     0mV     0mV
+    vreg_s3g_0p7                  0    0      0    fast   300mV     0mA   300mV  1004mV 
+    vreg_s4g_1p3                  3    5      0    fast  1200mV     0mA  1200mV  1352mV 
+       wcn7850-pmu-vddrfa1p2      1                                 0mA     0mV     0mV
+       vreg_l1g_1p2               1    1      0  normal  1200mV     0mA  1200mV  1200mV 
+          1d84000.ufshc-vccq      1                              1200mA     0mV     0mV
+       vreg_l3g_1p2               0    1      0  normal  1200mV     0mA  1200mV  1200mV 
+          1d84000.ufshc-vdd-hba   0                                 0mA     0mV     0mV
+       vreg_l3e_1p2               2    5      0    idle  1200mV     0mA  1200mV  1200mV 
+          1d80000.phy-vdda-pll    0                                18mA*    0mV     0mV
+          ae94000.dsi-vdda        1                                16mA     0mV     0mV
+          1c06000.phy-vdda-pll    1                                 0mA     0mV     0mV
+          88e8000.phy-vdda-phy    0                                21mA*    0mV     0mV
+          88e3000.phy-vdda12      0                                 0mA     0mV     0mV
+       vreg_l11b_1p2              0    0      0  normal  1200mV     0mA  1200mV  1504mV 
+    vreg_s5g_0p8                  1    1      0    fast   500mV     0mA   500mV  1004mV 
+       wcn7850-pmu-vdd            1                                 0mA     0mV     0mV
+    vreg_s6g_1p8                  2    3      0    fast  1800mV     0mA  1800mV  2000mV 
+       wcn7850-pmu-vddrfa1p8      1                                 0mA     0mV     0mV
+       vreg_l12b_1p8              0    0      0  normal  1800mV     0mA  1800mV  1800mV 
+       vreg_l15b_1p8              4    5      0  normal  1800mV     0mA  1800mV  1800mV 
+          audio-codec-vdd-buck    1                                 0mA     0mV     0mV
+          audio-codec-vdd-io      1                                 0mA     0mV     0mV
+          audio-codec-vdd-rxtx    1                                 0mA     0mV     0mV
+          wcn7850-pmu-vddio       1                                 0mA     0mV     0mV
+          c400000.spmi:pmic@7:phy@fd00-vdd18   0                                 0mA     0mV     0mV
+    vreg_bob1                     3   10      0    fast  3320mV     0mA  3320mV  3960mV 
+       audio-codec-vdd-mic-bias   1                                 0mA     0mV     0mV
+       vreg_l2b_3p0               0    0      0  normal  3008mV     0mA  3008mV  3008mV 
+       vreg_l5b_3p1               0    1      0  normal  3104mV     0mA  3104mV  3104mV 
+          c400000.spmi:pmic@7:phy@fd00-vdd3   0                                 0mA     0mV     0mV
+       vreg_l6b_1p8               0    0      0  normal  1800mV     0mA  1800mV  3008mV 
+       vreg_l7b_1p8               0    0      0  normal  1800mV     0mA  1800mV  3008mV 
+       vreg_l8b_1p8               1    1      0  normal  1800mV     0mA  1800mV  3008mV 
+          8804000.mmc-vqmmc       1                                22mA  1800mV  1950mV
+       vreg_l9b_2p9               1    1      0  normal  3000mV     0mA  2960mV  3008mV 
+          8804000.mmc-vmmc        1                               800mA  3000mV  3008mV
+       vreg_l13b_3p0              0    0      0  normal  3000mV     0mA  3000mV  3000mV 
+       vreg_l14b_3p2              0    0      0  normal  3200mV     0mA  3200mV  3200mV 
+       vreg_l16b_2p8              0    0      0  normal  2800mV     0mA  2800mV  2800mV 
+    vreg_s4e_0p95                 2    8      0    fast   904mV     0mA   904mV   984mV 
+       wcn7850-pmu-vdddig         1                                 0mA     0mV     0mV
+       vreg_l1e_0p88              2    4      0  normal   880mV     0mA   880mV   912mV 
+          1c06000.phy-vdda-phy    1                                 0mA     0mV     0mV
+          88e3000.phy-vdd         0                                 0mA     0mV     0mV
+          ae97000.phy-vdds        0                                98mA*    0mV     0mV
+          ae95000.phy-vdds        1                                98mA     0mV     0mV
+       vreg_l2e_0p9               0    0      0  normal   872mV     0mA   872mV   968mV 
+       vreg_l1f_0p9               0    0      0  normal   880mV     0mA   880mV   912mV 
+       vreg_l2f_0p88              0    0      0  normal   880mV     0mA   880mV   912mV 
+       vreg_l3f_0p88              0    1      0    idle   880mV     0mA   880mV   912mV 
+          88e8000.phy-vdda-pll    0                                36mA*    0mV     0mV
+       vreg_l3c_0p9               0    0      0  normal   880mV     0mA   880mV   912mV 
+       vreg_l1d_0p88              0    1      0    idle   880mV     0mA   880mV   920mV 
+          1d80000.phy-vdda-phy    0                               188mA*    0mV     0mV
+    vreg_s5e_1p08                 0    0      0    fast  1012mV     0mA  1012mV  1120mV 
+    vreg_bob2                     2    2      0    fast  3000mV     0mA  3000mV  3960mV 
+       serial1-0-vdd              1                                 0mA     0mV     0mV
+       vreg_l17b_2p5              1    1      0  normal  2504mV     0mA  2504mV  2504mV 
+          1d84000.ufshc-vcc       1                              1300mA     0mV     0mV
+    vreg_s4f_0p5                  0    0      0    fast   300mV     0mA   300mV   700mV 
+ vdd_fan_5v0                      1    1      0 unknown  5000mV     0mA  5000mV  5000mV 
+    pwm-fan-fan                   1                                 0mA     0mV     0mV
+ vdd_disp_1v8                     1    1      0 unknown  1800mV     0mA  1800mV  1800mV 
+    ae94000.dsi.0-vddio           1                                 0mA     0mV     0mV
+ vdd_disp_2v8                     0    0      0 unknown  2800mV     0mA  2800mV  2800mV 
+ ts_vddio_1v8                     1    1      0 unknown  1800mV     0mA  1800mV  1800mV 
+    1-0038-iovcc                  1                                 0mA     0mV     0mV
+ ts_avdd_3v0                      1    1      0 unknown  3000mV     0mA  3000mV  3000mV 
+    1-0038-vcc                    1                                 0mA     0mV     0mV
+ vdd_mcu_3v3                      3    2      0 unknown  3300mV     0mA  3300mV  3300mV 
+    3-003c-vdd                    1                                 0mA     0mV     0mV
+    2-003c-vdd                    1                                 0mA     0mV     0mV
+ hap-swr-slave-reg                0    0      0 unknown     0mV     0mA     0mV     0mV 
+=== cmdline ===
+ostree=/ostree/boot.0/default/fe4d16bd4878cae9447e4453800c638fd8db80d199c88204f22f99837008da9a/0 root=UUID=c8f19552-6d5f-4d2e-be10-17b11c3d9d15 rw boot=UUID=774e975f-87d4-4d7c-811f-ee7df06a14f9 rootwait console=tty0 quiet loglevel=3 allow_mismatched_32bit_el0 fw_devlink.strict=1 psi=1 cgroup_disable=pressure cgroup.memory=nokmem,nosocket cpufreq.default_governor=schedutil swiotlb=8192 pcie_ports=compat rootflags=subvol=root,noatime,compress=zstd:1,discard=async
