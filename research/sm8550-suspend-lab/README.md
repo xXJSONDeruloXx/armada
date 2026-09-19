@@ -240,9 +240,13 @@ On the device, one detached systemd unit performs this sequence:
    `psci_system_suspend_enter` on direct deep suspend. It enables the probe
    only in its private trace instance and removes only that registration
    immediately after trace capture, before post-resume collection.
-   `pcie-d3cold` filters ICC and device-PM callback events to `1c00000.pcie`,
-   records RPMh and system-suspend events, and probes the PCI host's D3cold
-   eligibility return.
+   `pcie-d3cold` filters ICC events to `1c00000.pcie`, records device-PM
+   callbacks for that host, its `0000:00:00.0` root port, and its
+   `0000:01:00.0` Wi-Fi endpoint, and probes each device's D3cold eligibility
+   callback in PCI bus-walk order, including `pci_dev.current_state`. The field
+   read uses the BTF-verified offset and runs only when both the inspected
+   kernel release and BTF hash match; otherwise the profile aborts before
+   suspend. It also records RPMh and system-suspend events.
    Its before/after runtime-PM snapshot also captures PCI power state, D3cold
    allowance, and negotiated link speed/width when the kernel exposes them.
    The profiles never send firmware commands or change runtime-PM, regulator,
