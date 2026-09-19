@@ -17,25 +17,38 @@ Header, decoded as big-endian Android DTBO header:
   magic: 0xd7b7ab1e
   total_size: 13,039,432
   header_size: 32
-  dt_entry_count: 32
-  dt_entry_size: 56
+  dt_entry_size: 32
+  dt_entry_count: 56
   dt_entries_offset: 0x20
   page_size: 4096
   version: 0
 
-A bounded scanner parsed the FDT structure blocks rather than merely grepping
-the image's strings table. It found a zero-length
-qcom,apss-based-l1ss-sleep property at these FDT starts and paths:
+A bounded parser decoded all standard 32-byte table entries and parsed the FDT
+structure blocks rather than merely grepping the image's strings table. Seven
+entries contain a zero-length qcom,apss-based-l1ss-sleep property:
 
-  0x00ab90d9  fragment@28/__overlay__
-  0x00b14610  fragment@30/__overlay__
-  0x00b71079  fragment@30/__overlay__
-  0x00bcd704  fragment@30/__overlay__
-  0x00bde786  fragment@42/__overlay__
-  0x00bf2d89  fragment@42/__overlay__
-  0x00c185b9  fragment@42/__overlay__
+  index  offset      size     model                                  msm-id / board-id
+  49     0xab90d9    374071   KalamaP AIM300                         <0x25b 0x20000> / <0x1001f 0x3>
+  50     0xb14610    379497   KalamaP HDK                            <0x218 0x20000 0x218 0x10000> / <0x1001f 0x0>
+  51     0xb71079    378507   KalamaP HDK                            <0x25b 0x20000> / <0x1001f 0x0>
+  52     0xbcd704    69762    KalamaP HDK                            <0x259 0x20000> / <0x1001f 0x0>
+  53     0xbde786    83459    KalamaP RB5 gen2 DVT                   <0x25b 0x20000> / <0x1011f 0x2>
+  54     0xbf2d89    153648   KalamaP RB5 gen2                        <0x25b 0x20000> / <0x1001f 0x2>
+  55     0xc185b9    356751   KalamaP SG HHG                          <0x259 0x20000> / <0x1001f 0x1>
 
-Interpretation limit: these are candidate FDT overlays present in dtbo_a.
-The 56-byte vendor entry format and bootloader's selected-overlay mapping have
-not been decoded, so this does not establish that any one of these overlays
-was applied to the Nova's Android base DT for the observed run.
+Property paths are fragment@28/__overlay__ for index 49, fragment@30/__overlay__
+for indices 50-52, and fragment@42/__overlay__ for indices 53-55. Index 51
+also contains qcom,no-client-based-bw-voting in the same overlay fragment.
+
+Index 51's root match data exactly matches the public RP6 Android DT source:
+qcom,msm-id = <603 0x20000> (603 decimal is 0x25b) and
+qcom,board-id = <0x1001f 0>. Its model string says KalamaP HDK. The overlay's
+fragment@30 target is an unresolved phandle placeholder in the blob; its
+__fixups__ mapping and the bootloader's selected-overlay result still need to
+be resolved. This makes index 51 the strongest candidate, not proof that it
+was selected or that the property was present in the merged runtime DT.
+
+Correction history: the first read of this header reversed dt_entry_count and
+dt_entry_size and incorrectly described 32 entries of 56 bytes. AOSP's header
+order and this bounded reparse establish the correct values above: 56 standard
+entries of 32 bytes. No device state was changed during either read.

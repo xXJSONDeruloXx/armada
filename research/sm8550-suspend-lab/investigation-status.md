@@ -6,8 +6,8 @@ the chronological record, including failed runs and superseded interpretations.
 Update this page when a checklist item changes; put raw output in a dated
 receipt and explain the result in the notebook.
 
-Status as of 2026-09-19 21:57 UTC. Repository branch
-`feat/sm8550-suspend-lab`, current pushed tip `334ef072b33b2392b75e03cb9594266163d825da`.
+Status as of 2026-09-19 22:08 UTC. Repository branch
+`feat/sm8550-suspend-lab`; see Git history for the current pushed tip.
 The user supplied anchor `054766d5...` is an earlier commit; work continues from
 the newer pushed tip.
 
@@ -44,8 +44,8 @@ open until measured.
 | Observed | The PCIe host's D3cold eligibility check fails on Qualcomm root port `0000:00:00.0` (`17cb:0113`) in `PCI_UNKNOWN`. Binding `pcieport` after a temporary boot-argument test did not change that result or clear the zero counters. Original `pcie_ports=compat` was restored. |
 | Correlation | PCIe consumer pre-suspend peak requests of 500,000 and 1,000,000 kB/s coincide with MC0/SH0 SLEEP words encoding 476 and 952. Wi-Fi-off removed one 476 component in a prior matched run, but other clients also differ. Do not assign the whole floor to PCIe yet. |
 | Source, public match only | Available Android source `Ayn8550Dev/android_kernel_ayn_qcs8550` at `93c5cc6...` has a Qualcomm `pci-msm.c` noirq path gated by `qcom,apss-based-l1ss-sleep`. When selected and L1SS is confirmed, it disables config access, host clocks/GDSC/analog rails, and clears its ICC request; it does not set root-port or endpoint D3 state in that branch. Android logs confirm WCN/WoW bus-suspend success, not the endpoint's PCI power state. Running Android reported `g697b78910a71-dirty`, not matched to this public commit. |
-| Observed, read-only Android DTBO | The Android preflight recorded slot `_a`. I copied the 24 MiB `dtbo_a` partition read-only and hashed the image (`1bd16dd0…`). A bounded FDT-structure scan found the actual zero-length `qcom,apss-based-l1ss-sleep` property in seven overlay blobs. This establishes that the property exists in the slot image, not that the bootloader selected any of those blobs for Nova. Offsets and raw receipt are in `receipts/2026-09-19-android-dtbo-a-scan.txt`. |
-| Source, Android DT selection unresolved | Public LineageOS RP6 overlay commit `b2b4a398...` identifies `hardware = "rp6"` and board ID, but doesn't declare `qcom,apss-based-l1ss-sleep`; it includes a base overlay outside that small repository. AYN's separate vendor device-tree release sets the property in Kalama HDK source for AYN device families, but it is not the RP6 runtime DT. The actual slot `_a` DTBO contains seven candidate property overlays, but its vendor-specific table/selection mapping and exact merged Android DT are not yet resolved. |
+| Observed, read-only Android DTBO | `dtbo_a` is a standard table with `dt_entry_size=32`, `dt_entry_count=56`. Seven entries contain the zero-length L1SS property. Entry 51 (`0xb71079`, size 378,507) has root IDs `<0x25b 0x20000>` and `<0x1001f 0>`, matching the public RP6 DT source IDs; its model label is KalamaP HDK. Its `fragment@30` adds both `qcom,apss-based-l1ss-sleep` and `qcom,no-client-based-bw-voting`. The phandle target is unresolved in the blob and runtime selection is unproven. See `receipts/2026-09-19-android-dtbo-a-scan.txt`. The earlier 32-by-56 interpretation was a field-order mistake and is superseded. |
+| Source, Android DT selection unresolved | Entry 51 is the strongest RP6 candidate by matching public SoC/board IDs, but matching IDs do not prove ABL selected it for the observed run. Its `fragment@30` target fixup, exact ABL overlay-selection behavior, and merged runtime DT remain to be verified. The public RP6 overlay source does not itself declare the L1SS property. |
 | Source, two Android PCIe suspend hooks | Nearby `pci-msm.c` also registers `DECLARE_PCI_FIXUP_SUSPEND_LATE` for Qualcomm PCI devices; its root-bus fixup invokes the PME_TURNOFF/L23 helper and `msm_pcie_disable()`. We have not yet established the ordering/interaction between this PCI fixup and the host platform's `suspend_noirq` callback on the observed image, so do not assume the APSS/L1SS branch is the one that ran. |
 | Source | Armada uses upstream DesignWare/Qualcomm PCIe PM plus patches 0513/0520. If the generic D3cold check fails, `dw_pcie_suspend_noirq()` returns before host teardown and leaves `pci->suspended` false. In the qcom fallback branch, direct deep (`PM_SUSPEND_MEM`) skips the OPP update; with the OPP-based path this leaves the active OPP request. The `opp-suspend` floor from 0520 is selected only in the non-S2RAM branch. |
 | Source, 0513/0520 nuance | Patch 0513 does call its OPP helper when the host really suspended; for `PM_SUSPEND_MEM` that helper passes `NULL`, which drops associated OPP bandwidth. But when D3cold is vetoed, the helper call is nested inside the non-`PM_SUSPEND_MEM` fallback, so deep suspend skips it. The patch therefore does not bypass the PCI safety check; it preserves the active request when the host remains running. |
@@ -63,14 +63,15 @@ open until measured.
   overlay; mark their applicability provisional where the actual vendor base
   DT/build is missing.
 - [x] Read the Android slot `_a` DTBO partition without changing device state;
-  the property occurs in seven candidate FDT overlays, but selection is not
-  yet known.
-- [ ] Decode the vendor DTBO table/selection metadata and tie the selected
-  overlay to the RP6 board ID and actual Android run.
+  parse its standard 32-byte entries and identify the seven property-bearing
+  overlays. Entry 51 matches the public RP6 SoC/board IDs.
+- [ ] Resolve entry 51's fragment target, then establish whether ABL selected
+  it and whether the property is present in Android's merged runtime DT.
 - [ ] Find the exact Android source/build revision if available; otherwise keep
   each nearby public-source conclusion explicitly provisional.
 - [ ] Identify Nova's runtime PCIe compatible, bound driver, DT properties,
-  and whether `qcom,apss-based-l1ss-sleep` is active.
+  and whether `qcom,apss-based-l1ss-sleep` is active; the DTBO candidate match
+  alone is insufficient.
 - [ ] Trace Android host and endpoint PM ordering: WCN7850 suspend/WoW, root
   port state, link L1SS/L23 behavior, host power-down, ICC/OPP calls, wake
   restoration. Do not infer D3hot/D3cold from host power loss.

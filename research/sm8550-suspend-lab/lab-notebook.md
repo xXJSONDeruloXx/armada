@@ -5043,7 +5043,7 @@ only on the awake summary. A useful read-only harness extension needs an exact
 observation of request tag/enabled state after suspend callbacks and before
 BCM aggregation.
 
-### 2026-09-19 21:57 UTC — Android DTBO contains APSS/L1SS property candidates
+### 2026-09-19 21:57 UTC — Android DTBO candidates found [header interpretation superseded]
 
 The previous Android preflight captured `ro.boot.slot_suffix=_a` and the
 Retroid Pocket Nova/Kalama build fingerprint in
@@ -5051,10 +5051,12 @@ Retroid Pocket Nova/Kalama build fingerprint in
 the device remained booted into Linux, I copied the 24 MiB Android
 `/dev/disk/by-partlabel/dtbo_a` partition over SSH using a read-only `dd` and
 saved its SHA-256 as
-`1bd16dd02a532121fa1b1b3f5d3aa23c7916e880b40ae43678574c381fd3b1a5`. The DTBO
-header reports magic `0xd7b7ab1e`, total size 13,039,432 bytes, 32 entries of
-56 bytes, and a 4 KiB page size. A bounded FDT-structure scan found seven
-actual zero-length `qcom,apss-based-l1ss-sleep` properties, at blob offsets
+`1bd16dd02a532121fa1b1b3f5d3aa23c7916e880b40ae43678574c381fd3b1a5`. The
+initial header interpretation in this note reversed `dt_entry_size` and
+`dt_entry_count`, incorrectly calling the image a 32-entry, 56-byte table.
+The corrected standard-table parse is recorded below. A bounded FDT-structure
+scan found seven actual zero-length `qcom,apss-based-l1ss-sleep` properties,
+at blob offsets
 `0xab90d9`, `0xb14610`, `0xb71079`, `0xbcd704`, `0xbde786`, `0xbf2d89`, and
 `0xc185b9`; they appear under `fragment@28`, `fragment@30`, or `fragment@42`
 overlay nodes. The raw summary is in
@@ -5062,8 +5064,6 @@ overlay nodes. The raw summary is in
 
 This proves those candidate overlays exist in the Android A-slot image, not
 that ABL selected them for the Nova or that the APSS/L1SS callback ran. The
-slot's 56-byte vendor DTBO table is not the simple 32-byte entry layout, and
-the mapping from these FDTs to the Nova selection is still unresolved. The
 available public RP6 overlay source does not declare this property. I also
 found a separate `DECLARE_PCI_FIXUP_SUSPEND_LATE` in the nearby Android
 `pci-msm.c`; that root-bus fixup invokes `msm_pcie_pm_suspend()` for the
@@ -5073,3 +5073,28 @@ which host power-down branch produced Android's residency.
 
 No device boot, PCIe state, ICC vote, regulator state, or Wi-Fi state changed.
 Linux remains reachable through SSH; USB ADB is still absent on the Mac.
+
+### 2026-09-19 22:08 UTC — correction: standard DTBO table; entry 51 matches RP6 IDs
+
+I reversed two adjacent DTBO header fields in the 21:57 parse. The AOSP order
+is `dt_entry_size` followed by `dt_entry_count`; the image says 32-byte entries
+and 56 entries, not 56-byte entries and 32 entries. I re-parsed the same
+read-only image `/tmp/nova-dtbo-a.img` (SHA-256 unchanged at
+`1bd16dd02a532121fa1b1b3f5d3aa23c7916e880b40ae43678574c381fd3b1a5`) using
+those standard 32-byte records and checked the property in each FDT structure.
+The corrected raw table and candidate metadata are in
+`receipts/2026-09-19-android-dtbo-a-scan.txt`.
+
+Entry 51 at offset `0xb71079` (378,507 bytes) has
+`qcom,msm-id=<0x25b 0x20000>`, `qcom,board-id=<0x1001f 0>`, and model
+`KalamaP HDK`. Those IDs match the public RP6 Android DT source (`603` decimal
+is `0x25b`). Its `fragment@30/__overlay__` contains both
+`qcom,apss-based-l1ss-sleep` and `qcom,no-client-based-bw-voting`. This is a
+strong candidate match, not proof of runtime selection: `fragment@30/target`
+is a fixup placeholder, and we have not established ABL's selected overlay or
+inspected the merged Android runtime tree. The earlier “56-byte vendor table”
+wording is superseded, not an additional firmware difference.
+
+No device state changed. Next resolve the entry's `__fixups__` target and look
+for a safe way to establish the selected/merged DT without rebooting away from
+the current Linux access path. Do not repeat the closed stats-offset probe.
