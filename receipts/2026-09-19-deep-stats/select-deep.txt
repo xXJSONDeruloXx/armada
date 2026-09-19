@@ -1,0 +1,4 @@
+rc=0
+stdout=s2idle [deep]
+
+stderr=

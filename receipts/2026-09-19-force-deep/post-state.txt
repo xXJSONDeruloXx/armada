@@ -1,0 +1,38 @@
+rc=0
+stdout=[s2idle] deep
+45c48211-b345-477c-b1bb-ef163dce7b73
+---suspend-control---
+Suspend Info:
+suspend attempts: 14649
+failed suspends: 178
+short suspends: 0
+total suspend time: 55340241994208 ms
+short suspend time: 0 ms
+suspend overhead: 3826441 ms
+failed suspend overhead: 20910 ms
+new backoffs: 155
+backoff continuations: 23
+total sleep time between suspends: 1537200 ms
+
+---wakeups---
+Wakeups:
+WakeupInfo{name: Abort: Pending Wakeup Sources: qcom_rx_wakelock, count: 92}
+WakeupInfo{name: Abort: Pending Wakeup Sources: [timerfd], count: 14449}
+WakeupInfo{name: 269 pm8xxx_rtc_alarm, count: 4}
+WakeupInfo{name: Abort: Callback failed on alarmtimer.0.auto in platform_pm_suspend.cfi_jt+0x0/0x8 returned -16, count: 37}
+WakeupInfo{name: Abort: Last active Wakeup Source: eventpoll, count: 6}
+WakeupInfo{name: unknown, count: 8}
+WakeupInfo{name: Abort: Some devices failed to suspend, or early wake event detected, count: 9}
+WakeupInfo{name: Abort: Callback failed on 0000:01:00.0 in cnss_pci_suspend.cfi_jt+0x0/0x8 [cnss2] returned -11, count: 5}
+WakeupInfo{name: Abort: Pending Wakeup Sources: [timerfd] [timerfd], count: 14}
+WakeupInfo{name: Abort: Device 3da0000.kgsl-smmu not prepared for power transition: code -115, count: 7}
+WakeupInfo{name: Abort: Pending Wakeup Sources: NETLINK, count: 9}
+WakeupInfo{name: Abort: late suspend of 0000:01:00.0 device failed, count: 1}
+WakeupInfo{name: Abort: Last active Wakeup Source: c42d000.qcom,spmi:qcom,pmk8550@0:rtc@6100, count: 3}
+WakeupInfo{name: Abort: Last active Wakeup Source: mhi0, count: 3}
+WakeupInfo{name: Abort: late suspend of alarmtimer.0.auto device failed, count: 1}
+WakeupInfo{name: Abort: Pending Wakeup Sources:, count: 1}
+
+
+stderr=cat: /sys/power/suspend_stats: Is a directory
+

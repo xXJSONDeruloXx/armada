@@ -1,0 +1,4 @@
+rc=0
+stdout=wakeup using "no" from /dev/rtc0 at Thu Jan  1 08:23:33 1970
+
+stderr=

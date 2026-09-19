@@ -1,0 +1,8 @@
+rc=1
+stdout=
+stderr=chmod: chmod '/sys/kernel/debug/tracing/events/power/suspend_resume/enable' to 0644: Operation not permitted
+chmod: chmod '/sys/kernel/debug/tracing/events/qcom_lpm/lpm_gov_select/enable' to 0644: Operation not permitted
+chmod: chmod '/sys/kernel/debug/tracing/events/cluster_lpm/cluster_enter/enable' to 0644: Operation not permitted
+chmod: chmod '/sys/kernel/debug/tracing/events/cluster_lpm/cluster_exit/enable' to 0644: Operation not permitted
+chmod: chmod '/sys/kernel/debug/tracing/events/cluster_lpm/cluster_pred_select/enable' to 0644: Operation not permitted
+

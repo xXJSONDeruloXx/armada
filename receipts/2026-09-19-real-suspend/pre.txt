@@ -1,0 +1,34 @@
+---cluster---
+domain                          status          children                           performance
+    /device                                             runtime status
+----------------------------------------------------------------------------------------------
+venus                           off-0                                              0
+spss                            off-0                                              0
+slpi                            off-0                                              0
+modem                           off-0                                              0
+adsp                            off-0                                              0
+cdsp                            off-0                                              0
+cluster-pd                      on                                                 0
+                                                cpu-pd0, cpu-pd1, cpu-pd2, cpu-pd3, cpu-pd4, cpu-pd5, cpu-pd6, cpu-pd7
+    /devices/platform/soc/17a00000.apps_rsc             suspended                  0
+    /devices/platform/soc/soc:cluster-device            suspended                  0
+cpu-pd7                         off-0                                              0
+    /devices/genpd:0:cpu7                               suspended                  0
+cpu-pd6                         off-0                                              0
+    /devices/genpd:0:cpu6                               suspended                  0
+cpu-pd5                         off-0                                              0
+    /devices/genpd:0:cpu5                               suspended                  0
+cpu-pd4                         on                                                 0
+    /devices/genpd:0:cpu4                               active                     0
+cpu-pd3                         off-0                                              0
+    /devices/genpd:0:cpu3                               suspended                  0
+cpu-pd2                         on                                                 0
+    /devices/genpd:0:cpu2                               active                     0
+cpu-pd1                         on                                                 0
+    /devices/genpd:0:cpu1                               active                     0
+cpu-pd0                         on                                                 0
+    /devices/genpd:0:cpu0                               active                     0
+---state---
+[s2idle] deep
+45c48211-b345-477c-b1bb-ef163dce7b73
+cat: /sys/power/suspend_stats: Is a directory

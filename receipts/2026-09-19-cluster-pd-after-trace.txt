@@ -1,0 +1,6 @@
+===/sys/kernel/debug/pm_genpd/cluster-pd/idle_states===
+State          Time Spent(ms) Usage          Rejected
+S0             9708           2131           657
+S1             6168           3047           2665
+===/sys/kernel/debug/pm_genpd/cluster-pd/current_state===
+on

@@ -1,0 +1,15 @@
+rc=0
+stdout=s2idle [deep]
+45c48211-b345-477c-b1bb-ef163dce7b73
+success=14581
+fail=198
+failed_freeze=92
+failed_prepare=7
+failed_suspend=76
+failed_suspend_late=2
+failed_suspend_noirq=0
+last_failed_dev=alarmtimer.0.auto
+last_failed_errno=-16
+last_failed_step=freeze
+
+stderr=

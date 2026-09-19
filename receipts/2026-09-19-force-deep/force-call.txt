@@ -1,0 +1,4 @@
+rc=0
+stdout=Result: Parcel(00000000 00000001   '........')
+
+stderr=

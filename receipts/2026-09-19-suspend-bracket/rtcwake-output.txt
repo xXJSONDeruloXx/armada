@@ -1,0 +1,4 @@
+rc=1
+stdout=
+stderr=/system/bin/sh: syntax error: unexpected '('
+

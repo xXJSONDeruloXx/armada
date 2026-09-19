@@ -1,0 +1,6 @@
+rc=0
+stdout=[s2idle] deep
+45c48211-b345-477c-b1bb-ef163dce7b73
+53506
+
+stderr=

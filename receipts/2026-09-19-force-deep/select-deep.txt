@@ -1,0 +1,5 @@
+rc=0
+stdout=[s2idle] deep
+
+stderr=/system/bin/sh: can't create /sys/power/mem_sleep: Permission denied
+

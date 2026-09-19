@@ -1,0 +1,20 @@
+===aosd===
+Count = 213056
+Last Entered At = 265190368608
+Last Exited At = 265190488736
+Accumulated Duration = 136102155648
+===cxsd===
+Count = 14722
+Last Entered At = 265180877178
+Last Exited At = 265190500740
+Accumulated Duration = 137294609380
+===ddr===
+Count = 14730
+Last Entered At = 265180873486
+Last Exited At = 265190513306
+Accumulated Duration = 137526850252
+===apss===
+Count = 12911
+Last Entered At = 265180857391
+Last Exited At = 265190869658
+Accumulated Duration = 142668115815

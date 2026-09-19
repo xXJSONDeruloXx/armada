@@ -1,0 +1,19 @@
+# tracer: nop
+#
+# entries-in-buffer/entries-written: 7/7   #P:8
+#
+#                                _-----=> irqs-off
+#                               / _----=> need-resched
+#                              | / _---=> hardirq/softirq
+#                              || / _--=> preempt-depth
+#                              ||| / _-=> migrate-disable
+#                              |||| /     delay
+#           TASK-PID     CPU#  |||||  TIMESTAMP  FUNCTION
+#              | |         |   |||||     |         |
+    binder:940_4-8272    [000] ..... 14078.145198: swrm_device_suspend: swrm_device_suspend: swrm state: 3
+    binder:940_4-8272    [000] ..... 14078.145216: swrm_device_suspend: swrm_device_suspend: swrm state: 3
+    binder:940_4-8272    [000] ..... 14078.145342: lpi_pinctrl_suspend: lpi_pinctrl_suspend: system suspend
+          <idle>-0       [000] d..4. 14078.278625: cluster_cb_ret: (notifier_call_chain_robust.llvm.477163113154901030+0x78/0x180 <- cluster_power_cb) ret=0x1
+          <idle>-0       [000] d..4. 14078.278625: cluster_cb_ret: (raw_notifier_call_chain+0x70/0xe4 <- cluster_power_cb) ret=0x1
+          <idle>-0       [004] d..4. 14078.278625: cluster_cb_ret: (notifier_call_chain_robust.llvm.477163113154901030+0x78/0x180 <- cluster_power_cb) ret=0x1
+          <idle>-0       [004] d..4. 14078.278625: cluster_cb_ret: (raw_notifier_call_chain+0x70/0xe4 <- cluster_power_cb) ret=0x1

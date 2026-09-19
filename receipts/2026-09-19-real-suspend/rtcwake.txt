@@ -1,0 +1,5 @@
+rc=1
+stdout=wakeup using "mem" from /dev/rtc0 at Thu Jan  1 07:54:17 1970
+
+stderr=rtcwake: xwrite: Device or resource busy
+

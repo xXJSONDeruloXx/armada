@@ -1,0 +1,19 @@
+# tracer: nop
+#
+# entries-in-buffer/entries-written: 7/7   #P:8
+#
+#                                _-----=> irqs-off
+#                               / _----=> need-resched
+#                              | / _---=> hardirq/softirq
+#                              || / _--=> preempt-depth
+#                              ||| / _-=> migrate-disable
+#                              |||| /     delay
+#           TASK-PID     CPU#  |||||  TIMESTAMP  FUNCTION
+#              | |         |   |||||     |         |
+    binder:940_4-8272    [004] ..... 13896.997705: swrm_device_suspend: swrm_device_suspend: swrm state: 3
+    binder:940_4-8272    [004] ..... 13896.997711: swrm_device_suspend: swrm_device_suspend: swrm state: 3
+    binder:940_4-8272    [004] ..... 13896.997785: lpi_pinctrl_suspend: lpi_pinctrl_suspend: system suspend
+          <idle>-0       [002] d..3. 13897.101817: cluster_enter: last cpu:2 idx:1 suspend_param:0x4100c344
+          <idle>-0       [002] d..3. 13897.101817: cluster_exit: first cpu:2 idx:1 suspend_param:0x4100c344
+          <idle>-0       [000] d..3. 13897.102421: cluster_enter: last cpu:0 idx:1 suspend_param:0x4100c344
+          <idle>-0       [000] d..3. 13897.102421: cluster_exit: first cpu:0 idx:1 suspend_param:0x4100c344

@@ -1,0 +1,239 @@
+rc=0
+stdout=# tracer: nop
+#
+# entries-in-buffer/entries-written: 224/224   #P:8
+#
+#                                _-----=> irqs-off
+#                               / _----=> need-resched
+#                              | / _---=> hardirq/softirq
+#                              || / _--=> preempt-depth
+#                              ||| / _-=> migrate-disable
+#                              |||| /     delay
+#           TASK-PID     CPU#  |||||  TIMESTAMP  FUNCTION
+#              | |         |   |||||     |         |
+    binder:940_4-8272    [000] ..... 18002.713832: suspend_resume: suspend_enter[3] begin
+    binder:940_4-8272    [000] ..... 18002.713839: suspend_resume: sync_filesystems[0] begin
+    binder:940_4-8272    [002] ..... 18002.719308: suspend_resume: sync_filesystems[0] end
+    binder:940_4-8272    [002] ..... 18002.719345: suspend_resume: freeze_processes[0] begin
+    binder:940_4-8272    [002] ..... 18002.728106: suspend_resume: freeze_processes[0] end
+    binder:940_4-8272    [002] ..... 18002.728109: suspend_resume: suspend_enter[3] end
+    binder:940_4-8272    [002] ..... 18002.728114: suspend_resume: dpm_prepare[2] begin
+    binder:940_4-8272    [002] ..... 18002.729628: suspend_resume: dpm_prepare[2] end
+    binder:940_4-8272    [002] ..... 18002.729631: suspend_resume: dpm_suspend[2] begin
+    binder:940_4-8272    [004] ..... 18002.731286: swrm_device_suspend: swrm_device_suspend: swrm state: 3
+    binder:940_4-8272    [004] ..... 18002.731292: swrm_device_suspend: swrm_device_suspend: swrm state: 3
+    binder:940_4-8272    [004] ..... 18002.731369: lpi_pinctrl_suspend: lpi_pinctrl_suspend: system suspend
+    binder:940_4-8272    [000] ..... 18002.826404: suspend_resume: dpm_suspend[2] end
+    binder:940_4-8272    [000] ..... 18002.826421: suspend_resume: dpm_suspend_late[2] begin
+    binder:940_4-8272    [002] ..... 18002.829428: suspend_resume: dpm_suspend_late[2] end
+    binder:940_4-8272    [002] ..... 18002.830289: suspend_resume: dpm_suspend_noirq[2] begin
+    binder:940_4-8272    [002] ..... 18002.832104: suspend_resume: dpm_suspend_noirq[2] end
+    binder:940_4-8272    [002] ..... 18002.832111: suspend_resume: CPU_OFF[1] begin
+    binder:940_4-8272    [000] ..... 18002.836317: suspend_resume: CPU_OFF[1] end
+    binder:940_4-8272    [000] ..... 18002.836318: suspend_resume: CPU_OFF[2] begin
+    binder:940_4-8272    [000] ..... 18002.839840: suspend_resume: CPU_OFF[2] end
+    binder:940_4-8272    [000] ..... 18002.839841: suspend_resume: CPU_OFF[3] begin
+    binder:940_4-8272    [000] ..... 18002.841575: suspend_resume: CPU_OFF[3] end
+    binder:940_4-8272    [000] ..... 18002.841577: suspend_resume: CPU_OFF[4] begin
+    binder:940_4-8272    [000] ..... 18002.843063: suspend_resume: CPU_OFF[4] end
+    binder:940_4-8272    [000] ..... 18002.843064: suspend_resume: CPU_OFF[5] begin
+    binder:940_4-8272    [000] ..... 18002.844739: suspend_resume: CPU_OFF[5] end
+    binder:940_4-8272    [000] ..... 18002.844741: suspend_resume: CPU_OFF[6] begin
+    binder:940_4-8272    [000] ..... 18002.847054: suspend_resume: CPU_OFF[6] end
+    binder:940_4-8272    [000] ..... 18002.847103: suspend_resume: CPU_ON[1] begin
+    binder:940_4-8272    [000] ..... 18002.849166: suspend_resume: CPU_ON[1] end
+    binder:940_4-8272    [000] ..... 18002.849171: suspend_resume: CPU_ON[2] begin
+    binder:940_4-8272    [000] ..... 18002.851182: suspend_resume: CPU_ON[2] end
+    binder:940_4-8272    [000] ..... 18002.851187: suspend_resume: CPU_ON[3] begin
+    binder:940_4-8272    [000] ..... 18002.853581: suspend_resume: CPU_ON[3] end
+    binder:940_4-8272    [000] ..... 18002.853586: suspend_resume: CPU_ON[4] begin
+    binder:940_4-8272    [000] ..... 18002.854907: suspend_resume: CPU_ON[4] end
+    binder:940_4-8272    [000] ..... 18002.854913: suspend_resume: CPU_ON[5] begin
+    binder:940_4-8272    [000] ..... 18002.856361: suspend_resume: CPU_ON[5] end
+    binder:940_4-8272    [000] ..... 18002.856368: suspend_resume: CPU_ON[6] begin
+    binder:940_4-8272    [000] ..... 18002.857906: suspend_resume: CPU_ON[6] end
+    binder:940_4-8272    [000] ..... 18002.857913: suspend_resume: dpm_resume_noirq[16] begin
+    binder:940_4-8272    [002] ..... 18002.859472: suspend_resume: dpm_resume_noirq[16] end
+    binder:940_4-8272    [002] ..... 18002.861262: suspend_resume: dpm_resume_early[16] begin
+    binder:940_4-8272    [002] ..... 18002.862695: suspend_resume: dpm_resume_early[16] end
+    binder:940_4-8272    [002] ..... 18002.862697: suspend_resume: dpm_resume[16] begin
+    binder:940_4-8272    [004] ..... 18002.895002: suspend_resume: dpm_resume[16] end
+    binder:940_4-8272    [004] ..... 18002.895006: suspend_resume: dpm_complete[16] begin
+    binder:940_4-8272    [004] ..... 18002.896308: suspend_resume: dpm_complete[16] end
+    binder:940_4-8272    [004] ..... 18002.896309: suspend_resume: resume_console[3] begin
+    binder:940_4-8272    [004] ..... 18002.896364: suspend_resume: resume_console[3] end
+    binder:940_4-8272    [004] ..... 18002.896365: suspend_resume: thaw_processes[0] begin
+    binder:940_4-8272    [004] ..... 18002.906011: suspend_resume: thaw_processes[0] end
+    binder:940_3-2215    [000] ..... 18002.933888: suspend_resume: suspend_enter[3] begin
+    binder:940_3-2215    [000] ..... 18002.933893: suspend_resume: sync_filesystems[0] begin
+    binder:940_3-2215    [000] ..... 18002.937535: suspend_resume: sync_filesystems[0] end
+    binder:940_3-2215    [000] ..... 18002.937576: suspend_resume: freeze_processes[0] begin
+    binder:940_3-2215    [000] ..... 18003.131875: suspend_resume: freeze_processes[0] end
+    binder:940_3-2215    [000] ..... 18003.131882: suspend_resume: suspend_enter[3] end
+    binder:940_3-2215    [000] ..... 18003.131896: suspend_resume: dpm_prepare[2] begin
+    binder:940_3-2215    [000] ..... 18003.135845: suspend_resume: dpm_prepare[2] end
+    binder:940_3-2215    [000] ..... 18003.135850: suspend_resume: dpm_suspend[2] begin
+    binder:940_3-2215    [002] ..... 18003.137377: swrm_device_suspend: swrm_device_suspend: swrm state: 3
+    binder:940_3-2215    [002] ..... 18003.137391: swrm_device_suspend: swrm_device_suspend: swrm state: 3
+    binder:940_3-2215    [002] ..... 18003.137569: lpi_pinctrl_suspend: lpi_pinctrl_suspend: system suspend
+    binder:940_3-2215    [000] ..... 18003.258006: suspend_resume: dpm_suspend[2] end
+    binder:940_3-2215    [000] ..... 18003.258038: suspend_resume: dpm_suspend_late[2] begin
+    binder:940_3-2215    [000] ..... 18003.267651: suspend_resume: dpm_suspend_late[2] end
+    binder:940_3-2215    [000] ..... 18003.269293: suspend_resume: dpm_suspend_noirq[2] begin
+    binder:940_3-2215    [002] ..... 18003.275472: suspend_resume: dpm_suspend_noirq[2] end
+    binder:940_3-2215    [002] ..... 18003.275490: suspend_resume: CPU_OFF[1] begin
+    binder:940_3-2215    [002] ..... 18003.285088: suspend_resume: CPU_OFF[1] end
+    binder:940_3-2215    [002] ..... 18003.285092: suspend_resume: CPU_OFF[2] begin
+    binder:940_3-2215    [000] ..... 18003.292743: suspend_resume: CPU_OFF[2] end
+    binder:940_3-2215    [000] ..... 18003.292747: suspend_resume: CPU_OFF[3] begin
+    binder:940_3-2215    [000] ..... 18003.296860: suspend_resume: CPU_OFF[3] end
+    binder:940_3-2215    [000] ..... 18003.296864: suspend_resume: CPU_OFF[4] begin
+    binder:940_3-2215    [000] ..... 18003.301285: suspend_resume: CPU_OFF[4] end
+    binder:940_3-2215    [000] ..... 18003.301289: suspend_resume: CPU_OFF[5] begin
+    binder:940_3-2215    [000] ..... 18003.306472: suspend_resume: CPU_OFF[5] end
+    binder:940_3-2215    [000] ..... 18003.306477: suspend_resume: CPU_OFF[6] begin
+    binder:940_3-2215    [000] ..... 18003.312138: suspend_resume: CPU_OFF[6] end
+    binder:940_3-2215    [000] ..... 18003.312142: suspend_resume: CPU_OFF[7] begin
+    binder:940_3-2215    [000] ..... 18003.315677: suspend_resume: CPU_OFF[7] end
+    binder:940_3-2215    [000] d.... 18003.315681: suspend_resume: syscore_suspend[0] begin
+    binder:940_3-2215    [000] d..2. 18003.315917: cluster_enter: last cpu:0 idx:1 suspend_param:0x4100c344
+    binder:940_3-2215    [000] d.... 18003.315942: suspend_resume: syscore_suspend[0] end
+    binder:940_3-2215    [000] d.... 18003.315942: suspend_resume: machine_suspend[3] begin
+    binder:940_3-2215    [000] d.... 18003.315942: suspend_resume: machine_suspend[3] end
+    binder:940_3-2215    [000] d.... 18003.315942: suspend_resume: syscore_resume[0] begin
+    binder:940_3-2215    [000] dN.2. 18007.722045: cluster_exit: first cpu:0 idx:1 suspend_param:0x4100c344
+    binder:940_3-2215    [000] dN... 18007.722334: suspend_resume: syscore_resume[0] end
+    binder:940_3-2215    [000] ..... 18007.722787: suspend_resume: CPU_ON[1] begin
+    binder:940_3-2215    [000] ..... 18007.729078: suspend_resume: CPU_ON[1] end
+    binder:940_3-2215    [000] ..... 18007.729095: suspend_resume: CPU_ON[2] begin
+    binder:940_3-2215    [000] ..... 18007.735956: suspend_resume: CPU_ON[2] end
+    binder:940_3-2215    [000] ..... 18007.735970: suspend_resume: CPU_ON[3] begin
+    binder:940_3-2215    [000] ..... 18007.744661: suspend_resume: CPU_ON[3] end
+    binder:940_3-2215    [000] ..... 18007.744678: suspend_resume: CPU_ON[4] begin
+    binder:940_3-2215    [000] ..... 18007.749165: suspend_resume: CPU_ON[4] end
+    binder:940_3-2215    [000] ..... 18007.749179: suspend_resume: CPU_ON[5] begin
+    binder:940_3-2215    [002] ..... 18007.754076: suspend_resume: CPU_ON[5] end
+    binder:940_3-2215    [002] ..... 18007.754094: suspend_resume: CPU_ON[6] begin
+    binder:940_3-2215    [000] ..... 18007.759041: suspend_resume: CPU_ON[6] end
+    binder:940_3-2215    [000] ..... 18007.759056: suspend_resume: CPU_ON[7] begin
+    binder:940_3-2215    [000] ..... 18007.765422: suspend_resume: CPU_ON[7] end
+    binder:940_3-2215    [000] ..... 18007.765438: suspend_resume: dpm_resume_noirq[16] begin
+    binder:940_3-2215    [001] ..... 18007.772024: suspend_resume: dpm_resume_noirq[16] end
+    binder:940_3-2215    [001] ..... 18007.780803: suspend_resume: dpm_resume_early[16] begin
+    binder:940_3-2215    [001] ..... 18007.785571: suspend_resume: dpm_resume_early[16] end
+    binder:940_3-2215    [001] ..... 18007.785576: suspend_resume: dpm_resume[16] begin
+    binder:940_3-2215    [001] ..... 18007.830782: suspend_resume: dpm_resume[16] end
+    binder:940_3-2215    [001] ..... 18007.830786: suspend_resume: dpm_complete[16] begin
+    binder:940_3-2215    [001] ..... 18007.833954: suspend_resume: dpm_complete[16] end
+    binder:940_3-2215    [001] ..... 18007.833958: suspend_resume: resume_console[3] begin
+    binder:940_3-2215    [001] ..... 18007.834085: suspend_resume: resume_console[3] end
+    binder:940_3-2215    [001] ..... 18007.834088: suspend_resume: thaw_processes[0] begin
+    binder:940_3-2215    [000] ..... 18007.844970: suspend_resume: thaw_processes[0] end
+    binder:940_4-8272    [000] ..... 18008.081523: suspend_resume: suspend_enter[3] begin
+    binder:940_4-8272    [000] ..... 18008.081539: suspend_resume: sync_filesystems[0] begin
+    binder:940_4-8272    [002] ..... 18008.097528: suspend_resume: sync_filesystems[0] end
+    binder:940_4-8272    [002] ..... 18008.097657: suspend_resume: freeze_processes[0] begin
+    binder:940_4-8272    [001] ..... 18008.116336: suspend_resume: freeze_processes[0] end
+    binder:940_4-8272    [001] ..... 18008.116343: suspend_resume: suspend_enter[3] end
+    binder:940_4-8272    [001] ..... 18008.116358: suspend_resume: dpm_prepare[2] begin
+    binder:940_4-8272    [001] ..... 18008.120047: suspend_resume: dpm_prepare[2] end
+    binder:940_4-8272    [001] ..... 18008.120052: suspend_resume: dpm_suspend[2] begin
+    binder:940_4-8272    [001] ..... 18008.121540: swrm_device_suspend: swrm_device_suspend: swrm state: 3
+    binder:940_4-8272    [001] ..... 18008.121552: swrm_device_suspend: swrm_device_suspend: swrm state: 3
+    binder:940_4-8272    [001] ..... 18008.121699: lpi_pinctrl_suspend: lpi_pinctrl_suspend: system suspend
+    binder:940_4-8272    [000] ..... 18008.249466: suspend_resume: dpm_suspend[2] end
+    binder:940_4-8272    [000] ..... 18008.249508: suspend_resume: dpm_suspend_late[2] begin
+    binder:940_4-8272    [000] ..... 18008.256263: suspend_resume: dpm_suspend_late[2] end
+    binder:940_4-8272    [000] ..... 18008.258016: suspend_resume: dpm_suspend_noirq[2] begin
+    binder:940_4-8272    [000] ..... 18008.262476: suspend_resume: dpm_suspend_noirq[2] end
+    binder:940_4-8272    [000] ..... 18008.262496: suspend_resume: CPU_OFF[1] begin
+    binder:940_4-8272    [000] ..... 18008.271635: suspend_resume: CPU_OFF[1] end
+    binder:940_4-8272    [000] ..... 18008.271639: suspend_resume: CPU_OFF[2] begin
+    binder:940_4-8272    [000] ..... 18008.278526: suspend_resume: CPU_OFF[2] end
+    binder:940_4-8272    [000] ..... 18008.278530: suspend_resume: CPU_OFF[3] begin
+    binder:940_4-8272    [006] ..... 18008.282815: suspend_resume: CPU_OFF[3] end
+    binder:940_4-8272    [006] ..... 18008.282819: suspend_resume: CPU_OFF[4] begin
+    binder:940_4-8272    [006] ..... 18008.286556: suspend_resume: CPU_OFF[4] end
+    binder:940_4-8272    [006] ..... 18008.286558: suspend_resume: CPU_OFF[5] begin
+    binder:940_4-8272    [006] ..... 18008.289610: suspend_resume: CPU_OFF[5] end
+    binder:940_4-8272    [006] ..... 18008.289611: suspend_resume: CPU_OFF[6] begin
+    binder:940_4-8272    [000] ..... 18008.296169: suspend_resume: CPU_OFF[6] end
+    binder:940_4-8272    [000] ..... 18008.296293: suspend_resume: CPU_ON[1] begin
+    binder:940_4-8272    [000] ..... 18008.300984: suspend_resume: CPU_ON[1] end
+    binder:940_4-8272    [000] ..... 18008.300997: suspend_resume: CPU_ON[2] begin
+    binder:940_4-8272    [000] ..... 18008.305349: suspend_resume: CPU_ON[2] end
+    binder:940_4-8272    [000] ..... 18008.305361: suspend_resume: CPU_ON[3] begin
+    binder:940_4-8272    [000] ..... 18008.313444: suspend_resume: CPU_ON[3] end
+    binder:940_4-8272    [000] ..... 18008.313459: suspend_resume: CPU_ON[4] begin
+    binder:940_4-8272    [000] ..... 18008.317962: suspend_resume: CPU_ON[4] end
+    binder:940_4-8272    [000] ..... 18008.317976: suspend_resume: CPU_ON[5] begin
+    binder:940_4-8272    [000] ..... 18008.322563: suspend_resume: CPU_ON[5] end
+    binder:940_4-8272    [000] ..... 18008.322578: suspend_resume: CPU_ON[6] begin
+    binder:940_4-8272    [000] ..... 18008.327610: suspend_resume: CPU_ON[6] end
+    binder:940_4-8272    [000] ..... 18008.327627: suspend_resume: dpm_resume_noirq[16] begin
+    binder:940_4-8272    [001] ..... 18008.330839: suspend_resume: dpm_resume_noirq[16] end
+    binder:940_4-8272    [002] ..... 18008.334877: suspend_resume: dpm_resume_early[16] begin
+    binder:940_4-8272    [001] ..... 18008.338281: suspend_resume: dpm_resume_early[16] end
+    binder:940_4-8272    [001] ..... 18008.338285: suspend_resume: dpm_resume[16] begin
+    binder:940_4-8272    [002] ..... 18008.382504: suspend_resume: dpm_resume[16] end
+    binder:940_4-8272    [002] ..... 18008.382508: suspend_resume: dpm_complete[16] begin
+    binder:940_4-8272    [002] ..... 18008.384945: suspend_resume: dpm_complete[16] end
+    binder:940_4-8272    [002] ..... 18008.384948: suspend_resume: resume_console[3] begin
+    binder:940_4-8272    [002] ..... 18008.385028: suspend_resume: resume_console[3] end
+    binder:940_4-8272    [002] ..... 18008.385031: suspend_resume: thaw_processes[0] begin
+    binder:940_4-8272    [002] ..... 18008.397474: suspend_resume: thaw_processes[0] end
+    binder:940_4-8272    [002] ..... 18008.836422: suspend_resume: suspend_enter[3] begin
+    binder:940_4-8272    [002] ..... 18008.836435: suspend_resume: sync_filesystems[0] begin
+    binder:940_4-8272    [002] ..... 18008.846128: suspend_resume: sync_filesystems[0] end
+    binder:940_4-8272    [002] ..... 18008.846178: suspend_resume: freeze_processes[0] begin
+    binder:940_4-8272    [001] ..... 18008.859927: suspend_resume: freeze_processes[0] end
+    binder:940_4-8272    [001] ..... 18008.859931: suspend_resume: suspend_enter[3] end
+    binder:940_4-8272    [001] ..... 18008.859943: suspend_resume: dpm_prepare[2] begin
+    binder:940_4-8272    [001] ..... 18008.862578: suspend_resume: dpm_prepare[2] end
+    binder:940_4-8272    [001] ..... 18008.862581: suspend_resume: dpm_suspend[2] begin
+    binder:940_4-8272    [000] ..... 18008.864067: swrm_device_suspend: swrm_device_suspend: swrm state: 3
+    binder:940_4-8272    [000] ..... 18008.864137: swrm_device_suspend: swrm_device_suspend: swrm state: 3
+    binder:940_4-8272    [000] ..... 18008.864423: lpi_pinctrl_suspend: lpi_pinctrl_suspend: system suspend
+    binder:940_4-8272    [000] ..... 18008.998198: suspend_resume: dpm_suspend[2] end
+    binder:940_4-8272    [000] ..... 18008.998258: suspend_resume: dpm_suspend_late[2] begin
+    binder:940_4-8272    [000] ..... 18009.005119: suspend_resume: dpm_suspend_late[2] end
+    binder:940_4-8272    [000] ..... 18009.006885: suspend_resume: dpm_suspend_noirq[2] begin
+    binder:940_4-8272    [000] ..... 18009.010901: suspend_resume: dpm_suspend_noirq[2] end
+    binder:940_4-8272    [000] ..... 18009.010919: suspend_resume: CPU_OFF[1] begin
+    binder:940_4-8272    [005] ..... 18009.019086: suspend_resume: CPU_OFF[1] end
+    binder:940_4-8272    [005] ..... 18009.019090: suspend_resume: CPU_OFF[2] begin
+    binder:940_4-8272    [005] ..... 18009.024983: suspend_resume: CPU_OFF[2] end
+    binder:940_4-8272    [005] ..... 18009.024984: suspend_resume: CPU_OFF[3] begin
+    binder:940_4-8272    [005] ..... 18009.029533: suspend_resume: CPU_OFF[3] end
+    binder:940_4-8272    [005] ..... 18009.029534: suspend_resume: CPU_OFF[4] begin
+    binder:940_4-8272    [005] ..... 18009.033811: suspend_resume: CPU_OFF[4] end
+    binder:940_4-8272    [005] ..... 18009.033812: suspend_resume: CPU_OFF[5] begin
+    binder:940_4-8272    [000] ..... 18009.038595: suspend_resume: CPU_OFF[5] end
+    binder:940_4-8272    [000] ..... 18009.038599: suspend_resume: CPU_OFF[6] begin
+    binder:940_4-8272    [000] ..... 18009.046483: suspend_resume: CPU_OFF[6] end
+    binder:940_4-8272    [000] ..... 18009.046621: suspend_resume: CPU_ON[1] begin
+    binder:940_4-8272    [000] ..... 18009.051147: suspend_resume: CPU_ON[1] end
+    binder:940_4-8272    [000] ..... 18009.051159: suspend_resume: CPU_ON[2] begin
+    binder:940_4-8272    [000] ..... 18009.055435: suspend_resume: CPU_ON[2] end
+    binder:940_4-8272    [000] ..... 18009.055446: suspend_resume: CPU_ON[3] begin
+    binder:940_4-8272    [000] ..... 18009.063480: suspend_resume: CPU_ON[3] end
+    binder:940_4-8272    [000] ..... 18009.063495: suspend_resume: CPU_ON[4] begin
+    binder:940_4-8272    [000] ..... 18009.068006: suspend_resume: CPU_ON[4] end
+    binder:940_4-8272    [000] ..... 18009.068020: suspend_resume: CPU_ON[5] begin
+    binder:940_4-8272    [000] ..... 18009.072695: suspend_resume: CPU_ON[5] end
+    binder:940_4-8272    [000] ..... 18009.072712: suspend_resume: CPU_ON[6] begin
+    binder:940_4-8272    [000] ..... 18009.077602: suspend_resume: CPU_ON[6] end
+    binder:940_4-8272    [000] ..... 18009.077617: suspend_resume: dpm_resume_noirq[16] begin
+    binder:940_4-8272    [000] ..... 18009.080861: suspend_resume: dpm_resume_noirq[16] end
+    binder:940_4-8272    [001] ..... 18009.084933: suspend_resume: dpm_resume_early[16] begin
+    binder:940_4-8272    [002] ..... 18009.088817: suspend_resume: dpm_resume_early[16] end
+    binder:940_4-8272    [002] ..... 18009.088823: suspend_resume: dpm_resume[16] begin
+    binder:940_4-8272    [000] ..... 18009.132537: suspend_resume: dpm_resume[16] end
+    binder:940_4-8272    [000] ..... 18009.132540: suspend_resume: dpm_complete[16] begin
+    binder:940_4-8272    [000] ..... 18009.134840: suspend_resume: dpm_complete[16] end
+    binder:940_4-8272    [000] ..... 18009.134843: suspend_resume: resume_console[3] begin
+    binder:940_4-8272    [000] ..... 18009.134925: suspend_resume: resume_console[3] end
+    binder:940_4-8272    [000] ..... 18009.134928: suspend_resume: thaw_processes[0] begin
+    binder:940_4-8272    [001] ..... 18009.145795: suspend_resume: thaw_processes[0] end
+
+stderr=

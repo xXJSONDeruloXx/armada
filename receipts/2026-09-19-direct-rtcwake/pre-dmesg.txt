@@ -1,0 +1,100 @@
+[Fri Sep 18 18:39:52 2026] RPN [drivers/base/power/wakeup.c:pm_wakeup_pending():963]Wakeup pending, aborting suspend
+[Fri Sep 18 18:39:52 2026] 
+[Fri Sep 18 18:39:52 2026] RPN [drivers/base/power/wakeup.c:pm_print_active_wakeup_sources():921]active wakeup source: [timerfd]
+[Fri Sep 18 18:39:52 2026] 
+[Fri Sep 18 18:39:52 2026] RPN [drivers/base/power/wakeup.c:pm_wakeup_pending():968]PM: Pending Wakeup Sources: [timerfd] 
+[Fri Sep 18 18:39:52 2026] 
+[Fri Sep 18 18:39:52 2026] i2c_geni 980000.i2c: Unbalanced pm_runtime_enable!
+[Fri Sep 18 18:39:52 2026] i2c_geni 988000.i2c: Unbalanced pm_runtime_enable!
+[Fri Sep 18 18:39:52 2026] i2c_geni 98c000.i2c: Unbalanced pm_runtime_enable!
+[Fri Sep 18 18:39:52 2026] i2c_geni a80000.i2c: Unbalanced pm_runtime_enable!
+[Fri Sep 18 18:39:52 2026] i2c_geni a90000.i2c: Unbalanced pm_runtime_enable!
+[Fri Sep 18 18:39:52 2026] i2c_geni 890000.i2c: Unbalanced pm_runtime_enable!
+[Fri Sep 18 18:39:52 2026] [binder][0x52d3459cd4][21:29:41.597828] kiwi_v2: [8272:I:HDD] wlan_hdd_bus_resume: starting bus resume
+[Fri Sep 18 18:39:52 2026] [binder][0x52d345dc1a][21:29:41.598672] kiwi_v2: [8272:I:PMO] pmo_core_psoc_send_host_wakeup_ind_to_fw: Host wakeup indication sent to fw
+[Fri Sep 18 18:39:52 2026] [soft_i][0x52d34a7c44][21:29:41.614461] kiwi_v2: [0:I:WMA] WLAN triggered wakeup: BPF_ALLOW (39), vdev: 0 (STA)
+[Fri Sep 18 18:39:52 2026] [soft_i][0x52d34a893b][21:29:41.614633] kiwi_v2: [0:I:WMA] wma_wake_event_packet: Wake event packet:
+[Fri Sep 18 18:39:52 2026] [soft_i][0x52d34a8a3d][21:29:41.614647] kiwi_v2: [0:I:WMA] 00000000: 26 ab dc db 81 56 14 98 77 3a d9 38 08 00 45 00
+[Fri Sep 18 18:39:52 2026] [soft_i][0x52d34a8aff][21:29:41.614657] kiwi_v2: [0:I:WMA] 00000010: 00 28 33 b5 00 00 40 06 c4 6f c0 a8 00 b8 c0 a8
+[Fri Sep 18 18:39:52 2026] [soft_i][0x52d34a8ba2][21:29:41.614665] kiwi_v2: [0:I:WMA] 00000020: 00 a3 cd 73 15 b3 27 3a 88 af 46 ab f9 76 50 10
+[Fri Sep 18 18:39:52 2026] [soft_i][0x52d34a8c4f][21:29:41.614674] kiwi_v2: [0:I:WMA] 00000030: 0e 19 4b dd 00 00 00 00 00 00 00 00
+[Fri Sep 18 18:39:52 2026] [soft_i][0x52d34a90d5][21:29:41.614735] kiwi_v2: [0:I:WMA] wma_log_pkt_ipv4: Pkt_len: 40, src_port: 52595, dst_port: 5555
+[Fri Sep 18 18:39:52 2026] [binder][0x52d34aa666][21:29:41.615022] kiwi_v2: [8272:I:HDD] wlan_hdd_bus_resume: bus resume succeeded
+[Fri Sep 18 18:39:52 2026] [kworke][0x52d34aae0b][21:29:41.615124] kiwi_v2: [8475:I:HDD] hdd_resume_wlan: WLAN being resumed by OS
+[Fri Sep 18 18:39:52 2026] [kworke][0x52d34ad308][21:29:41.615617] kiwi_v2: [8475:E:HDD] hdd_restart_tsf_sync_post_wlan_resume: Host TSF sync is not initialized!!
+[Fri Sep 18 18:39:52 2026] [kworke][0x52d34ad560][21:29:41.615649] kiwi_v2: [8475:I:HDD] hdd_disable_host_offloads: vdev is not connected
+[Fri Sep 18 18:39:52 2026] [kworke][0x52d34ad679][21:29:41.615663] kiwi_v2: [8475:E:HDD] hdd_restart_tsf_sync_post_wlan_resume: Host TSF sync is not initialized!!
+[Fri Sep 18 18:39:52 2026] [kworke][0x52d34ae5fd][21:29:41.615870] kiwi_v2: [8475:E:HDD] hdd_send_igmp_offload_params: in_dev is NULL
+[Fri Sep 18 18:39:52 2026] [kworke][0x52d34af74c][21:29:41.616101] kiwi_v2: [8475:E:HDD] hdd_restart_tsf_sync_post_wlan_resume: Host TSF sync is not initialized!!
+[Fri Sep 18 18:39:52 2026] OOM killer enabled.
+[Fri Sep 18 18:39:52 2026] Restarting tasks ... 
+[Fri Sep 18 18:39:52 2026] cdsp-loader soc:qcom,msm-cdsp-loader: cdsp_loader_probe: rproc not found
+[Fri Sep 18 18:39:52 2026] done.
+[Fri Sep 18 18:39:52 2026] Abort: Pending Wakeup Sources: [timerfd] 
+[Fri Sep 18 18:39:52 2026] adsp_sleepmon: PM_POST_SUSPEND
+[Fri Sep 18 18:39:52 2026] PM: suspend exit
+[Fri Sep 18 18:39:52 2026] adsp_sleepmon: timer_event = 0,suspend_event = 1
+[Fri Sep 18 18:39:52 2026] PM: suspend entry (s2idle)
+[Fri Sep 18 18:39:52 2026] Filesystems sync: 0.007 seconds
+[Fri Sep 18 18:39:52 2026] Freezing user space processes ... 
+[Fri Sep 18 18:39:52 2026] gunyah: Wait for VM_STATUS 9 interrupted
+[Fri Sep 18 18:39:52 2026] spcom:spcom_ioctl_handle_poll_event: Wait for link state change interrupted, ret[-512]
+[Fri Sep 18 18:39:52 2026] spcom:spcom_ioctl_handle_poll_event: Wait for link state change interrupted, ret[-512]
+[Fri Sep 18 18:39:52 2026] spcom:spcom_ioctl_handle_poll_event: Wait for link state change interrupted, ret[-512]
+[Fri Sep 18 18:39:52 2026] spcom:spcom_ioctl_handle_poll_event: Wait for link state change interrupted, ret[-512]
+[Fri Sep 18 18:39:52 2026] gunyah: Failed vcpu_run -512
+[Fri Sep 18 18:39:52 2026] gunyah: Failed vcpu_run -512
+[Fri Sep 18 18:39:52 2026] (elapsed 0.009 seconds) done.
+[Fri Sep 18 18:39:52 2026] OOM killer disabled.
+[Fri Sep 18 18:39:52 2026] Freezing remaining freezable tasks ... (elapsed 0.002 seconds) done.
+[Fri Sep 18 18:39:52 2026] printk: Suspending console(s) (use no_console_suspend to debug)
+[Fri Sep 18 18:39:52 2026] [kworke][0x52d39a2102][21:29:41.886310] kiwi_v2: [8475:I:HDD] hdd_suspend_wlan: WLAN being suspended by OS
+[Fri Sep 18 18:39:52 2026] [kworke][0x52d39a6ca7][21:29:41.887319] kiwi_v2: [8475:E:HDD] hdd_enable_ns_offload: IPv6 dev does not exist. Failed to request NSOffload
+[Fri Sep 18 18:39:52 2026] [kworke][0x52d39a712e][21:29:41.887379] kiwi_v2: [8475:E:HDD] hdd_send_igmp_offload_params: in_dev is NULL
+[Fri Sep 18 18:39:52 2026] [kworke][0x52d39a8b8d][21:29:41.887731] kiwi_v2: [8475:I:PMO] pmo_core_is_wow_applicable: lpass enabled, enabling wow
+[Fri Sep 18 18:39:52 2026] [binder][0x52d39aafcb][21:29:41.888214] kiwi_v2: [8272:I:HDD] __wlan_hdd_bus_suspend: starting bus suspend
+[Fri Sep 18 18:39:52 2026] [binder][0x52d39ab589][21:29:41.888291] kiwi_v2: [8272:I:PMO] pmo_core_enable_wow_in_fw: drv wow is enabled
+[Fri Sep 18 18:39:52 2026] [binder][0x52d39ab693][21:29:41.888305] kiwi_v2: [8272:I:PMO] pmo_core_enable_wow_in_fw: system suspend wow
+[Fri Sep 18 18:39:52 2026] [binder][0x52d3b14678][21:29:41.965317] kiwi_v2: [8272:I:HDD] __wlan_hdd_bus_suspend: bus suspend succeeded
+[Fri Sep 18 18:39:52 2026] qcom-hv-haptics c42d000.qcom,spmi:qcom,pm8550b@7:qcom,hv-haptics@f000: wait 2000 us for brake pattern to complete timeout=3 delay_us=1000
+[Fri Sep 18 18:39:52 2026] suspend ns:    8336781128408      suspend cycles:     355739862178
+[Fri Sep 18 18:39:52 2026] resume cycles:     355754829406
+[Fri Sep 18 18:39:52 2026] [irq][0x52d4a3f514][21:29:42.793673] kiwi_v2: [0:I:HIF] hif_wake_interrupt_handler: wake interrupt received on irq 324
+[Fri Sep 18 18:39:52 2026] RPN [drivers/base/power/wakeup.c:pm_wakeup_pending():963]Wakeup pending, aborting suspend
+[Fri Sep 18 18:39:52 2026] 
+[Fri Sep 18 18:39:52 2026] RPN [drivers/base/power/wakeup.c:pm_print_active_wakeup_sources():921]active wakeup source: [timerfd]
+[Fri Sep 18 18:39:52 2026] 
+[Fri Sep 18 18:39:52 2026] RPN [drivers/base/power/wakeup.c:pm_wakeup_pending():968]PM: Pending Wakeup Sources: [timerfd] 
+[Fri Sep 18 18:39:52 2026] 
+[Fri Sep 18 18:39:52 2026] i2c_geni 980000.i2c: Unbalanced pm_runtime_enable!
+[Fri Sep 18 18:39:52 2026] i2c_geni 988000.i2c: Unbalanced pm_runtime_enable!
+[Fri Sep 18 18:39:52 2026] i2c_geni 98c000.i2c: Unbalanced pm_runtime_enable!
+[Fri Sep 18 18:39:52 2026] i2c_geni a80000.i2c: Unbalanced pm_runtime_enable!
+[Fri Sep 18 18:39:52 2026] i2c_geni a90000.i2c: Unbalanced pm_runtime_enable!
+[Fri Sep 18 18:39:52 2026] i2c_geni 890000.i2c: Unbalanced pm_runtime_enable!
+[Fri Sep 18 18:39:52 2026] [binder][0x52d4aee0f6][21:29:42.830950] kiwi_v2: [8272:I:HDD] wlan_hdd_bus_resume: starting bus resume
+[Fri Sep 18 18:39:52 2026] [binder][0x52d4af0ba8][21:29:42.831519] kiwi_v2: [8272:I:PMO] pmo_core_psoc_send_host_wakeup_ind_to_fw: Host wakeup indication sent to fw
+[Fri Sep 18 18:39:52 2026] [soft_i][0x52d4b3804a][21:29:42.846728] kiwi_v2: [0:I:WMA] WLAN triggered wakeup: BPF_ALLOW (39), vdev: 0 (STA)
+[Fri Sep 18 18:39:52 2026] [binder][0x52d4b38f1d][21:29:42.846925] kiwi_v2: [8272:I:HDD] wlan_hdd_bus_resume: bus resume succeeded
+[Fri Sep 18 18:39:52 2026] [soft_i][0x52d4b38f41][21:29:42.846927] kiwi_v2: [0:I:WMA] wma_wake_event_packet: Wake event packet:
+[Fri Sep 18 18:39:52 2026] [soft_i][0x52d4b390bd][21:29:42.846947] kiwi_v2: [0:I:WMA] 00000000: 26 ab dc db 81 56 14 98 77 3a d9 38 08 00 45 00
+[Fri Sep 18 18:39:52 2026] [soft_i][0x52d4b391e7][21:29:42.846962] kiwi_v2: [0:I:WMA] 00000010: 00 28 79 c0 00 00 40 06 7e 64 c0 a8 00 b8 c0 a8
+[Fri Sep 18 18:39:52 2026] [soft_i][0x52d4b39302][21:29:42.846977] kiwi_v2: [0:I:WMA] 00000020: 00 a3 cd 73 15 b3 27 3a 88 af 46 ab f9 76 50 10
+[Fri Sep 18 18:39:52 2026] [soft_i][0x52d4b3941d][21:29:42.846992] kiwi_v2: [0:I:WMA] 00000030: 0e 19 4b dd 00 00 00 00 00 00 00 00
+[Fri Sep 18 18:39:52 2026] [soft_i][0x52d4b39a65][21:29:42.847076] kiwi_v2: [0:I:WMA] wma_log_pkt_ipv4: Pkt_len: 40, src_port: 52595, dst_port: 5555
+[Fri Sep 18 18:39:52 2026] [kworke][0x52d4b3cc64][21:29:42.847742] kiwi_v2: [8472:I:HDD] hdd_resume_wlan: WLAN being resumed by OS
+[Fri Sep 18 18:39:52 2026] [kworke][0x52d4b3fdd3][21:29:42.848401] kiwi_v2: [8472:E:HDD] hdd_restart_tsf_sync_post_wlan_resume: Host TSF sync is not initialized!!
+[Fri Sep 18 18:39:52 2026] [kworke][0x52d4b4012e][21:29:42.848446] kiwi_v2: [8472:I:HDD] hdd_disable_host_offloads: vdev is not connected
+[Fri Sep 18 18:39:52 2026] [kworke][0x52d4b402e4][21:29:42.848469] kiwi_v2: [8472:E:HDD] hdd_restart_tsf_sync_post_wlan_resume: Host TSF sync is not initialized!!
+[Fri Sep 18 18:39:52 2026] [kworke][0x52d4b41a8f][21:29:42.848784] kiwi_v2: [8472:E:HDD] hdd_send_igmp_offload_params: in_dev is NULL
+[Fri Sep 18 18:39:52 2026] [kworke][0x52d4b429ea][21:29:42.848989] kiwi_v2: [8472:E:HDD] hdd_restart_tsf_sync_post_wlan_resume: Host TSF sync is not initialized!!
+[Fri Sep 18 18:39:52 2026] OOM killer enabled.
+[Fri Sep 18 18:39:52 2026] Restarting tasks ... 
+[Fri Sep 18 18:39:52 2026] cdsp-loader soc:qcom,msm-cdsp-loader: cdsp_loader_probe: rproc not found
+[Fri Sep 18 18:39:52 2026] done.
+[Fri Sep 18 18:39:52 2026] Abort: Pending Wakeup Sources: [timerfd] 
+[Fri Sep 18 18:39:52 2026] adsp_sleepmon: PM_POST_SUSPEND
+[Fri Sep 18 18:39:52 2026] PM: suspend exit
+[Fri Sep 18 18:39:52 2026] adsp_sleepmon: timer_event = 0,suspend_event = 1
+[Fri Sep 18 18:39:52 2026] init: Untracked pid 13433 exited with status 0
+[Fri Sep 18 18:39:52 2026] init: Untracked pid 13433 did not have an associated service entry and will not be reaped

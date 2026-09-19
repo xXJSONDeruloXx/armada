@@ -1,0 +1,9 @@
+rc=0
+stdout=
+stderr=chmod: /sys/kernel/debug/tracing/events/qcom_lpm/cluster_enter/enable: No such file or directory
+chmod: /sys/kernel/debug/tracing/events/qcom_lpm/cluster_exit/enable: No such file or directory
+chmod: /sys/kernel/debug/tracing/events/qcom_lpm/cluster_pred_select/enable: No such file or directory
+/system/bin/sh: can't create /sys/kernel/debug/tracing/events/qcom_lpm/cluster_enter/enable: No such file or directory
+/system/bin/sh: can't create /sys/kernel/debug/tracing/events/qcom_lpm/cluster_exit/enable: No such file or directory
+/system/bin/sh: can't create /sys/kernel/debug/tracing/events/qcom_lpm/cluster_pred_select/enable: No such file or directory
+

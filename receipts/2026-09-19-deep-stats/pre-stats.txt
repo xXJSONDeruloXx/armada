@@ -1,0 +1,23 @@
+rc=0
+stdout=AOSD
+Count = 282549
+Last Entered At = 345667791408
+Last Exited At = 345667912128
+Accumulated Duration = 180267405120
+CXSD
+Count = 19192
+Last Entered At = 345657745618
+Last Exited At = 345667924709
+Accumulated Duration = 181842625533
+DDR
+Count = 19201
+Last Entered At = 345657742867
+Last Exited At = 345667937248
+Accumulated Duration = 182145336185
+APSS
+Count = 16421
+Last Entered At = 345657730623
+Last Exited At = 345668297603
+Accumulated Duration = 188868361480
+
+stderr=

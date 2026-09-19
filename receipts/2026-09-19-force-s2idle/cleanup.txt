@@ -1,0 +1,11 @@
+rc=1
+stdout=
+stderr=/system/bin/sh: can't create /sys/kernel/debug/tracing/events/qcom_lpm/cluster_enter/enable: No such file or directory
+/system/bin/sh: can't create /sys/kernel/debug/tracing/events/qcom_lpm/cluster_exit/enable: No such file or directory
+/system/bin/sh: can't create /sys/kernel/debug/tracing/events/qcom_lpm/cluster_pred_select/enable: No such file or directory
+chmod: chmod '/sys/kernel/debug/tracing/events/power/suspend_resume/enable' to 0644: Operation not permitted
+chmod: chmod '/sys/kernel/debug/tracing/events/qcom_lpm/lpm_gov_select/enable' to 0644: Operation not permitted
+chmod: /sys/kernel/debug/tracing/events/qcom_lpm/cluster_enter/enable: No such file or directory
+chmod: /sys/kernel/debug/tracing/events/qcom_lpm/cluster_exit/enable: No such file or directory
+chmod: /sys/kernel/debug/tracing/events/qcom_lpm/cluster_pred_select/enable: No such file or directory
+

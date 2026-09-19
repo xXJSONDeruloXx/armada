@@ -1,0 +1,38 @@
+# tracer: nop
+#
+# entries-in-buffer/entries-written: 26/26   #P:8
+#
+#                                _-----=> irqs-off
+#                               / _----=> need-resched
+#                              | / _---=> hardirq/softirq
+#                              || / _--=> preempt-depth
+#                              ||| / _-=> migrate-disable
+#                              |||| /     delay
+#           TASK-PID     CPU#  |||||  TIMESTAMP  FUNCTION
+#              | |         |   |||||     |         |
+              sh-4074    [004] d..1. 13410.939837: sleep_read: (readl_relaxed+0x0/0x70 [soc_sleep_stats]) arg0=0xffffffc01f96d004
+              sh-4074    [004] d..1. 13410.939851: sleep_read: (readl_relaxed+0x0/0x70 [soc_sleep_stats]) arg0=0xffffffc01f97d01c
+              sh-4074    [004] d..1. 13410.939856: sleep_read: (readl_relaxed+0x0/0x70 [soc_sleep_stats]) arg0=0xffffffc01f9850bc
+              sh-4074    [004] d..1. 13410.939859: sleep_read: (readl_relaxed+0x0/0x70 [soc_sleep_stats]) arg0=0xffffffc01f9850c0
+              sh-4074    [004] d..1. 13410.939861: sleep_read: (readl_relaxed+0x0/0x70 [soc_sleep_stats]) arg0=0xffffffc01f9850d0
+              sh-4074    [004] d..1. 13410.939863: sleep_read: (readl_relaxed+0x0/0x70 [soc_sleep_stats]) arg0=0xffffffc01f9850e0
+              sh-4074    [004] d..1. 13410.939865: sleep_read: (readl_relaxed+0x0/0x70 [soc_sleep_stats]) arg0=0xffffffc01f9850f0
+              sh-4074    [004] d..1. 13410.939867: sleep_read: (readl_relaxed+0x0/0x70 [soc_sleep_stats]) arg0=0xffffffc01f985100
+              sh-4074    [004] d..1. 13410.939869: sleep_read: (readl_relaxed+0x0/0x70 [soc_sleep_stats]) arg0=0xffffffc01f985110
+              sh-4074    [004] d..1. 13410.939871: sleep_read: (readl_relaxed+0x0/0x70 [soc_sleep_stats]) arg0=0xffffffc01f985120
+              sh-4074    [004] d..1. 13410.939873: sleep_read: (readl_relaxed+0x0/0x70 [soc_sleep_stats]) arg0=0xffffffc01f985130
+              sh-4074    [004] d..1. 13410.939875: sleep_read: (readl_relaxed+0x0/0x70 [soc_sleep_stats]) arg0=0xffffffc01f985140
+              sh-4074    [004] d..1. 13410.939877: sleep_read: (readl_relaxed+0x0/0x70 [soc_sleep_stats]) arg0=0xffffffc01f985150
+              sh-4074    [004] d..1. 13410.939879: sleep_read: (readl_relaxed+0x0/0x70 [soc_sleep_stats]) arg0=0xffffffc01f985160
+              sh-4074    [004] d..1. 13410.939881: sleep_read: (readl_relaxed+0x0/0x70 [soc_sleep_stats]) arg0=0xffffffc01f985170
+              sh-4074    [004] d..1. 13410.939883: sleep_read: (readl_relaxed+0x0/0x70 [soc_sleep_stats]) arg0=0xffffffc01f985180
+              sh-4074    [004] d..1. 13410.939885: sleep_read: (readl_relaxed+0x0/0x70 [soc_sleep_stats]) arg0=0xffffffc01f985190
+              sh-4074    [004] d..1. 13410.939887: sleep_read: (readl_relaxed+0x0/0x70 [soc_sleep_stats]) arg0=0xffffffc01f9851a0
+              sh-4074    [004] d..1. 13410.939889: sleep_read: (readl_relaxed+0x0/0x70 [soc_sleep_stats]) arg0=0xffffffc01f9851b0
+              sh-4074    [004] d..1. 13410.939891: sleep_read: (readl_relaxed+0x0/0x70 [soc_sleep_stats]) arg0=0xffffffc01f9851c0
+              sh-4074    [004] d..1. 13410.939893: sleep_read: (readl_relaxed+0x0/0x70 [soc_sleep_stats]) arg0=0xffffffc01f9851d0
+              sh-4074    [004] d..1. 13410.939895: sleep_read: (readl_relaxed+0x0/0x70 [soc_sleep_stats]) arg0=0xffffffc01f9851e0
+              sh-4074    [004] d..1. 13410.939939: sleep_read: (readl_relaxed+0x0/0x70 [soc_sleep_stats]) arg0=0xffffffc01f975048
+              sh-4074    [004] d..1. 13410.939946: sleep_read: (readl_relaxed+0x0/0x70 [soc_sleep_stats]) arg0=0xffffffc01f975068
+              sh-4074    [004] d..1. 13410.939951: sleep_read: (readl_relaxed+0x0/0x70 [soc_sleep_stats]) arg0=0xffffffc01f975088
+              sh-4074    [004] d..1. 13410.939973: sleep_read: (readl_relaxed+0x0/0x70 [soc_sleep_stats]) arg0=0xffffffc01f9850b8

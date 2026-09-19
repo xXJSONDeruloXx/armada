@@ -1,0 +1,3 @@
+Fri Sep 18 21:29:43 EDT 2026
+wakeup using "mem" from /dev/rtc0 at Thu Jan  1 08:35:42 1970
+host_rc=0

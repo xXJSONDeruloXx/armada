@@ -1,0 +1,23 @@
+boot=45c48211-b345-477c-b1bb-ef163dce7b73
+
+155
+70
+7
+0
+0
+0
+67
+2
+0
+alarmtimer.0.auto
+-16
+freeze
+12835
+
+---cluster---
+State          Time Spent(ms) Usage          Rejected
+S0             10605          2240           657
+S1             6168           3047           2666
+
+---state---
+on
