@@ -1,0 +1,38 @@
+Read-only validation of tracing the existing qcom_stats mapping on Armada Linux
+Date: 2026-09-19 20:13 UTC
+Device: Retroid Pocket Nova, Linux 7.2.3, boot ID
+        4508b1ed-cfbd-43a1-a37e-ccee2a163a20
+
+The live BTF reports:
+  struct seq_file size=112; private byte offset=104
+  struct stats_data size=16; base byte offset=8
+
+Temporary tracefs event (enabled only in a private trace instance):
+  p:codexdiag/read qcom_soc_sleep_stats_show seq=$arg1:x64 \
+      data=+104($arg1):x64 base=+8(+104($arg1)):x64
+
+Trigger: read /sys/kernel/debug/qcom_stats/aosd once.
+
+Captured event:
+  cat-48974 [001] 4595.085918: read:
+  (qcom_soc_sleep_stats_show+0x0/0xd8)
+  seq=0xffff00080ee83460 data=0xffff000807b46e00
+  base=0xffff8000800e5048
+
+The captured base has low-page offset 0x048. The live RPMh resource begins at
+0xc3f00000, and the bound mainline qcom_stats driver uses resource + 0x48 for
+the SoC sleep-stat records. Thus the in-memory pointer trace recovers the
+already-mapped record offset without adding an MMIO read. The existing
+memcpy_fromio() read in qcom_soc_sleep_stats_show() remains the only MMIO read
+triggered by opening aosd.
+
+An earlier attempt to kprobe memcpy_fromio directly was rejected because the
+function is marked notrace. The caller probe above succeeded. After the run,
+the global kprobe_events file was empty and the private codexdiag trace
+instance was absent. No other trace state, suspend state, device setting, or
+boot state was changed.
+
+This demonstrates a no-build method on Armada Linux only. Android's
+soc_sleep_stats_show() and stats_prv_data layout differ; repeat only after
+verifying its exact kernel/module BTF or matching structure offsets, runtime
+module symbol availability, and a safe Android access path.
