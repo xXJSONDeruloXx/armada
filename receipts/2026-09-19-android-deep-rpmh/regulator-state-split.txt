@@ -1,0 +1,52 @@
+# Rooted Nova Android RPMh regulator-state inspection
+# Captured read-only on 2026-09-19; current boot remains unchanged.
+
+Device: Retroid Pocket Nova / kalama
+Kernel: 5.15.123-android13-8-g697b78910a71-dirty
+DT paths: /sys/firmware/devicetree/base/soc/apps_rsc@17a00000/drv@2/
+
+The active FDT has no node named qcom,regulator_deepsleep and no
+regulator-state-mem nodes. It does have rpmh-regulator-ldoe1 and
+rpmh-regulator-ldoe3. Their qcom,resource-name values are "ldoe1" and
+"ldoe3"; both qcom,regulator-type values are "pmic5-ldo".
+
+Runtime qcom,set words (big-endian u32):
+
+             base proxy   -ao proxy   -so proxy
+LDOE1             3            1            2
+LDOE3             3            1            2
+
+The matching downstream source is
+drivers/regulator/rpmh-regulator.c at 93c5cc6ad1d0b807510cfa0fb1d06f47407881f9.
+include/dt-bindings/regulator/qcom,rpmh-regulator-levels.h defines ACTIVE=1,
+SLEEP=2, ALL=3. rpmh_regulator_init_vreg() converts qcom,set into separate
+set_active/set_sleep flags, and rpmh_regulator_aggregate_requests() folds each
+proxy into only the selected request set. The -so nodes are sleep-only; their
+qcom,init-enable value is 0. The -ao nodes are active-only. The live
+/sys/kernel/debug/regulator/regulator_summary reports pm_v6e_l1_so and
+pm_v6e_l3_so disabled, while the corresponding -ao nodes are enabled.
+
+This matches the captured Android TCS payload at the resource level:
+
+SLEEP m=3: LDOE1 mode +0x08 = 4, LDOE1 enable +0x04 = 0,
+           LDOE3 enable +0x04 = 0.
+WAKE  m=5: LDOE1 mode +0x08 = 7, LDOE1 enable +0x04 = 1,
+           LDOE3 enable +0x04 = 1.
+
+For PMIC5 LDOs, the downstream mode map uses 4 for LPM and 7 for HPM. The
+staged words are therefore consistent with distinct RPMh sleep/wake regulator
+requests. They do not prove firmware accepted those requests or that this is
+the sole reason Android records AOSD/CXSD/DDR while Armada does not.
+
+Armada's qcs8550-ayn-common.dtsi instead describes vreg_l1e_0p88 and
+vreg_l3e_1p2 as single regulators with HPM initial mode and allowed LPM/HPM
+modes. It supplies no regulator-state-mem entries for those rails. Their
+consumers include DSI, PCIe, UFS PHY, USB, and DisplayPort PHY nodes, so do not
+blindly disable either rail for suspend.
+
+Upstream Linux v7.2 drivers/regulator/qcom-rpmh-regulator.c sends regulator
+requests with RPMH_ACTIVE_ONLY_STATE and has no set_suspend_* operation. A
+standard regulator-state-mem DTS node alone therefore cannot reproduce the
+downstream qcom,set active/sleep split with the current upstream driver.
+
+No files, drivers, trace controls, or power policy were changed on Android.

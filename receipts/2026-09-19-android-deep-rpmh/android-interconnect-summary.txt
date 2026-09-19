@@ -1,0 +1,513 @@
+ node                                  tag          avg         peak
+--------------------------------------------------------------------
+qup0_core_master                                      0            0
+  98c000.i2c                             0            0            0
+  988000.i2c                             0            0            0
+  980000.i2c                             0            0            0
+qup1_core_master                                      0            0
+  a90000.i2c                             0            0            0
+  a80000.i2c                             0            0            0
+qup2_core_master                                  50000        50000
+  890000.i2c                             0            0            0
+  89c000.qcom,qup_uart                   0        50000        50000
+  898000.qcom,qup_uart                   0            0            0
+qup0_core_slave                                       0            0
+  98c000.i2c                             0            0            0
+  988000.i2c                             0            0            0
+  980000.i2c                             0            0            0
+qup1_core_slave                                       0            0
+  a90000.i2c                             0            0            0
+  a80000.i2c                             0            0            0
+qup2_core_slave                                   50000        50000
+  890000.i2c                             0            0            0
+  89c000.qcom,qup_uart                   0        50000        50000
+  898000.qcom,qup_uart                   0            0            0
+llcc_mc                                         1923660      2188800
+  ab00000.qcom,cvp                       0            0            0
+  ae00000.qcom,mdss_mdp                  0            0            0
+  ac13000.qcom,cam-cpas                  0            0            0
+  ac13000.qcom,cam-cpas                  0            0            0
+  ac13000.qcom,cam-cpas                  0            0            0
+  a600000.ssusb                          0            0            0
+  aa00000.qcom,vidc                      0            0            0
+  3d00000.qcom,kgsl-3d0                  7            0            0
+  b0000000.qcom,cnss-qca-converged            0         2250      2188800
+  1de0000.qcedev                         0            0            0
+  soc:qcom,ddr-cdev                      0            0            0
+  4080000.remoteproc-mss                 0            0            0
+  890000.i2c                             0            0            0
+  a90000.i2c                             0            0            0
+  3000000.remoteproc-adsp                0            0            0
+  a80000.i2c                             0            0            0
+  3000000.remoteproc-adsp                0            0            0
+  89c000.qcom,qup_uart                   0        76800        76800
+  898000.qcom,qup_uart                   0            0            0
+  3de8000.gpu_qtb                        0            0            0
+  1c00000.qcom,pcie                      0          500          800
+  8804000.sdhci                          0         1046         3200
+  8804000.sdhci                          0        50000       160000
+  1d84000.ufshc                          0            0            0
+  17d0000.mdp_hf_qtb                     0            0            0
+  17d1000.sf_qtb                         0            0            0
+  16cd000.pcie_qtb                       0            0            0
+  503000.lpass_qtb                       0            0            0
+  523000.nsp_qtb                         0            0            0
+  17d2000.cam_hf_qtb                     0            0            0
+  171a000.anoc_2_qtb                     0            0            0
+  16f0000.anoc_1_qtb                     0            0            0
+  soc:qcom,dcvs:ddrqos:sp               11            0            0
+  soc:qcom,dcvs:ddr:sp                   3      1793064      2188000
+ebi                                             1923660      2188800
+  ab00000.qcom,cvp                       0            0            0
+  ae00000.qcom,mdss_mdp                  0            0            0
+  ac13000.qcom,cam-cpas                  0            0            0
+  ac13000.qcom,cam-cpas                  0            0            0
+  ac13000.qcom,cam-cpas                  0            0            0
+  a600000.ssusb                          0            0            0
+  aa00000.qcom,vidc                      0            0            0
+  3d00000.qcom,kgsl-3d0                  7            0            0
+  b0000000.qcom,cnss-qca-converged            0         2250      2188800
+  1de0000.qcedev                         0            0            0
+  soc:qcom,ddr-cdev                      0            0            0
+  4080000.remoteproc-mss                 0            0            0
+  890000.i2c                             0            0            0
+  a90000.i2c                             0            0            0
+  3000000.remoteproc-adsp                0            0            0
+  a80000.i2c                             0            0            0
+  3000000.remoteproc-adsp                0            0            0
+  89c000.qcom,qup_uart                   0        76800        76800
+  898000.qcom,qup_uart                   0            0            0
+  3de8000.gpu_qtb                        0            0            0
+  1c00000.qcom,pcie                      0          500          800
+  8804000.sdhci                          0         1046         3200
+  8804000.sdhci                          0        50000       160000
+  1d84000.ufshc                          0            0            0
+  17d0000.mdp_hf_qtb                     0            0            0
+  17d1000.sf_qtb                         0            0            0
+  16cd000.pcie_qtb                       0            0            0
+  503000.lpass_qtb                       0            0            0
+  523000.nsp_qtb                         0            0            0
+  17d2000.cam_hf_qtb                     0            0            0
+  171a000.anoc_2_qtb                     0            0            0
+  16f0000.anoc_1_qtb                     0            0            0
+  soc:qcom,dcvs:ddrqos:sp               11            0            0
+  soc:qcom,dcvs:ddr:sp                   3      1793064      2188000
+llcc_mc_disp                                          0            0
+  af20000.qcom,sde_rscc                  3            0            0
+ebi_disp                                              0            0
+  af20000.qcom,sde_rscc                  3            0            0
+llcc_mc_cam_ife_0                                     0            0
+ebi_cam_ife_0                                         0            0
+llcc_mc_cam_ife_1                                     0            0
+ebi_cam_ife_1                                         0            0
+llcc_mc_cam_ife_2                                     0            0
+ebi_cam_ife_2                                         0            0
+qsm_cfg                                          591600       590000
+  ab00000.qcom,cvp                       0            0            0
+  ae00000.qcom,mdss_mdp                  0            0            0
+  ac13000.qcom,cam-cpas                  0            0            0
+  a600000.ssusb                          0            0            0
+  a600000.ssusb                          0            0            0
+  aa00000.qcom,vidc                      0            0            0
+  890000.i2c                             0            0            0
+  a90000.i2c                             0            0            0
+  a80000.i2c                             0            0            0
+  98c000.i2c                             0            0            0
+  988000.i2c                             0            0            0
+  980000.i2c                             0            0            0
+  89c000.qcom,qup_uart                   0       590000       590000
+  898000.qcom,qup_uart                   0            0            0
+  8804000.sdhci                          0         1600         1600
+  8804000.sdhci                          0            0       100000
+  1d84000.ufshc                          0            0            0
+qhs_ahb2phy0                                          0            0
+qhs_ahb2phy1                                          0            0
+qhs_apss                                              0            0
+qhs_camera_cfg                                        0            0
+  ac13000.qcom,cam-cpas                  0            0            0
+qhs_clk_ctl                                           0            0
+qhs_cpr_cx                                            0            0
+qhs_cpr_mmcx                                          0            0
+qhs_cpr_mxa                                           0            0
+qhs_cpr_mxc                                           0            0
+qhs_cpr_nspcx                                         0            0
+qhs_crypto0_cfg                                       0            0
+qhs_cx_rdpm                                           0            0
+qhs_display_cfg                                       0            0
+  ae00000.qcom,mdss_mdp                  0            0            0
+qhs_gpuss_cfg                                         0            0
+qhs_i2c                                               0            0
+  98c000.i2c                             0            0            0
+  988000.i2c                             0            0            0
+  980000.i2c                             0            0            0
+qhs_imem_cfg                                          0            0
+qhs_ipa                                               0            0
+  a600000.ssusb                          0            0            0
+qhs_ipc_router                                        0            0
+qhs_mss_cfg                                           0            0
+qhs_mx_rdpm                                           0            0
+qhs_pcie0_cfg                                         0            0
+qhs_pcie1_cfg                                         0            0
+qhs_pdm                                               0            0
+qhs_pimem_cfg                                         0            0
+qhs_prng                                              0            0
+qhs_qdss_cfg                                          0            0
+qhs_qspi                                              0            0
+qhs_qup1                                              0            0
+  a90000.i2c                             0            0            0
+  a80000.i2c                             0            0            0
+qhs_qup2                                         590000       590000
+  890000.i2c                             0            0            0
+  89c000.qcom,qup_uart                   0       590000       590000
+  898000.qcom,qup_uart                   0            0            0
+qhs_sdc2                                           1600       100000
+  8804000.sdhci                          0         1600         1600
+  8804000.sdhci                          0            0       100000
+qhs_sdc4                                              0            0
+qhs_spss_cfg                                          0            0
+qhs_tcsr                                              0            0
+qhs_tlmm                                              0            0
+qhs_ufs_mem_cfg                                       0            0
+  1d84000.ufshc                          0            0            0
+qhs_usb3_0                                            0            0
+  a600000.ssusb                          0            0            0
+qhs_venus_cfg                                         0            0
+  ab00000.qcom,cvp                       0            0            0
+  aa00000.qcom,vidc                      0            0            0
+qhs_vsense_ctrl_cfg                                   0            0
+qss_lpass_qtb_cfg                                     0            0
+qss_mnoc_cfg                                          0            0
+qss_nsp_qtb_cfg                                       0            0
+qss_pcie_anoc_cfg                                     0            0
+xs_qdss_stm                                           0            0
+xs_sys_tcu_cfg                                        0            0
+qnm_gemnoc_cnoc                                  591600       590000
+  ab00000.qcom,cvp                       0            0            0
+  ae00000.qcom,mdss_mdp                  0            0            0
+  ac13000.qcom,cam-cpas                  0            0            0
+  a600000.ssusb                          0            0            0
+  a600000.ssusb                          0            0            0
+  aa00000.qcom,vidc                      0            0            0
+  890000.i2c                             0            0            0
+  a90000.i2c                             0            0            0
+  a80000.i2c                             0            0            0
+  98c000.i2c                             0            0            0
+  988000.i2c                             0            0            0
+  980000.i2c                             0            0            0
+  89c000.qcom,qup_uart                   0       590000       590000
+  898000.qcom,qup_uart                   0            0            0
+  8804000.sdhci                          0         1600         1600
+  8804000.sdhci                          0            0       100000
+  1d84000.ufshc                          0            0            0
+qnm_gemnoc_pcie                                       0            0
+qhs_aoss                                              0            0
+qhs_tme_cfg                                           0            0
+qss_cfg                                          591600       590000
+  ab00000.qcom,cvp                       0            0            0
+  ae00000.qcom,mdss_mdp                  0            0            0
+  ac13000.qcom,cam-cpas                  0            0            0
+  a600000.ssusb                          0            0            0
+  a600000.ssusb                          0            0            0
+  aa00000.qcom,vidc                      0            0            0
+  890000.i2c                             0            0            0
+  a90000.i2c                             0            0            0
+  a80000.i2c                             0            0            0
+  98c000.i2c                             0            0            0
+  988000.i2c                             0            0            0
+  980000.i2c                             0            0            0
+  89c000.qcom,qup_uart                   0       590000       590000
+  898000.qcom,qup_uart                   0            0            0
+  8804000.sdhci                          0         1600         1600
+  8804000.sdhci                          0            0       100000
+  1d84000.ufshc                          0            0            0
+qss_ddrss_cfg                                         0            0
+qxs_boot_imem                                         0            0
+qxs_imem                                              0            0
+xs_pcie_0                                             0            0
+xs_pcie_1                                             0            0
+qhm_gic                                               0            0
+qnm_aggre1_noc                                        0            0
+  a600000.ssusb                          0            0            0
+  a600000.ssusb                          0            0            0
+  a90000.i2c                             0            0            0
+  a80000.i2c                             0            0            0
+  1d84000.ufshc                          0            0            0
+  16f0000.anoc_1_qtb                     0            0            0
+qnm_aggre2_noc                                   127846       160000
+  1de0000.qcedev                         0            0            0
+  890000.i2c                             0            0            0
+  3000000.remoteproc-adsp                0            0            0
+  89c000.qcom,qup_uart                   0        76800        76800
+  898000.qcom,qup_uart                   0            0            0
+  8804000.sdhci                          0         1046         3200
+  8804000.sdhci                          0        50000       160000
+  171a000.anoc_2_qtb                     0            0            0
+xm_gic                                                0            0
+qns_gemnoc_gc                                         0            0
+qns_gemnoc_sf                                    127846       160000
+  a600000.ssusb                          0            0            0
+  a600000.ssusb                          0            0            0
+  1de0000.qcedev                         0            0            0
+  890000.i2c                             0            0            0
+  a90000.i2c                             0            0            0
+  a80000.i2c                             0            0            0
+  3000000.remoteproc-adsp                0            0            0
+  89c000.qcom,qup_uart                   0        76800        76800
+  898000.qcom,qup_uart                   0            0            0
+  8804000.sdhci                          0         1046         3200
+  8804000.sdhci                          0        50000       160000
+  1d84000.ufshc                          0            0            0
+  171a000.anoc_2_qtb                     0            0            0
+  16f0000.anoc_1_qtb                     0            0            0
+qsm_pcie_anoc_cfg                                     0            0
+xm_pcie3_0                                         2750      1600000
+  b0000000.qcom,cnss-qca-converged            0         2250      1600000
+  1c00000.qcom,pcie                      0          500          800
+  16cd000.pcie_qtb                       0            0            0
+xm_pcie3_1                                            0            0
+qns_pcie_mem_noc                                   2750      1600000
+  b0000000.qcom,cnss-qca-converged            0         2250      1600000
+  1c00000.qcom,pcie                      0          500          800
+  16cd000.pcie_qtb                       0            0            0
+srvc_pcie_aggre_noc                                   0            0
+qhm_qspi                                              0            0
+qhm_qup1                                              0            0
+  a90000.i2c                             0            0            0
+  a80000.i2c                             0            0            0
+xm_sdc4                                               0            0
+xm_ufs_mem                                            0            0
+  1d84000.ufshc                          0            0            0
+xm_usb3_0                                             0            0
+  a600000.ssusb                          0            0            0
+  a600000.ssusb                          0            0            0
+qns_a1noc_snoc                                        0            0
+  a600000.ssusb                          0            0            0
+  a600000.ssusb                          0            0            0
+  a90000.i2c                             0            0            0
+  a80000.i2c                             0            0            0
+  1d84000.ufshc                          0            0            0
+qhm_qdss_bam                                          0            0
+qhm_qup2                                          76800        76800
+  890000.i2c                             0            0            0
+  89c000.qcom,qup_uart                   0        76800        76800
+  898000.qcom,qup_uart                   0            0            0
+qxm_crypto                                            0            0
+  1de0000.qcedev                         0            0            0
+  3000000.remoteproc-adsp                0            0            0
+qxm_ipa                                               0            0
+qxm_sp                                                0            0
+xm_qdss_etr_0                                         0            0
+xm_qdss_etr_1                                         0            0
+xm_sdc2                                           51046       160000
+  8804000.sdhci                          0         1046         3200
+  8804000.sdhci                          0        50000       160000
+qns_a2noc_snoc                                   127846       160000
+  1de0000.qcedev                         0            0            0
+  890000.i2c                             0            0            0
+  3000000.remoteproc-adsp                0            0            0
+  89c000.qcom,qup_uart                   0        76800        76800
+  898000.qcom,qup_uart                   0            0            0
+  8804000.sdhci                          0         1046         3200
+  8804000.sdhci                          0        50000       160000
+qnm_camnoc_hf                                         0            0
+  ac13000.qcom,cam-cpas                  0            0            0
+  17d2000.cam_hf_qtb                     0            0            0
+  adf4058.qcom,gdsc                      0            0            0
+qnm_camnoc_icp                                        0            0
+  ac13000.qcom,cam-cpas                  0            0            0
+qnm_camnoc_sf                                         0            0
+  ac13000.qcom,cam-cpas                  0            0            0
+qnm_mdp                                               0            0
+  ae00000.qcom,mdss_mdp                  0            0            0
+  17d0000.mdp_hf_qtb                     0            0            0
+qnm_vapss_hcp                                         0            0
+qnm_video                                             0            0
+  aa00000.qcom,vidc                      0            0            0
+  17d1000.sf_qtb                         0            0            0
+qnm_video_cv_cpu                                      0            0
+qnm_video_cvp                                         0            0
+  ab00000.qcom,cvp                       0            0            0
+qnm_video_v_cpu                                       0            0
+qsm_mnoc_cfg                                          0            0
+qns_mem_noc_hf                                        0            0
+  ae00000.qcom,mdss_mdp                  0            0            0
+  ac13000.qcom,cam-cpas                  0            0            0
+  17d0000.mdp_hf_qtb                     0            0            0
+  17d2000.cam_hf_qtb                     0            0            0
+  adf4058.qcom,gdsc                      0            0            0
+qns_mem_noc_sf                                        0            0
+  ab00000.qcom,cvp                       0            0            0
+  ac13000.qcom,cam-cpas                  0            0            0
+  ac13000.qcom,cam-cpas                  0            0            0
+  aa00000.qcom,vidc                      0            0            0
+  17d1000.sf_qtb                         0            0            0
+srvc_mnoc                                             0            0
+qnm_mdp_disp                                          0            0
+  af20000.qcom,sde_rscc                  3            0            0
+qns_mem_noc_hf_disp                                   0            0
+  af20000.qcom,sde_rscc                  3            0            0
+qnm_camnoc_hf_cam_ife_0                               0            0
+qnm_camnoc_icp_cam_ife_0                              0            0
+qnm_camnoc_sf_cam_ife_0                               0            0
+qns_mem_noc_hf_cam_ife_0                              0            0
+qns_mem_noc_sf_cam_ife_0                              0            0
+qnm_camnoc_hf_cam_ife_1                               0            0
+qnm_camnoc_icp_cam_ife_1                              0            0
+qnm_camnoc_sf_cam_ife_1                               0            0
+qns_mem_noc_hf_cam_ife_1                              0            0
+qns_mem_noc_sf_cam_ife_1                              0            0
+qnm_camnoc_hf_cam_ife_2                               0            0
+qnm_camnoc_icp_cam_ife_2                              0            0
+qnm_camnoc_sf_cam_ife_2                               0            0
+qns_mem_noc_hf_cam_ife_2                              0            0
+qns_mem_noc_sf_cam_ife_2                              0            0
+alm_gpu_tcu                                           0            0
+  3de8000.gpu_qtb                        0            0            0
+alm_sys_tcu                                           0            0
+chm_apps                                        4576176      4800000
+  ab00000.qcom,cvp                       0            0            0
+  ae00000.qcom,mdss_mdp                  0            0            0
+  ac13000.qcom,cam-cpas                  0            0            0
+  a600000.ssusb                          0            0            0
+  aa00000.qcom,vidc                      0            0            0
+  890000.i2c                             0            0            0
+  a90000.i2c                             0            0            0
+  a80000.i2c                             0            0            0
+  98c000.i2c                             0            0            0
+  988000.i2c                             0            0            0
+  980000.i2c                             0            0            0
+  89c000.qcom,qup_uart                   0       590000       590000
+  898000.qcom,qup_uart                   0            0            0
+  8804000.sdhci                          0         1600         1600
+  8804000.sdhci                          0            0       100000
+  1d84000.ufshc                          0            0            0
+  soc:qcom,dcvs:llcc:sp                  3      3984576      4800000
+qnm_gpu                                               0            0
+  3d00000.qcom,kgsl-3d0                  7            0            0
+qnm_lpass_gemnoc                                      0            0
+  3000000.remoteproc-adsp                0            0            0
+  503000.lpass_qtb                       0            0            0
+qnm_mdsp                                              0            0
+qnm_mnoc_hf                                           0            0
+  ae00000.qcom,mdss_mdp                  0            0            0
+  ac13000.qcom,cam-cpas                  0            0            0
+  17d0000.mdp_hf_qtb                     0            0            0
+  17d2000.cam_hf_qtb                     0            0            0
+qnm_mnoc_sf                                           0            0
+  ab00000.qcom,cvp                       0            0            0
+  ac13000.qcom,cam-cpas                  0            0            0
+  ac13000.qcom,cam-cpas                  0            0            0
+  aa00000.qcom,vidc                      0            0            0
+  17d1000.sf_qtb                         0            0            0
+qnm_nsp_gemnoc                                        0            0
+  523000.nsp_qtb                         0            0            0
+qnm_pcie                                           2750      2188800
+  b0000000.qcom,cnss-qca-converged            0         2250      2188800
+  1c00000.qcom,pcie                      0          500          800
+  16cd000.pcie_qtb                       0            0            0
+qnm_snoc_gc                                           0            0
+qnm_snoc_sf                                      127846       160000
+  a600000.ssusb                          0            0            0
+  a600000.ssusb                          0            0            0
+  1de0000.qcedev                         0            0            0
+  890000.i2c                             0            0            0
+  a90000.i2c                             0            0            0
+  a80000.i2c                             0            0            0
+  3000000.remoteproc-adsp                0            0            0
+  89c000.qcom,qup_uart                   0        76800        76800
+  898000.qcom,qup_uart                   0            0            0
+  8804000.sdhci                          0         1046         3200
+  8804000.sdhci                          0        50000       160000
+  1d84000.ufshc                          0            0            0
+  171a000.anoc_2_qtb                     0            0            0
+  16f0000.anoc_1_qtb                     0            0            0
+qns_gem_noc_cnoc                                 591600       590000
+  ab00000.qcom,cvp                       0            0            0
+  ae00000.qcom,mdss_mdp                  0            0            0
+  ac13000.qcom,cam-cpas                  0            0            0
+  a600000.ssusb                          0            0            0
+  a600000.ssusb                          0            0            0
+  aa00000.qcom,vidc                      0            0            0
+  890000.i2c                             0            0            0
+  a90000.i2c                             0            0            0
+  a80000.i2c                             0            0            0
+  98c000.i2c                             0            0            0
+  988000.i2c                             0            0            0
+  980000.i2c                             0            0            0
+  89c000.qcom,qup_uart                   0       590000       590000
+  898000.qcom,qup_uart                   0            0            0
+  8804000.sdhci                          0         1600         1600
+  8804000.sdhci                          0            0       100000
+  1d84000.ufshc                          0            0            0
+qns_llcc                                        4115172      4800000
+  ab00000.qcom,cvp                       0            0            0
+  ae00000.qcom,mdss_mdp                  0            0            0
+  ac13000.qcom,cam-cpas                  0            0            0
+  ac13000.qcom,cam-cpas                  0            0            0
+  ac13000.qcom,cam-cpas                  0            0            0
+  a600000.ssusb                          0            0            0
+  aa00000.qcom,vidc                      0            0            0
+  3d00000.qcom,kgsl-3d0                  7            0            0
+  b0000000.qcom,cnss-qca-converged            0         2250      2188800
+  1de0000.qcedev                         0            0            0
+  890000.i2c                             0            0            0
+  a90000.i2c                             0            0            0
+  3000000.remoteproc-adsp                0            0            0
+  a80000.i2c                             0            0            0
+  3000000.remoteproc-adsp                0            0            0
+  89c000.qcom,qup_uart                   0        76800        76800
+  898000.qcom,qup_uart                   0            0            0
+  3de8000.gpu_qtb                        0            0            0
+  1c00000.qcom,pcie                      0          500          800
+  8804000.sdhci                          0         1046         3200
+  8804000.sdhci                          0        50000       160000
+  1d84000.ufshc                          0            0            0
+  17d0000.mdp_hf_qtb                     0            0            0
+  17d1000.sf_qtb                         0            0            0
+  16cd000.pcie_qtb                       0            0            0
+  503000.lpass_qtb                       0            0            0
+  523000.nsp_qtb                         0            0            0
+  17d2000.cam_hf_qtb                     0            0            0
+  171a000.anoc_2_qtb                     0            0            0
+  16f0000.anoc_1_qtb                     0            0            0
+  soc:qcom,dcvs:llcc:sp                  3      3984576      4800000
+qns_pcie                                              0            0
+qnm_mnoc_hf_disp                                      0            0
+  af20000.qcom,sde_rscc                  3            0            0
+qnm_pcie_disp                                         0            0
+qns_llcc_disp                                         0            0
+  af20000.qcom,sde_rscc                  3            0            0
+qnm_mnoc_hf_cam_ife_0                                 0            0
+qnm_mnoc_sf_cam_ife_0                                 0            0
+qnm_pcie_cam_ife_0                                    0            0
+qns_llcc_cam_ife_0                                    0            0
+qnm_mnoc_hf_cam_ife_1                                 0            0
+qnm_mnoc_sf_cam_ife_1                                 0            0
+qnm_pcie_cam_ife_1                                    0            0
+qns_llcc_cam_ife_1                                    0            0
+qnm_mnoc_hf_cam_ife_2                                 0            0
+qnm_mnoc_sf_cam_ife_2                                 0            0
+qnm_pcie_cam_ife_2                                    0            0
+qns_llcc_cam_ife_2                                    0            0
+qxm_nsp                                               0            0
+  523000.nsp_qtb                         0            0            0
+qns_nsp_gemnoc                                        0            0
+  523000.nsp_qtb                         0            0            0
+qnm_lpiaon_noc                                        0            0
+  3000000.remoteproc-adsp                0            0            0
+  503000.lpass_qtb                       0            0            0
+qns_lpass_ag_noc_gemnoc                               0            0
+  3000000.remoteproc-adsp                0            0            0
+  503000.lpass_qtb                       0            0            0
+qnm_lpass_lpinoc                                      0            0
+  3000000.remoteproc-adsp                0            0            0
+  503000.lpass_qtb                       0            0            0
+qns_lpass_aggnoc                                      0            0
+  3000000.remoteproc-adsp                0            0            0
+  503000.lpass_qtb                       0            0            0
+qxm_lpinoc_dsp_axim                                   0            0
+  3000000.remoteproc-adsp                0            0            0
+  503000.lpass_qtb                       0            0            0
+qns_lpi_aon_noc                                       0            0
+  3000000.remoteproc-adsp                0            0            0
+  503000.lpass_qtb                       0            0            0

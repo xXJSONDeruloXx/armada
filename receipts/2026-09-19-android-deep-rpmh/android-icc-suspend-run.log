@@ -1,0 +1,11 @@
+start_utc=2026-09-19T15:09:16Z
+boot_id=45c48211-b345-477c-b1bb-ef163dce7b73
+kernel=Linux localhost 5.15.123-android13-8-g697b78910a71-dirty #1 SMP PREEMPT Mon Jul 20 10:48:54 UTC 2026 aarch64 Toybox
+fingerprint=qti/kalama/kalama:13/TKQ1.231222.001/eng.RPN.20260722.081626:user/release-keys
+orig_mem=[s2idle] deep orig_mode=s2idle orig_debug=0 orig_alarm=
+armed_utc=2026-09-19T15:09:16Z mem=s2idle [deep] debug=1 alarm=98124
+service_rc=0 service_output=Result: Parcel(00000000 00000001   '........')
+post_capture_utc=2026-09-19T15:09:26Z
+restore_begin_utc=2026-09-19T15:09:26Z
+restored_mem=[s2idle] deep restored_debug=0 restored_alarm=
+restore_done_utc=2026-09-19T15:09:26Z

@@ -1,0 +1,30 @@
+Capture: 2026-09-19 16:19 UTC
+Transport: authorized Wi-Fi ADB at 192.168.0.163:5555
+Privilege: Magisk root, uid=0, context=u:r:magisk:s0
+
+Device/build:
+  ro.product.device=kalama
+  ro.build.fingerprint=qti/kalama/kalama:13/TKQ1.231222.001/eng.RPN.20260722.081626:user/release-keys
+  ro.boot.slot_suffix=_a
+  ro.boot.bootmode=(empty)
+
+Security/transport state (read only):
+  SELinux=Permissive
+  /sys/fs/selinux/enforce=0
+  service.adb.tcp.port=5555
+  persist.adb.tcp.port=(empty)
+
+Internal Armada partitions (read only):
+  ARMADA=/dev/block/sda18, 536870912 bytes (512 MiB)
+  ARMADA_BOOT=/dev/block/sda19, 1073741824 bytes (1 GiB)
+  ARMADA_ROOT=/dev/block/sda20, 98070167552 bytes
+
+The running OS is Android; SSH to the Linux alias 192.168.0.20 times out.
+No partition, boot mode, SELinux setting, Magisk policy, or ADB property was
+changed during this capture. Wi-Fi ADB is currently boot-scoped, so do not
+reboot Android as a recovery strategy unless the device is physically
+available.
+
+Boot selection reference: https://armadaos.dev/getting-started/uninstalling-and-restoring-android/
+The documented ROCKNIX ABL flow enters its menu with VOL- during power-on and
+uses volume keys plus Power to switch the persistent Android/Linux boot mode.

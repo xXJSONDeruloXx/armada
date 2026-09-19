@@ -1,0 +1,56 @@
+# Read-only Android ICC snapshot and diagnostic-hook access result.
+# Device: Retroid Pocket Nova / Kalama, Android build fingerprint
+#   qti/kalama/kalama:13/TKQ1.231222.001/eng.RPN.20260722.081626:user/release-keys
+# Kernel: 5.15.123-android13-8-g697b78910a71-dirty, aarch64
+# Boot ID: 45c48211-b345-477c-b1bb-ef163dce7b73
+# Snapshot time: 2026-09-19 14:58:11 UTC
+# Source: read-only `cat /sys/kernel/debug/interconnect/interconnect_summary`
+# Full temporary snapshot SHA-256:
+#   81c7a55139fd0d1f566ee4da5b531c1f191f9e4a78b92d579d0584d21a99be29
+# Full snapshot retained as `android-interconnect-summary.txt` in this receipt.
+
+# Awake ICC request excerpt (units/semantics are those printed by Android's
+# ICC debug summary; these are current client requests, not firmware readback):
+#   qup2_core_master:       avg=50000 peak=50000
+#     89c000.qcom,qup_uart: avg=50000 peak=50000
+#   llcc_mc:                avg=1923660 peak=2188800
+#   ebi:                    avg=1923660 peak=2188800
+#     b0000000.qcom,cnss-qca-converged: avg=2250 peak=2188800
+#     soc:qcom,dcvs:ddr:sp:             avg=1793064 peak=2188000
+#   qhs_qup2:               avg=590000 peak=590000
+#     89c000.qcom,qup_uart: avg=590000 peak=590000
+#   llcc_mc_disp / ebi_disp: 0 / 0
+#   llcc_mc_cam_ife_{0,1,2} / ebi_cam_ife_{0,1,2}: all 0 / 0
+
+# The summary is an awake-state request view only. It does not expose the
+# WAKE/SLEEP BCM buckets or prove that firmware applied an RPMh transaction.
+
+# Android source `drivers/interconnect/qcom/icc-debug.c` provides a
+# `debug_suspend` debugfs switch which prints currently enabled ICC clients at
+# the `machine_suspend` tracepoint. A read-only inspection confirmed the
+# attribute is present and initially 0. Attempts to write `1` to that switch
+# and to select `deep` through `/sys/power/mem_sleep` both failed with
+# `Permission denied` from the Magisk root shell. That shell reports UID 0 but
+# CapEff=0; the SELinux enforcement state could not be read. No permissive
+# policy, capability, boot, kernel, or sysfs setting was changed. No new
+# suspend was triggered by those attempts. Final state remained
+# `mem_sleep=[s2idle] deep`, empty RTC wakealarm, and `debug_suspend=0`.
+
+# A read-only SSH check to the configured Armada alias at 192.168.0.20 timed
+# out while Android ADB at 192.168.0.163 remained online. Therefore the next
+# matched Linux-side ICC snapshot requires the device to be back in Armada.
+
+# 2026-09-19 15:06 UTC correction after auditing the command quoting:
+# The prior write failures above are invalid as root-access evidence. The
+# invocation `adb shell su -c '...; ...'` allowed the remote ADB shell to
+# split at semicolons, so only the first simple command ran via `su`; later
+# commands ran as UID 2000 shell. Correct invocation:
+#   adb shell "su -c '...; ...'"
+# A correctly scoped root shell reports UID 0, context u:r:magisk:s0,
+# CapEff=CapBnd=0x1ffffffffff. SELinux was already permissive
+# (`getenforce`=Permissive, `/sys/fs/selinux/enforce`=0); no policy change was
+# made. A bounded awake control test successfully selected `deep`, toggled
+# `debug_suspend` 0->1->0, restored `[s2idle] deep`, and confirmed empty
+# `rtc0/wakealarm` on the unchanged boot `45c48211-b345-477c-b1bb-ef163dce7b73`.
+# No suspend was triggered in this control test. The previously cited
+# permission denial came from the unprivileged shell, not Magisk root.

@@ -1,0 +1,38 @@
+# Existing Armada Linux deep-suspend trace cross-check
+# No new device cycle was run for this check. Source is the preserved run archive.
+
+Run: 20260918T142021Z-883484904299
+Kernel: 7.2.3; Armada image: 20260915.feca679
+Requested/observed: deep/deep
+Clock separation: 28.961247 seconds
+Trace profile: rpmh-aoss
+Same-run qcom_stats deltas: AOSD 0, CXSD 0, DDR 0 (all pre/post records
+remained absolute zero).
+
+Relevant raw tracepoint records use the kernel tracepoint's explicit request
+state field, printed as [active], [sleep], or [wake]:
+
+6293.980387  ACTIVE  addr 0x43a08  data 0x4  (LDOE3 mode)
+6294.056273  ACTIVE  addr 0x43908  data 0x4  (LDOE1 mode)
+6324.927648  ACTIVE  addr 0x43908  data 0x7  (LDOE1 mode)
+6324.928547  ACTIVE  addr 0x43a08  data 0x7  (LDOE3 mode)
+
+These are active-state mode changes around suspend/resume; they are not
+sleep-state requests. Across the available archived Linux raw trace text,
+there are no requests to LDOE1 enable (0x43904) or LDOE3 enable (0x43a04), and
+no [sleep]/[wake] requests to either LDOE resource. The active LDOs are put in
+mode 4 before suspend and returned to mode 7 on resume. They are not disabled
+in the captured Linux request stream.
+
+The corresponding Android simpleperf capture stages a separate SLEEP set with
+LDOE1 mode 4 and both LDOE1/LDOE3 enable 0, then a WAKE set with LDOE1 mode 7
+and both enables 1. Android's active FDT sets the relevant qcom,set sleep bits
+on its -so proxy regulators. This is a source-backed request-policy delta.
+It is not yet proof that the missing Linux sleep votes cause AOSD/CXSD/DDR
+firmware counters to remain zero; RPMh tracepoints show requests, not final
+firmware residency.
+
+Trace source:
+sm8550-suspend-lab-runs/20260918T142021Z-883484904299/device/raw/trace/trace.txt
+Run summary and same-run counters:
+sm8550-suspend-lab-runs/20260918T142021Z-883484904299/result.md

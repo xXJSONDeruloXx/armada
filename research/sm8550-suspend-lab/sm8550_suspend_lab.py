@@ -65,6 +65,15 @@ RUNTIME_FIELDS = (
     "autosuspend_delay_ms",
     "wakeup",
 )
+PCI_DEVICE_FIELDS = (
+    "d3cold_allowed",
+    "power_state",
+    "current_link_speed",
+    "current_link_width",
+    "max_link_speed",
+    "max_link_width",
+    "enable",
+)
 POWER_FIELDS = (
     "type",
     "status",
@@ -101,7 +110,8 @@ TRACEFS_DIRS = (
     "/sys/kernel/tracing",
     "/sys/kernel/debug/tracing",
 )
-TRACE_PROFILE_CHOICES = ("none", "ufs-irq", "rpmh-aoss", "rsc-success", "psci-kretprobe")
+TRACE_PROFILE_CHOICES = ("none", "ufs-irq", "rpmh-aoss", "rsc-success", "psci-kretprobe", "pcie-d3cold")
+TRACE_KRETPROBE_PROFILES = ("psci-kretprobe", "pcie-d3cold")
 TRACE_REQUIRED_EVENTS = (
     "irq:irq_handler_entry",
     "irq:irq_handler_exit",
@@ -118,6 +128,13 @@ TRACE_RPMH_SUCCESS_REQUIRED_EVENTS = TRACE_RPMH_REQUIRED_EVENTS + (
 TRACE_PSCI_KRETPROBE_REQUIRED_EVENTS = (
     "power:psci_domain_idle_enter",
     "power:psci_domain_idle_exit",
+)
+TRACE_PCIE_D3COLD_REQUIRED_EVENTS = TRACE_RPMH_REQUIRED_EVENTS + (
+    "interconnect:icc_set_bw",
+    "interconnect:icc_set_bw_end",
+    "power:device_pm_callback_start",
+    "power:device_pm_callback_end",
+    "power:suspend_resume",
 )
 TRACE_UFS_PM_EVENTS = (
     "ufs:ufshcd_system_suspend",
@@ -745,6 +762,21 @@ def trace_pm_filter(format_text: Optional[str]) -> Optional[str]:
     return 'device ~ ".*ufs.*"'
 
 
+def trace_pcie_event_filter(event: str, format_text: Optional[str]) -> Optional[str]:
+    field = (
+        "dev"
+        if event in ("interconnect:icc_set_bw", "interconnect:icc_set_bw_end")
+        else "device"
+        if event in ("power:device_pm_callback_start", "power:device_pm_callback_end")
+        else None
+    )
+    if field is None:
+        return None
+    if not format_text or not re.search(r"^\s*field:[^\n]*\b%s;" % re.escape(field), format_text, re.MULTILINE):
+        raise LabError("PCIe trace event lacks the expected %s field: %s" % (field, event))
+    return '%s == "1c00000.pcie"' % field
+
+
 def parse_clock_file(source: Path) -> Optional[Dict[str, Any]]:
     data = read_bytes(source)
     if data is None:
@@ -1021,20 +1053,27 @@ def kprobe_definition_matches(line: str, definition: str) -> bool:
     return re.sub(r"^r[0-9]*:", "r:", line, count=1) == definition
 
 
-def trace_prepare_psci_kretprobe(run: DeviceRun, info: Dict[str, Any]) -> Dict[str, Any]:
+def trace_prepare_suspend_kretprobe(run: DeviceRun, info: Dict[str, Any]) -> Dict[str, Any]:
     root = Path(str(info.get("root", "")))
     registry = root / "kprobe_events"
+    pcie_d3cold = info.get("profile") == "pcie-d3cold"
     deep_suspend = run.load_config().get("mode") == "deep"
-    function = "psci_system_suspend_enter" if deep_suspend else "psci_cpu_suspend_enter"
+    function = (
+        "pci_host_common_d3cold_possible"
+        if pcie_d3cold
+        else "psci_system_suspend_enter"
+        if deep_suspend
+        else "psci_cpu_suspend_enter"
+    )
     group = "s2lab_%s" % safe_name(run.run_id).replace("-", "_")
-    name = "system_ret" if deep_suspend else "cluster_ret"
+    name = "d3cold_ret" if pcie_d3cold else "system_ret" if deep_suspend else "cluster_ret"
     event = "%s:%s" % (group, name)
     definition = (
         "r:%s/%s %s retval=$retval:s32" % (group, name, function)
-        if deep_suspend
+        if deep_suspend or pcie_d3cold
         else "r:%s/%s %s state=$arg1:u32 retval=$retval:s32" % (group, name, function)
     )
-    event_filter = None if deep_suspend else "state == %d" % int("4100c344", 16)
+    event_filter = None if deep_suspend or pcie_d3cold else "state == %d" % int("4100c344", 16)
     available = read_text(root / "available_filter_functions") or ""
     if not re.search(r"(^|\s)%s(\s|$)" % re.escape(function), available, re.MULTILINE):
         raise LabError("kretprobe function is not available: %s" % function)
@@ -1073,19 +1112,21 @@ def trace_prepare_psci_kretprobe(run: DeviceRun, info: Dict[str, Any]) -> Dict[s
     trace_capture_file(run, "kprobe_events.registered.txt", registry)
     registered_lines = [line for line in registry_after.splitlines() if re.match(identity, line)]
     if len(registered_lines) != 1 or not kprobe_definition_matches(registered_lines[0], definition):
-        raise LabError("kernel did not retain the PSCI kretprobe definition")
+        raise LabError("kernel did not retain the suspend kretprobe definition")
     info["dynamic_kprobe"]["registered"] = True
     info["dynamic_kprobe"]["registered_line"] = registered_lines[0]
     info["dynamic_kprobe"]["state"] = "registered"
 
     event_format = read_text(trace_event_file(Path(str(info["instance"])), event, "format"))
     if event_format is None or not re.search(r"\bretval\s*;", event_format):
-        raise LabError("PSCI kretprobe format does not expose retval")
-    if not deep_suspend and not re.search(r"\bstate\s*;", event_format):
+        raise LabError("suspend kretprobe format does not expose retval")
+    if not deep_suspend and not pcie_d3cold and not re.search(r"\bstate\s*;", event_format):
         raise LabError("PSCI CPU kretprobe format does not expose state")
     configured = trace_configure_event(run, info, event, event_filter=event_filter)
     configured["purpose"] = (
-        "record the PSCI SYSTEM_SUSPEND wrapper return code"
+        "record the PCI host D3cold eligibility result"
+        if pcie_d3cold
+        else "record the PSCI SYSTEM_SUSPEND wrapper return code"
         if deep_suspend
         else "record state 0x4100c344 return values, successful and rejected"
     )
@@ -1095,7 +1136,7 @@ def trace_prepare_psci_kretprobe(run: DeviceRun, info: Dict[str, Any]) -> Dict[s
     return configured
 
 
-def trace_remove_psci_kretprobe(run: DeviceRun, info: Dict[str, Any]) -> Dict[str, Any]:
+def trace_remove_suspend_kretprobe(run: DeviceRun, info: Dict[str, Any]) -> Dict[str, Any]:
     probe = info.get("dynamic_kprobe")
     if not isinstance(probe, dict) or not probe.get("owned"):
         return {"result": "not-owned"}
@@ -1105,7 +1146,7 @@ def trace_remove_psci_kretprobe(run: DeviceRun, info: Dict[str, Any]) -> Dict[st
     registry_value = probe.get("registry")
     if not all(isinstance(value, str) for value in (group, name, definition, registry_value)):
         return {"result": "refused-invalid-metadata"}
-    if not re.fullmatch(r"s2lab_[A-Za-z0-9_]+", group) or name not in ("cluster_ret", "system_ret"):
+    if not re.fullmatch(r"s2lab_[A-Za-z0-9_]+", group) or name not in ("cluster_ret", "system_ret", "d3cold_ret"):
         return {"result": "refused-unexpected-name", "group": group, "name": name}
     expected = {
         "cluster_ret": (
@@ -1115,6 +1156,10 @@ def trace_remove_psci_kretprobe(run: DeviceRun, info: Dict[str, Any]) -> Dict[st
         "system_ret": (
             "psci_system_suspend_enter",
             "r:%s/%s psci_system_suspend_enter retval=$retval:s32" % (group, name),
+        ),
+        "d3cold_ret": (
+            "pci_host_common_d3cold_possible",
+            "r:%s/%s pci_host_common_d3cold_possible retval=$retval:s32" % (group, name),
         ),
     }[name]
     if probe.get("function") != expected[0] or definition != expected[1]:
@@ -1203,8 +1248,10 @@ def trace_prepare(run: DeviceRun, profile: str) -> Dict[str, Any]:
         if profile == "ufs-irq"
         else TRACE_RPMH_SUCCESS_REQUIRED_EVENTS
         if profile == "rsc-success"
+        else TRACE_PCIE_D3COLD_REQUIRED_EVENTS
+        if profile == "pcie-d3cold"
         else TRACE_PSCI_KRETPROBE_REQUIRED_EVENTS
-        if profile == "psci-kretprobe"
+        if profile in TRACE_KRETPROBE_PROFILES
         else TRACE_RPMH_REQUIRED_EVENTS
         if profile == "rpmh-aoss"
         else ()
@@ -1334,10 +1381,14 @@ def trace_prepare(run: DeviceRun, profile: str) -> Dict[str, Any]:
                     trace_optional_event_error(info, event, exc)
                     with contextlib.suppress(OSError):
                         write_kernel_control(trace_event_file(instance, event, "enable"), "0\n")
-        elif profile == "psci-kretprobe":
+        elif profile in TRACE_KRETPROBE_PROFILES:
             for event in required_events:
-                info["selected_events"].append(trace_configure_event(run, info, event))
-            trace_prepare_psci_kretprobe(run, info)
+                event_format = read_text(trace_event_file(instance, event, "format"))
+                event_filter = trace_pcie_event_filter(event, event_format) if profile == "pcie-d3cold" else None
+                info["selected_events"].append(
+                    trace_configure_event(run, info, event, event_filter=event_filter)
+                )
+            trace_prepare_suspend_kretprobe(run, info)
         else:
             profile_events = list(required_events) + list(TRACE_RPMH_OPTIONAL_EVENTS)
             info["candidate_rpmh_events"] = profile_events
@@ -1363,7 +1414,7 @@ def trace_prepare(run: DeviceRun, profile: str) -> Dict[str, Any]:
         write_json(run.run_dir / "meta" / "trace.json", info)
         remove_actions = trace_remove_instance(run, info)
         if any(action.get("result") in ("instance-removed", "already-absent") for action in remove_actions):
-            info["prepare_kprobe_cleanup"] = trace_remove_psci_kretprobe(run, info)
+            info["prepare_kprobe_cleanup"] = trace_remove_suspend_kretprobe(run, info)
         elif info.get("dynamic_kprobe"):
             info["prepare_kprobe_cleanup"] = {"result": "refused-instance-not-removed", "actions": remove_actions}
         write_json(run.run_dir / "meta" / "trace.json", info)
@@ -1513,7 +1564,7 @@ def trace_cleanup(run: DeviceRun) -> Dict[str, Any]:
     }
     if info.get("dynamic_kprobe"):
         if any(action.get("result") in ("instance-removed", "already-absent") for action in actions):
-            result["kprobe_cleanup"] = trace_remove_psci_kretprobe(run, info)
+            result["kprobe_cleanup"] = trace_remove_suspend_kretprobe(run, info)
         else:
             result["kprobe_cleanup"] = {"result": "refused-instance-not-removed"}
     write_json(run.run_dir / "cleanup" / "trace.json", result)
@@ -1886,6 +1937,13 @@ def runtime_record(run: DeviceRun, phase: str, device: Path) -> Optional[Dict[st
         if value is not None:
             fields[field] = numeric_or_text(value)
             snapshot_file(run, phase, source)
+    if re.fullmatch(r"[0-9a-f]{4}:[0-9a-f]{2}:[0-9a-f]{2}\.[0-7]", device.name, re.IGNORECASE):
+        for field in PCI_DEVICE_FIELDS:
+            source = device / field
+            value = read_text(source)
+            if value is not None:
+                fields[field] = numeric_or_text(value)
+                snapshot_file(run, phase, source)
     if not fields:
         return None
     driver = None
@@ -3607,7 +3665,7 @@ def device_execute(args: argparse.Namespace) -> int:
             )
         finally:
             trace_stop(run)
-            if config.get("trace_profile") == "psci-kretprobe":
+            if config.get("trace_profile") in TRACE_KRETPROBE_PROFILES:
                 trace_cleanup(run)
         command_returncode = suspend_result.returncode
         capture_clock(run, "resume-return")
@@ -3619,7 +3677,7 @@ def device_execute(args: argparse.Namespace) -> int:
         write_json(run.run_dir / "derived/post-resume-health.json", health)
         cleanup = cleanup_run(run)
         summary = derive_summary(run, command_returncode=command_returncode)
-        if config.get("trace_profile") == "psci-kretprobe":
+        if config.get("trace_profile") in TRACE_KRETPROBE_PROFILES:
             cleanup_result = cleanup.get("trace", {}).get("kprobe_cleanup", {})
             cleanup_ok = cleanup_result.get("result") in ("removed", "already-absent")
             summary["metrics"]["kprobe_cleanup_success"] = cleanup_ok
@@ -4622,6 +4680,19 @@ def self_test() -> int:
         "r16:s2lab_test/cluster_ret other_function state=$arg1:u32 retval=$retval:s32",
         "r:s2lab_test/cluster_ret psci_cpu_suspend_enter state=$arg1:u32 retval=$retval:s32",
     )
+    assert trace_pcie_event_filter(
+        "interconnect:icc_set_bw", "field:__data_loc char[] dev;\n"
+    ) == 'dev == "1c00000.pcie"'
+    assert trace_pcie_event_filter(
+        "power:device_pm_callback_start", "field:__data_loc char[] device;\n"
+    ) == 'device == "1c00000.pcie"'
+    assert trace_pcie_event_filter("rpmh:rpmh_send_msg", "") is None
+    try:
+        trace_pcie_event_filter("interconnect:icc_set_bw", "field:u32 avg_bw;\n")
+    except LabError:
+        pass
+    else:
+        raise AssertionError("PCIe trace filter accepted a format without the dev field")
     assert requested_mode_matches("policy", "s2idle")
     assert not requested_mode_matches("deep", "s2idle")
     assert bluetooth_power_restore_decision("no", "yes", "no", "no") == "restore"

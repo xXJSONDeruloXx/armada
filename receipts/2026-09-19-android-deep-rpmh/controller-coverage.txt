@@ -1,0 +1,26 @@
+# Controller names present in the saved Android RPMh perf capture.
+# Retrieved read-only from rooted Android at 192.168.0.163:5555:
+#   /data/local/tmp/nova-deep-rpmh-20260919.data
+# The retrieved file SHA-256 matches the earlier receipt:
+#   1dd520d8117f5473190058ee752f869a072bfc7dfeb57cd33c2f66140790fab2
+# Capture command and accounting are in tcs-sequence.txt: simpleperf recorded
+# rpmh_send_msg and rpmh_tx_done for 12 seconds, 1,927 samples, 0 lost.
+
+# Read-only strings scan:
+#   strings nova-deep-rpmh-20260919.data | rg '(_rsc-|rpmh_)' | sort -u
+# All controller identifiers found were apps_rsc-drv-2. No disp_rsc or cam_rsc
+# identifier appeared in the raw capture.
+
+# Interpretation: the Android suspend-window TCS pair already decoded in
+# tcs-sequence.txt came from Apps RSC driver 2. The active Android FDT's extra
+# Display/Camera voter phandles are a real topology difference, but this
+# capture does not show those controllers submitting RPMh messages in the
+# measured window. Their presence alone therefore is not a demonstrated cause
+# of Armada's zero AOSD/CXSD/DDR counters. This does not establish that they are
+# never used or that they cannot affect arbitration outside the capture.
+
+# The bounded next source audit is the Apps RSC path itself: explain why
+# Android stages 11 BCM commands (including SH1, QUP2, ACV, MC4, SH5) while
+# Armada stages 6, and why Android clears the MC0/SH0 SLEEP votes while Armada
+# retains nonzero floors. Keep request generation separate from proof of
+# firmware acceptance or physical residency.

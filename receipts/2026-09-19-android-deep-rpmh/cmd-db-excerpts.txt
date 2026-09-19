@@ -1,0 +1,21 @@
+# Read-only Android /sys/kernel/debug/cmd-db lookup excerpts (CMD-DB v16.0 BCM,
+# VRM v1.0). Names are from the live device CMD-DB, not inferred from Linux.
+
+0x50000  MC0
+0x50004  SH0
+0x50008  SH1
+0x50010  SN0
+0x50038  CN0
+0x50044  QUP0
+0x50048  QUP1
+0x5004c  QUP2
+0x50060  MC4
+0x50064  SH5
+0x50068  ACV
+
+0x43900  LDOE1 (trace accesses resource offsets +0x04 and +0x08)
+0x43a00  LDOE3 (trace accesses resource offset +0x04)
+
+# The Android source's cmd_db_debugfs_dump() iterates the bounded CMD-DB
+# slave/resource counts. This was a read-only debugfs access; no QMP or MMIO
+# operation was issued.

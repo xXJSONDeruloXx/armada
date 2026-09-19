@@ -228,8 +228,8 @@ On the device, one detached systemd unit performs this sequence:
    timing is not the suspend boundary and no direct
    `systemd-suspend.service` start is needed. This is not `rtcwake -m freeze`.
 8. For short diagnostic reproductions, `--trace-profile ufs-irq`,
-   `--trace-profile rpmh-aoss`, `--trace-profile rsc-success`, or
-   `--trace-profile psci-kretprobe` creates a
+   `--trace-profile rpmh-aoss`, `--trace-profile rsc-success`,
+   `--trace-profile psci-kretprobe`, or `--trace-profile pcie-d3cold` creates a
    private tracefs instance, records its exact event inventory/configuration,
    selects the suspend-inclusive `boot` clock, enables only the requested
    existing tracepoints, archives the bounded buffer after the dispatcher
@@ -240,6 +240,11 @@ On the device, one detached systemd unit performs this sequence:
    `psci_system_suspend_enter` on direct deep suspend. It enables the probe
    only in its private trace instance and removes only that registration
    immediately after trace capture, before post-resume collection.
+   `pcie-d3cold` filters ICC and device-PM callback events to `1c00000.pcie`,
+   records RPMh and system-suspend events, and probes the PCI host's D3cold
+   eligibility return.
+   Its before/after runtime-PM snapshot also captures PCI power state, D3cold
+   allowance, and negotiated link speed/width when the kernel exposes them.
    The profiles never send firmware commands or change runtime-PM, regulator,
    interconnect, or device power controls.
 9. After resume, captures the matching post snapshot, Armada's exact

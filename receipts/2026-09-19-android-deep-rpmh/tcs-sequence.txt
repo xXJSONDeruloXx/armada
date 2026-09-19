@@ -1,0 +1,56 @@
+# Rooted Android RPMh tracepoint excerpt from the bounded deep-suspend run.
+# Source file: /tmp/nova-deep-rpmh-20260919.data
+# SHA-256: 1dd520d8117f5473190058ee752f869a072bfc7dfeb57cd33c2f66140790fab2
+# Command: simpleperf record -a -e rpmh:rpmh_send_msg,rpmh:rpmh_tx_done
+#          --duration 12 --size-limit 16M --no-dump-symbols
+# The 12-second run recorded 1,927 samples with 0 lost; 1,340 were send_msg
+# and 587 were tx_done. This excerpt is the paired 14-command SLEEP/WAKE set
+# first written at perf timestamp 26340550847503 ns.
+
+# Runtime apps_rsc DT configuration:
+#   drv-id=2, tcs-offset=0xd0000
+#   qcom,tcs-config cells: 2 3, 0 2, 1 2, 3 0, 4 1
+# Source enum maps these pairs to ACTIVE 3, SLEEP 2, WAKE 2, CONTROL 0,
+# FAST_PATH 1. This places SLEEP at global TCS 3 and WAKE at global TCS 5.
+# In the trace, m=3 carries msgid 0x10008 and m=5 carries 0x10108.
+# wait is the command completion-request flag, not an AOP sleep-acceptance bit.
+
+# m=3 / SLEEP TCS
+# n   CMD-DB resource/address      data        wait
+0    MC0  0x50000                 0x40000000  0
+1    SH0  0x50004                 0x00000000  0
+2    SH1  0x50008                 0x40000000  0
+3    SN0  0x50010                 0x40000000  0
+4    CN0  0x50038                 0x40000000  0
+5    QUP1 0x50048                 0x00000000  0
+6    QUP0 0x50044                 0x00000000  0
+7    QUP2 0x5004c                 0x40000000  0
+8    ACV  0x50068                 0x40000000  0
+9    LDOE1 +0x08 (0x43908)        0x00000004  0
+10   LDOE1 +0x04 (0x43904)        0x00000000  0
+11   LDOE3 +0x04 (0x43a04)        0x00000000  0
+12   MC4  0x50060                 0x60000000  0
+13   SH5  0x50064                 0x60000000  0
+
+# m=5 / WAKE TCS
+# n   CMD-DB resource/address      data        wait
+0    MC0  0x50000                 0x60238823  1
+1    SH0  0x50004                 0x20ed11db  0
+2    SH1  0x50008                 0x60000001  1
+3    SN0  0x50010                 0x60004001  1
+4    CN0  0x50038                 0x60004001  1
+5    QUP1 0x50048                 0x20004001  0
+6    QUP0 0x50044                 0x20004001  0
+7    QUP2 0x5004c                 0x60004001  1
+8    ACV  0x50068                 0x6000000a  1
+9    LDOE1 +0x08 (0x43908)        0x00000007  0
+10   LDOE1 +0x04 (0x43904)        0x00000001  0
+11   LDOE3 +0x04 (0x43a04)        0x00000001  0
+12   MC4  0x50060                 0x60000001  0
+13   SH5  0x50064                 0x60000001  0
+
+# Interpretation boundary: rpmh_send_msg is emitted as the driver writes
+# command words into TCS buffers. The records show the requested staged set;
+# they do not prove firmware triggered or accepted it. The independent Android
+# sleep-stat bracket did show AOSD/CXSD/DDR counts advancing during the same
+# bounded deep-suspend experiment.

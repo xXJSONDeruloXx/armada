@@ -1,0 +1,188 @@
+45481-[28945.554672] [binder][0x12eaa7a7d21][11:09:16.704016] kiwi_v2: [8272:I:HDD] __wlan_hdd_bus_suspend: starting bus suspend
+45482-[28945.554763] [binder][0x12eaa7a840a][11:09:16.704108] kiwi_v2: [8272:I:PMO] pmo_core_enable_wow_in_fw: drv wow is enabled
+45483-[28945.554777] [binder][0x12eaa7a851d][11:09:16.704122] kiwi_v2: [8272:I:PMO] pmo_core_enable_wow_in_fw: system suspend wow
+45484-[28945.635083] [binder][0x12eaa920c1e][11:09:16.784429] kiwi_v2: [8272:I:HDD] __wlan_hdd_bus_suspend: bus suspend succeeded
+45485-[28945.673893] qcom-hv-haptics c42d000.qcom,spmi:qcom,pm8550b@7:qcom,hv-haptics@f000: wait 2000 us for brake pattern to complete timeout=3 delay_us=1000
+45486:[28945.685041] Enabled interconnect votes:
+45487-[28945.685048] node                                  tag          avg         peak
+45488-[28945.685053] --------------------------------------------------------------------
+45489-[28945.685062] llcc_mc                                          398456      2188000
+45490-[28945.685076] soc:qcom,dcvs:ddr:sp                   3       398456      2188000
+45491-[28945.685084] ebi                                              398456      2188000
+45492-[28945.685092] soc:qcom,dcvs:ddr:sp                   3       398456      2188000
+45493-[28945.685126] chm_apps                                         398448      4800000
+45494-[28945.685134] soc:qcom,dcvs:llcc:sp                  3       398448      4800000
+45495-[28945.685142] qns_llcc                                         398448      4800000
+45496-[28945.685149] soc:qcom,dcvs:llcc:sp                  3       398448      4800000
+45497-[28945.685207] suspend ns:   28945685207678      suspend cycles:    1299942783928
+45498-[28945.685235] resume cycles:    1299953250405
+45499-[28945.685391] [irq][0x12eab407d23][11:09:17.379857] kiwi_v2: [0:I:HIF] hif_wake_interrupt_handler: wake interrupt received on irq 324
+45500-[28945.686796] RPN [drivers/base/power/wakeup.c:pm_wakeup_pending():963]Wakeup pending, aborting suspend
+45501-[28945.686807] 
+45502-[28945.686837] RPN [drivers/base/power/wakeup.c:pm_print_active_wakeup_sources():921]active wakeup source: [timerfd]
+45503-[28945.686845] 
+45504-[28945.686887] RPN [drivers/base/power/wakeup.c:pm_wakeup_pending():968]PM: Pending Wakeup Sources: [timerfd] 
+45505-[28945.686892] 
+45506-[28945.692303] i2c_geni 980000.i2c: Unbalanced pm_runtime_enable!
+45507-[28945.692321] i2c_geni 988000.i2c: Unbalanced pm_runtime_enable!
+45508-[28945.692332] i2c_geni 98c000.i2c: Unbalanced pm_runtime_enable!
+45509-[28945.692508] i2c_geni a80000.i2c: Unbalanced pm_runtime_enable!
+45510-[28945.692518] i2c_geni a90000.i2c: Unbalanced pm_runtime_enable!
+45511-[28945.692529] i2c_geni 890000.i2c: Unbalanced pm_runtime_enable!
+45512-[28945.712768] [binder][0x12eab488317][11:09:17.407243] kiwi_v2: [8272:I:HDD] wlan_hdd_bus_resume: starting bus resume
+45513-[28945.713213] [binder][0x12eab48a49a][11:09:17.407689] kiwi_v2: [8272:I:PMO] pmo_core_psoc_send_host_wakeup_ind_to_fw: Host wakeup indication sent to fw
+45514-[28945.723051] [soft_i][0x12eab4b8667][11:09:17.417526] kiwi_v2: [0:I:WMA] WLAN triggered wakeup: BPF_ALLOW (39), vdev: 0 (STA)
+45515-[28945.723196] [soft_i][0x12eab4b9154][11:09:17.417672] kiwi_v2: [0:I:WMA] wma_wake_event_packet: Wake event packet:
+45516-[28945.723208] [soft_i][0x12eab4b9240][11:09:17.417684] kiwi_v2: [0:I:WMA] 00000000: 26 ab dc db 81 56 14 98 77 3a d9 38 08 00 45 00
+45517-[28945.723216] [soft_i][0x12eab4b92e2][11:09:17.417693] kiwi_v2: [0:I:WMA] 00000010: 00 28 29 62 00 00 40 06 ce c2 c0 a8 00 b8 c0 a8
+45518-[28945.723223] [soft_i][0x12eab4b9369][11:09:17.417700] kiwi_v2: [0:I:WMA] 00000020: 00 a3 c2 ea 15 b3 c4 c2 17 72 b4 2c ba fa 50 10
+45519-[28945.723230] [soft_i][0x12eab4b93f9][11:09:17.417707] kiwi_v2: [0:I:WMA] 00000030: 39 50 cf de 00 00 00 00 00 00 00 00
+45520-[28945.723276] [soft_i][0x12eab4b9761][11:09:17.417753] kiwi_v2: [0:I:WMA] wma_log_pkt_ipv4: Pkt_len: 40, src_port: 49898, dst_port: 5555
+45521-[28945.724075] [binder][0x12eab4bd335][11:09:17.418550] kiwi_v2: [8272:I:HDD] wlan_hdd_bus_resume: bus resume succeeded
+45522-[28945.724166] [kworke][0x12eab4bda18][11:09:17.418642] kiwi_v2: [17062:I:HDD] hdd_resume_wlan: WLAN being resumed by OS
+45523-[28945.724565] [kworke][0x12eab4bf813][11:09:17.419042] kiwi_v2: [17062:E:HDD] hdd_restart_tsf_sync_post_wlan_resume: Host TSF sync is not initialized!!
+45524-[28945.724586] [kworke][0x12eab4bf9b7][11:09:17.419064] kiwi_v2: [17062:I:HDD] hdd_disable_host_offloads: vdev is not connected
+45525-[28945.724597] [kworke][0x12eab4bfa7e][11:09:17.419074] kiwi_v2: [17062:E:HDD] hdd_restart_tsf_sync_post_wlan_resume: Host TSF sync is not initialized!!
+45526-[28945.724736] [kworke][0x12eab4c04ec][11:09:17.419213] kiwi_v2: [17062:E:HDD] hdd_send_igmp_offload_params: in_dev is NULL
+45527-[28945.724828] [kworke][0x12eab4c0bc3][11:09:17.419304] kiwi_v2: [17062:E:HDD] hdd_restart_tsf_sync_post_wlan_resume: Host TSF sync is not initialized!!
+45528-[28945.726905] OOM killer enabled.
+45529-[28945.726909] Restarting tasks ... 
+45530-[28945.727554] cdsp-loader soc:qcom,msm-cdsp-loader: cdsp_loader_probe: rproc not found
+45531-[28945.735486] done.
+45532-[28945.770639] Abort: Pending Wakeup Sources: [timerfd] 
+45533-[28945.770667] adsp_sleepmon: PM_POST_SUSPEND
+45534-[28945.770689] PM: suspend exit
+45535-[28945.770716] adsp_sleepmon: timer_event = 0,suspend_event = 1
+45536-[28945.775335] PM: suspend entry (deep)
+45537-[28945.779384] Filesystems sync: 0.004 seconds
+45538-[28945.779430] Freezing user space processes ... 
+45539-[28945.781389] gunyah: Wait for VM_STATUS 9 interrupted
+45540-[28945.781442] spcom:spcom_ioctl_handle_poll_event: Wait for link state change interrupted, ret[-512]
+45541-[28945.781755] spcom:spcom_ioctl_handle_poll_event: Wait for link state change interrupted, ret[-512]
+45542-[28945.782752] spcom:spcom_ioctl_handle_poll_event: Wait for link state change interrupted, ret[-512]
+45543-[28945.782766] spcom:spcom_ioctl_handle_poll_event: Wait for link state change interrupted, ret[-512]
+45544-[28945.785229] gunyah: Failed vcpu_run -512
+45545-[28945.785266] gunyah: Failed vcpu_run -512
+45546-[28945.788232] (elapsed 0.008 seconds) done.
+45547-[28945.788259] OOM killer disabled.
+45548-[28945.788262] Freezing remaining freezable tasks ... (elapsed 0.179 seconds) done.
+45549-[28945.967322] printk: Suspending console(s) (use no_console_suspend to debug)
+45550-[28945.974449] [kworke][0x12eab952ce9][11:09:17.668920] kiwi_v2: [186:I:HDD] hdd_suspend_wlan: WLAN being suspended by OS
+45551-[28945.976489] [kworke][0x12eab95c5f4][11:09:17.670960] kiwi_v2: [186:E:HDD] hdd_enable_ns_offload: IPv6 dev does not exist. Failed to request NSOffload
+45552-[28945.976579] [kworke][0x12eab95ccb2][11:09:17.671050] kiwi_v2: [186:E:HDD] hdd_send_igmp_offload_params: in_dev is NULL
+45553-[28945.977040] [kworke][0x12eab95ef4f][11:09:17.671512] kiwi_v2: [186:I:PMO] pmo_core_is_wow_applicable: lpass enabled, enabling wow
+45554-[28945.978231] [binder][0x12eab96487c][11:09:17.672701] kiwi_v2: [2215:I:HDD] __wlan_hdd_bus_suspend: starting bus suspend
+45555-[28945.978363] [binder][0x12eab96527e][11:09:17.672834] kiwi_v2: [2215:I:PMO] pmo_core_enable_wow_in_fw: drv wow is enabled
+45556-[28945.978387] [binder][0x12eab96545a][11:09:17.672859] kiwi_v2: [2215:I:PMO] pmo_core_enable_wow_in_fw: system suspend wow
+45557-[28946.053056] [binder][0x12eabac3460][11:09:17.747526] kiwi_v2: [2215:I:HDD] __wlan_hdd_bus_suspend: bus suspend succeeded
+45558-[28946.089307] qcom-hv-haptics c42d000.qcom,spmi:qcom,pm8550b@7:qcom,hv-haptics@f000: wait 2000 us for brake pattern to complete timeout=3 delay_us=1000
+45559-[28946.114350] Disabling non-boot CPUs ...
+45560-[28946.124236] psci: CPU1 killed (polled 0 ms)
+45561-[28946.135706] psci: CPU2 killed (polled 0 ms)
+45562-[28946.143688] psci: CPU3 killed (polled 0 ms)
+45563-[28946.150593] psci: CPU4 killed (polled 0 ms)
+45564-[28946.156201] psci: CPU5 killed (polled 0 ms)
+45565-[28946.167160] psci: CPU6 killed (polled 0 ms)
+45566-[28946.175591] psci: CPU7 killed (polled 0 ms)
+45567-[28946.180829] suspend ns:   28946180829085      suspend cycles:    1299962766336
+45568:[28946.180829] Enabled interconnect votes:
+45569-[28946.180829] node                                  tag          avg         peak
+45570-[28946.180829] --------------------------------------------------------------------
+45571-[28946.180829] llcc_mc                                          796916      2188000
+45572-[28946.180829] soc:qcom,dcvs:ddr:sp                   3       796916      2188000
+45573-[28946.180829] ebi                                              796916      2188000
+45574-[28946.180829] soc:qcom,dcvs:ddr:sp                   3       796916      2188000
+45575-[28946.180829] chm_apps                                        2390752      4800000
+45576-[28946.180829] soc:qcom,dcvs:llcc:sp                  3      2390752      4800000
+45577-[28946.180829] qns_llcc                                        2390752      4800000
+45578-[28946.180829] soc:qcom,dcvs:llcc:sp                  3      2390752      4800000
+45579-[28946.180861] resume cycles:    1300109944481
+45580-[28946.181212] The PIL relocation information region is not mapped
+45581-[28946.181299] PM: pm_system_irq_wakeup: 269 triggered pm8xxx_rtc_alarm
+45582-[28946.182571] Enabling non-boot CPUs ...
+45583-[28946.183476] CPU features: detected CPU1: Activity Monitors Unit (AMU)
+45584-[28946.184001] Detected PIPT I-cache on CPU1
+45585-[28946.184100] GICv3: CPU1: found redistributor 100 region 0:0x00000000171c0000
+45586-[28946.184665] CPU1: Booted secondary processor 0x0000000100 [0x411fd461]
+45587-[28946.189492] CPU1 is up
+45588-[28946.190162] CPU features: detected CPU2: Activity Monitors Unit (AMU)
+45589-[28946.190584] Detected PIPT I-cache on CPU2
+45590-[28946.190641] GICv3: CPU2: found redistributor 200 region 0:0x0000000017200000
+45591-[28946.191067] CPU2: Booted secondary processor 0x0000000200 [0x411fd461]
+45592-[28946.194625] CPU2 is up
+45593-[28946.195702] CPU features: detected CPU3: Activity Monitors Unit (AMU)
+45594-[28946.195817] Detected PIPT I-cache on CPU3
+45595-[28946.195826] CPU features: SANITY CHECK: Unexpected variation in SYS_ID_AA64MMFR1_EL1. Boot CPU: 0x00000011212122, CPU3: 0x00000010212122
+45596-[28946.195857] GICv3: CPU3: found redistributor 300 region 0:0x0000000017240000
+45597-[28946.196213] CPU3: Booted secondary processor 0x0000000300 [0x411fd4d0]
+45598-[28946.203905] CPU3 is up
+45599-[28946.204435] CPU features: detected CPU4: Activity Monitors Unit (AMU)
+45600-[28946.204551] Detected PIPT I-cache on CPU4
+45601-[28946.204562] CPU features: SANITY CHECK: Unexpected variation in SYS_ID_AA64MMFR1_EL1. Boot CPU: 0x00000011212122, CPU4: 0x00000010212122
+45602-[28946.204595] GICv3: CPU4: found redistributor 400 region 0:0x0000000017280000
+45603-[28946.204953] CPU4: Booted secondary processor 0x0000000400 [0x411fd4d0]
+45604-[28946.208243] CPU4 is up
+45605-[28946.208925] CPU features: detected CPU5: Activity Monitors Unit (AMU)
+45606-[28946.209044] Detected PIPT I-cache on CPU5
+45607-[28946.209053] CPU features: SANITY CHECK: Unexpected variation in SYS_ID_AA64MMFR1_EL1. Boot CPU: 0x00000011212122, CPU5: 0x00000010212122
+45608-[28946.209069] CPU features: SANITY CHECK: Unexpected variation in SYS_ID_MMFR4_EL1. Boot CPU: 0x00000001021111, CPU5: 0x00000001021110
+45609-[28946.209100] GICv3: CPU5: found redistributor 500 region 0:0x00000000172c0000
+45610-[28946.209431] CPU5: Booted secondary processor 0x0000000500 [0x412fd470]
+45611-[28946.212786] CPU5 is up
+45612-[28946.213469] CPU features: detected CPU6: Activity Monitors Unit (AMU)
+45613-[28946.213586] Detected PIPT I-cache on CPU6
+45614-[28946.213594] CPU features: SANITY CHECK: Unexpected variation in SYS_ID_AA64MMFR1_EL1. Boot CPU: 0x00000011212122, CPU6: 0x00000010212122
+45615-[28946.213613] CPU features: SANITY CHECK: Unexpected variation in SYS_ID_MMFR4_EL1. Boot CPU: 0x00000001021111, CPU6: 0x00000001021110
+45616-[28946.213645] GICv3: CPU6: found redistributor 600 region 0:0x0000000017300000
+45617-[28946.213972] CPU6: Booted secondary processor 0x0000000600 [0x412fd470]
+45618-[28946.217589] CPU6 is up
+45619-[28946.218393] CPU features: detected CPU7: Activity Monitors Unit (AMU)
+45620-[28946.218466] Detected PIPT I-cache on CPU7
+45621-[28946.218472] CPU features: SANITY CHECK: Unexpected variation in SYS_ID_AA64MMFR1_EL1. Boot CPU: 0x00000011212122, CPU7: 0x00000010212122
+45622-[28946.218497] GICv3: CPU7: found redistributor 700 region 0:0x0000000017340000
+45623-[28946.218800] CPU7: Booted secondary processor 0x0000000700 [0x411fd4e0]
+45624-[28946.224346] CPU7 is up
+45625-[28946.231128] ------------[ cut here ]------------
+45626-[28946.231137] Unbalanced enable for IRQ 31
+45627-[28946.231172] WARNING: CPU: 2 PID: 2215 at kernel/irq/manage.c:791 __enable_irq+0x5c/0x70
+45628-[28946.231211] Modules linked in: sys_pm_vx(E) subsystem_sleep_stats(E) soc_sleep_stats(E) kiwi_v2(OE) msm_drm(OE) ipa_clientsm(OE) machine_dlkm(OE) qdss_bridge(E) coresight_tmc(E) usb_f_qdss(E) usb_f_gsi(E) rndisipam(OE) lpass_cdc_va_macro_dlkm(OE) ipanetm(OE) swr_dmic_dlkm(OE) wcd939x_dlkm(OE) rmnet_perf(OE) msm_eva(OE) lpass_cdc_rx_macro_dlkm(OE) lpass_cdc_wsa2_macro_dlkm(OE) bt_fm_slim(OE) goodix_ts(OE) rmnet_offload(OE) pinctrl_lpi_dlkm(OE) rmnet_perf_tether(OE) wcd938x_dlkm(OE) lpass_cdc_tx_macro_dlkm(OE) ipam(OE) audio_pkt_dlkm(OE) wcd937x_dlkm(OE) lpass_cdc_wsa_macro_dlkm(OE) adsp_loader_dlkm(OE) rmnet_shs(OE) wcd9xxx_dlkm(OE) focaltech_fts(OE) audio_prm_dlkm(OE) camera(OE) swr_ctrl_dlkm(OE) rmnet_aps(OE) rmnet_wlan(OE) keydetect(OE) lpass_cdc_dlkm(OE) htr3212r(OE) msm_video(OE) nt36xxx_i2c(OE) wsa883x_dlkm(OE) wsa884x_dlkm(OE) qrtr_gunyah(E) nxp_nci(OE) qcrypto_msm_dlkm(OE) focaltech_fp(OE) btpower(OE) aw883xx_dlkm(OE) extcon_demo(OE) stm_ftrace(E)
+45629-[28946.231643] wcd938x_slave_dlkm(OE) swr_haptics_dlkm(OE) hdcp_qseecom_dlkm(OE) audpkt_ion_dlkm(OE) msm_kgsl(OE) cnss2(OE) sync_fence(OE) rmnet_sch(OE) stm_nfc_i2c(OE) synaptics_tcm_ts(OE) atmel_mxt_ts(OE) stub_dlkm(OE) rmnet_core(OE) mac80211(E) htr3212l(OE) hdmi_dlkm(OE) spf_core_dlkm(OE) gpr_dlkm(OE) gsim(OE) msm_mmrm(OE) msm_hw_fence(OE) rmnet_ctl(OE) q6_notifier_dlkm(OE) wcd939x_slave_dlkm(OE) qcedev_mod_dlkm(OE) coresight_tpdm(E) leds_qti_flash(E) nvmem_qfprom(E) wcd937x_slave_dlkm(OE) ddr_cdev(E) stm_st54se_gpio(OE) qti_qmi_sensor_v2(E) smcinvoke_dlkm(OE) cnss_plat_ipc_qmi_svc(OE) coresight_remote_etm(E) qrng_dlkm(OE) mbhc_dlkm(OE) wlan_firmware_service(OE) cnss_utils(OE) msm_ext_display(OE) stm_console(E) sdpm_clk(E) qcom_edac(E) cnss_nl(OE) coresight_replicator(E) swr_dlkm(OE) qrtr_mhi(E) qce50_dlkm(OE) qrtr_smd(E) wcd_core_dlkm(OE) tz_log_dlkm(OE) cfg80211(E) q6_dlkm(OE) cnss_prealloc(OE) snd_event_dlkm(OE) q6_pdr_dlkm(OE) snd_usb_audio_qmi(E)
+45630-[28946.232071] coresight_funnel(E) slim_qcom_ngd_ctrl(E) coresight_dummy(E) coresight_tpda(E) coresight_stm(E) coresight_cti(E) qti_userspace_cdev(E) coresight_tgu(E) mhi_dev_drv(E) coresight_hwevent(E) coresight_csr(E) qti_amoled_ecm(E) ep_pcie_drv(E) coresight(E) qcom_q6v5_pas(E) icc_test(E) stm_p_ost(E) qti_glink_adc(E) industrialio_buffer_cb(E) hwmon(E) gpio5_pwm(E) policy_engine(E) stm_p_basic(E) cpu_voltage_cooling(E) stm_core(E) gh_irq_lend(E) qcom_spmi_adc5_gen3(E) slimbus(E) qti_qmi_cdev(E) mhi_dev_net(E) qcom_pon(E) max31760_fan(E) qcom_vadc_common(E) repeater_qti_pmic_eusb2(E) qcom_pil_info(E) leds_qti_tri_led(E) i2c_msm_geni(E) altmode_glink(E) smp2p_sleepstate(E) qti_cpufreq_cdev(E) usbmon(E) pm8941_pwrkey(E) bcl_soc(E) qcom_q6v5(E) qsee_ipc_irq_bridge(E) qti_battery_debug(E) charger_ulog_glink(E) ipa_fmwk(E) qcom_hv_haptics(E) nb7vpq904m(E) usb_f_diag(E) i3c_master_msm_geni(E) leds_qpnp_vibrator_ldo(E) glink_pkt(E) qcom_lpm(E) qcom_spmi_temp_alarm(E)
+45631-[28946.232490] msm_lmh_dcvs(E) qti_battery_charger(E) reboot_mode(E) qcom_cpufreq_hw_debug(E) qti_devfreq_cdev(E) synx_driver(E) qcom_ipc_lite(E) core_hang_detect(E) rq_stats(E) usb_f_ccid(E) repeater_i2c_eusb2(E) mcp25xxfd(E) f_fs_ipc_log(E) dwc3_msm(E) msm_sharedmem(E) pinctrl_spmi_mpp(E) phy_generic(E) redriver(E) msm_geni_serial(E) rdbg(E) spcom(E) qcom_va_minidump(E) mhi_dev_uci(E) usb_bam(E) phy_qcom_emu(E) debugcc_crow(E) debugcc_kalama(E) msm_performance(E) gh_tlmm_vm_mem_access(E) phy_msm_m31_eusb2(E) spss_utils(E) phy_msm_snps_eusb2(E) fsa4480_i2c(E) gh_mem_notifier(E) repeater(E) hvc_gunyah(E) usb_f_cdev(E) ehset(E) qcom_spss(E) phy_msm_ssusb_qmp(E) spmi_pmic_arb_debug(E) frpc_adsprpc(E) glink_probe(E) qti_fixed_regulator(E) qcom_glink_spss(E) qti_ocp_notifier(E) qfprom_sys(E) sg(E) wcd_usbss_i2c(E) msm_show_epoch(E) hung_task_enh(E) spi_msm_geni(E) qcom_iommu_debug(E) cpufreq_stats_scmi(E) qseecom_proxy(E) qpnp_amoled_regulator(E) ucsi_glink(E) qcom_i2c_pmic(E)
+45632-[28946.232925] mhi_cntrl_qcom(E) microdump_collector(E) qbt_handler(E) qcom_esoc(E) memlat_scmi(E) mhi_dev_netdev(E) qcom_sysmon(E) memlat_vendor(E) mhi_dev_dtr(E) plh_scmi(E) qcom_ramdump(E) pmic_pon_log(E) camcc_crow(E) eud(E) videocc_crow(E) sysmon_subsystem_stats(E) cdsp_loader(E) adsp_sleepmon(E) pmic_glink_debug(E) bam_dma(E) plh_vendor(E) cdsprm(E) msm_memshare(E) gpucc_kalama(E) dmesg_dumper(E) smp2p(E) mhi_dev_satellite(E) panel_event_notifier(E) mhi(E) sps_drv(E) phy_qcom_ufs_qmp_v4_khaje(E) boot_stats(E) phy_qcom_ufs_qmp_v4_waipio(E) pmic_glink(E) rimps_log(E) cpufreq_stats_vendor(E) heap_mem_ext_v01(E) msm_gpi(E) pdr_interface(E) memlat(E) qcom_cpuss_sleep_stats(E) pinctrl_spmi_gpio(E) gpucc_crow(E) phy_qcom_ufs_qmp_v4(E) phy_qcom_ufs_qmp_v4_lahaina(E) phy_qcom_ufs_qmp_v4_kona(E) pwm_qti_lpg(E) qmi_helpers(E) pci_msm_drv(E) rproc_qcom_common(E) qcom_smd(E) msm_show_resume_irq(E) qcom_glink_smem(E) qcom_glink(E) zram msm_sysstats(E) zsmalloc nvme(E) nvme_core(E)
+45633-[28946.233365] bcl_pmic5(E) c1dcvs_scmi(E) c1dcvs_vendor(E) qcom_rimps(E) sdhci_msm(E) mem_offline(E) arm_smmu(E) ufs_qcom(E) ufshcd_crypto_qti(E) msm_qmp(E) qcom_aoss(E) stub_regulator(E) rtc_pm8xxx(E) qrtr(E) qcom_reboot_reason(E) spmi_pmic_arb(E) qcom_spmi_pmic(E) regmap_spmi(E) qti_regmap_debugfs(E) pmu_scmi(E) pmu_vendor(E) qcom_pmu_lib(E) qcom_llcc_pmu(E) qcom_iommu_util(E) qcom_logbuf_vh(E) debug_symbol(E) qcom_dload_mode(E) phy_qcom_ufs_qrbtc_sdm845(E) phy_qcom_ufs_qmp_v4_crow(E) phy_qcom_ufs_qmp_v4_kalama(E) phy_qcom_ufs(E) nvmem_qcom_spmi_sdam(E) qnoc_crow(E) qnoc_kalama(E) qnoc_qos(E) pinctrl_kalama(E) pinctrl_crow(E) pinctrl_msm(E) memory_dump_v2(E) mem_buf(E) qcom_dma_heaps(E) msm_dma_iommu_mapping(E) mem_buf_msgq(E) mem_buf_dev(E) mem_hooks(E) llcc_qcom(E) iommu_logger(E) gunyah(E) mdt_loader(E) secure_buffer(E) gh_rm_drv(E) gh_msgq(E) gh_dbl(E) gh_ctrl(E) gh_arm_drv(E) videocc_kalama(E) tcsrcc_kalama(E) dispcc_kalama(E) dispcc_crow(E) dcc_v2(E)
+45634-[28946.233811] crypto_qti_common(E) crypto_qti_hwkm(E) hwkm(E) tmecom_intf(E) cqhci(E) clk_dummy(E) cpu_hotplug(E) thermal_pause(E) sched_walt(E) qcom_cpufreq_hw(E) bwmon(E) qcom_dcvs(E) dcvs_fp(E) rpmh_regulator(E) qcom_tsens(E) thermal_minidump(E) qcom_pdc(E) qcom_ipcc(E) camcc_kalama(E) icc_rpmh(E) socinfo(E) icc_debug(E) icc_bcm_voter(E) gcc_kalama(E) gcc_crow(E) clk_qcom(E) gdsc_regulator(E) debug_regulator(E) proxy_consumer(E) clk_rpmh(E) qcom_rpmh(E) cmd_db(E) qcom_ipc_logging(E) qcom_cpu_vendor_hooks(E) gh_virt_wdt(E) qcom_wdt_core(E) qcom_scm(E) minidump(E) smem(E) qcom_hwspinlock(E) [last unloaded: soc_sleep_stats]
+45635-[28946.234115] CPU: 2 PID: 2215 Comm: binder:940_3 Tainted: G S      W  OE     5.15.123-android13-8-g697b78910a71-dirty #1
+45636-[28946.234135] Hardware name: Qualcomm Technologies, Inc. KalamaP HDK (DT)
+45637-[28946.234149] pstate: 604000c5 (nZCv daIF +PAN -UAO -TCO -DIT -SSBS BTYPE=--)
+45638-[28946.234169] pc : __enable_irq+0x5c/0x70
+45639-[28946.234186] lr : __enable_irq+0x5c/0x70
+45640-[28946.234203] sp : ffffffc01ae63ad0
+45641-[28946.234211] x29: ffffffc01ae63ad0 x28: ffffffe4cf97e000 x27: ffffffe4cd6339b0
+45642-[28946.234242] x26: ffffffe4cd61ab78 x25: ffffffe4cf7f1000 x24: 0000000000000000
+45643-[28946.234269] x23: ffffff80037958ac x22: ffffff8003795800 x21: ffffffe4cf7f1138
+45644-[28946.234297] x20: 0000000000000020 x19: 0000000000000000 x18: ffffffc01a5a5090
+45645-[28946.234324] x17: ffffffe4ce9f1090 x16: 0000000000000010 x15: ffffffe4ccbf85f4
+45646-[28946.234350] x14: 0000000000000000 x13: ffffffe4cf97f0a0 x12: 0000000000000001
+45647-[28946.234376] x11: 00000000ffffffff x10: ffffffe4ce9f0e98 x9 : 33ec03aa6568db00
+45648-[28946.234404] x8 : 33ec03aa6568db00 x7 : 6c62616e65206465 x6 : 636e616c61626e55
+45649-[28946.234432] x5 : ffffffe4cf9adfd4 x4 : ffffffe4cf9adfd6 x3 : ffff0a01ffffff10
+45650-[28946.234458] x2 : 0000000000000001 x1 : 0000000000000000 x0 : 000000000000001c
+45651-[28946.234485] Call trace:
+45652-[28946.234496] __enable_irq+0x5c/0x70
+45653-[28946.234514] resume_irqs.llvm.9247973572835553663+0x98/0x160
+45654-[28946.234536] dpm_resume_noirq+0x20/0x38
+45655-[28946.234557] suspend_devices_and_enter+0x4d8/0xa3c
+45656-[28946.234579] enter_state+0xa0/0x37c
+45657-[28946.234593] pm_suspend+0x60/0xc8
+45658-[28946.234607] state_store+0x108/0x144
+45659-[28946.234629] kobj_attr_store+0x38/0x94
+45660-[28946.234653] sysfs_kf_write+0x68/0xcc
+45661-[28946.234677] kernfs_fop_write_iter+0x108/0x1d4
+45662-[28946.234694] vfs_write+0x274/0x3c0
+45663-[28946.234716] ksys_write+0x7c/0xec
+45664-[28946.234734] __arm64_sys_write+0x20/0x30
+45665-[28946.234753] invoke_syscall+0x60/0x150
+45666-[28946.234778] el0_svc_common.llvm.17765349948017032585+0xb8/0xf8
+45667-[28946.234799] do_el0_svc+0x28/0x98
+45668-[28946.234815] el0_svc+0x24/0x84
