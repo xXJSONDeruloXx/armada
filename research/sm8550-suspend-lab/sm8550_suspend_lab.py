@@ -76,8 +76,16 @@ PCI_DEVICE_FIELDS = (
 )
 # Verified from this device's vmlinux BTF; refuse to dereference on another build.
 PCIE_CURRENT_STATE_KERNEL_RELEASE = "7.2.3"
-PCIE_CURRENT_STATE_BTF_SHA256 = "fb193ea5c32178ae22d52e30a62986e4bbc2c3db01bfa530f34b257fe94b45a1"
+PCIE_PDEV_BTF_SHA256 = "fb193ea5c32178ae22d52e30a62986e4bbc2c3db01bfa530f34b257fe94b45a1"
 PCIE_CURRENT_STATE_OFFSET = 0xA8
+PCIE_D3COLD_IDENTITY_FIELDS = (
+    ("pdev_busnum", "+0xd8(+0x10($arg1)):u8"),
+    ("pdev_domain", "+0xdc(+0x10($arg1)):s32"),
+    ("pdev_devfn", "+0x38($arg1):u32"),
+    ("pdev_vendor", "+0x3c($arg1):u16"),
+    ("pdev_device", "+0x3e($arg1):u16"),
+    ("pdev_class", "+0x44($arg1):u32"),
+)
 POWER_FIELDS = (
     "type",
     "status",
@@ -1062,6 +1070,12 @@ def kprobe_definition_matches(line: str, definition: str) -> bool:
     return re.sub(r"^r[0-9]*:", "r:", line, count=1) == definition
 
 
+def pcie_d3cold_probe_fields() -> str:
+    fields = ["pdev_state=+0x%x($arg1):u32" % PCIE_CURRENT_STATE_OFFSET]
+    fields.extend("%s=%s" % field for field in PCIE_D3COLD_IDENTITY_FIELDS)
+    return " ".join(fields)
+
+
 def trace_prepare_suspend_kretprobe(run: DeviceRun, info: Dict[str, Any]) -> Dict[str, Any]:
     root = Path(str(info.get("root", "")))
     registry = root / "kprobe_events"
@@ -1077,16 +1091,16 @@ def trace_prepare_suspend_kretprobe(run: DeviceRun, info: Dict[str, Any]) -> Dic
     group = "s2lab_%s" % safe_name(run.run_id).replace("-", "_")
     name = "d3cold_device_ret" if pcie_d3cold else "system_ret" if deep_suspend else "cluster_ret"
     event = "%s:%s" % (group, name)
-    pcie_state_field = ""
+    pcie_probe_fields = ""
     if pcie_d3cold:
         kernel_release = read_text(Path("/proc/sys/kernel/osrelease"))
         btf = read_bytes(Path("/sys/kernel/btf/vmlinux"))
         btf_digest = hashlib.sha256(btf).hexdigest() if btf is not None else None
-        if kernel_release != PCIE_CURRENT_STATE_KERNEL_RELEASE or btf_digest != PCIE_CURRENT_STATE_BTF_SHA256:
+        if kernel_release != PCIE_CURRENT_STATE_KERNEL_RELEASE or btf_digest != PCIE_PDEV_BTF_SHA256:
             raise LabError("refusing PCI state dereference: kernel release/BTF differs from the inspected build")
-        pcie_state_field = " pdev_state=+0x%x($arg1):u32" % PCIE_CURRENT_STATE_OFFSET
+        pcie_probe_fields = pcie_d3cold_probe_fields()
     definition = (
-        "r:%s/%s %s%s retval=$retval:s32" % (group, name, function, pcie_state_field)
+        "r:%s/%s %s %s retval=$retval:s32" % (group, name, function, pcie_probe_fields)
         if pcie_d3cold
         else "r:%s/%s %s retval=$retval:s32" % (group, name, function)
         if deep_suspend
@@ -1126,9 +1140,18 @@ def trace_prepare_suspend_kretprobe(run: DeviceRun, info: Dict[str, Any]) -> Dic
         "state": "registration-requested",
         "field_source": {
             "struct": "pci_dev",
-            "member": "current_state",
-            "byte_offset": PCIE_CURRENT_STATE_OFFSET,
-            "btf_sha256": PCIE_CURRENT_STATE_BTF_SHA256,
+            "byte_offsets": {
+                "current_state": PCIE_CURRENT_STATE_OFFSET,
+                "bus": 0x10,
+                "bus.number": 0xD8,
+                "bus.domain_nr": 0xDC,
+                "devfn": 0x38,
+                "vendor": 0x3C,
+                "device": 0x3E,
+                "class": 0x44,
+            },
+            "nested_bus_dereference": True,
+            "btf_sha256": PCIE_PDEV_BTF_SHA256,
         }
         if pcie_d3cold
         else None,
@@ -1147,13 +1170,15 @@ def trace_prepare_suspend_kretprobe(run: DeviceRun, info: Dict[str, Any]) -> Dic
     event_format = read_text(trace_event_file(Path(str(info["instance"])), event, "format"))
     if event_format is None or not re.search(r"\bretval\s*;", event_format):
         raise LabError("suspend kretprobe format does not expose retval")
-    if pcie_d3cold and not re.search(r"\bpdev_state\s*;", event_format):
-        raise LabError("PCI D3cold callback probe format does not expose pci_dev.current_state")
+    if pcie_d3cold:
+        for field in ("pdev_state", *(name for name, _ in PCIE_D3COLD_IDENTITY_FIELDS)):
+            if not re.search(r"\b%s\s*;" % re.escape(field), event_format):
+                raise LabError("PCI D3cold callback probe format does not expose %s" % field)
     if not deep_suspend and not pcie_d3cold and not re.search(r"\bstate\s*;", event_format):
         raise LabError("PSCI CPU kretprobe format does not expose state")
     configured = trace_configure_event(run, info, event, event_filter=event_filter)
     configured["purpose"] = (
-        "record per-device D3cold eligibility results in PCI bus walk order"
+        "record PCI identity and per-device D3cold eligibility results in PCI bus walk order"
         if pcie_d3cold
         else "record the PSCI SYSTEM_SUSPEND wrapper return code"
         if deep_suspend
@@ -1197,8 +1222,8 @@ def trace_remove_suspend_kretprobe(run: DeviceRun, info: Dict[str, Any]) -> Dict
         ),
         "d3cold_device_ret": (
             "__pci_host_common_d3cold_possible",
-            "r:%s/%s __pci_host_common_d3cold_possible pdev_state=+0x%x($arg1):u32 retval=$retval:s32"
-            % (group, name, PCIE_CURRENT_STATE_OFFSET),
+            "r:%s/%s __pci_host_common_d3cold_possible %s retval=$retval:s32"
+            % (group, name, pcie_d3cold_probe_fields()),
         ),
     }[name]
     if probe.get("function") != expected[0] or definition != expected[1]:
@@ -4720,8 +4745,22 @@ def self_test() -> int:
         "r:s2lab_test/cluster_ret psci_cpu_suspend_enter state=$arg1:u32 retval=$retval:s32",
     )
     assert kprobe_definition_matches(
-        "r16:s2lab_test/d3cold_device_ret __pci_host_common_d3cold_possible retval=$retval:s32",
-        "r:s2lab_test/d3cold_device_ret __pci_host_common_d3cold_possible retval=$retval:s32",
+        "r16:s2lab_test/d3cold_device_ret __pci_host_common_d3cold_possible "
+        "pdev_state=+0xa8($arg1):u32 pdev_busnum=+0xd8(+0x10($arg1)):u8 "
+        "pdev_domain=+0xdc(+0x10($arg1)):s32 pdev_devfn=+0x38($arg1):u32 "
+        "pdev_vendor=+0x3c($arg1):u16 pdev_device=+0x3e($arg1):u16 "
+        "pdev_class=+0x44($arg1):u32 retval=$retval:s32",
+        "r:s2lab_test/d3cold_device_ret __pci_host_common_d3cold_possible "
+        "pdev_state=+0xa8($arg1):u32 pdev_busnum=+0xd8(+0x10($arg1)):u8 "
+        "pdev_domain=+0xdc(+0x10($arg1)):s32 pdev_devfn=+0x38($arg1):u32 "
+        "pdev_vendor=+0x3c($arg1):u16 pdev_device=+0x3e($arg1):u16 "
+        "pdev_class=+0x44($arg1):u32 retval=$retval:s32",
+    )
+    assert pcie_d3cold_probe_fields() == (
+        "pdev_state=+0xa8($arg1):u32 pdev_busnum=+0xd8(+0x10($arg1)):u8 "
+        "pdev_domain=+0xdc(+0x10($arg1)):s32 pdev_devfn=+0x38($arg1):u32 "
+        "pdev_vendor=+0x3c($arg1):u16 pdev_device=+0x3e($arg1):u16 "
+        "pdev_class=+0x44($arg1):u32"
     )
     assert trace_pcie_event_filter(
         "interconnect:icc_set_bw", "field:__data_loc char[] dev;\n"
