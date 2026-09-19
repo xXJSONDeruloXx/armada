@@ -786,11 +786,9 @@ def trace_pcie_event_filter(event: str, format_text: Optional[str]) -> Optional[
         return None
     if not format_text or not re.search(r"^\s*field:[^\n]*\b%s;" % re.escape(field), format_text, re.MULTILINE):
         raise LabError("PCIe trace event lacks the expected %s field: %s" % (field, event))
-    devices = (
-        ("1c00000.pcie", "0000:00:00.0", "0000:01:00.0")
-        if field == "device"
-        else ("1c00000.pcie",)
-    )
+    if field == "dev":
+        return None
+    devices = ("1c00000.pcie", "0000:00:00.0", "0000:01:00.0")
     return " || ".join('%s == "%s"' % (field, device) for device in devices)
 
 
@@ -4764,7 +4762,7 @@ def self_test() -> int:
     )
     assert trace_pcie_event_filter(
         "interconnect:icc_set_bw", "field:__data_loc char[] dev;\n"
-    ) == 'dev == "1c00000.pcie"'
+    ) is None
     assert trace_pcie_event_filter(
         "power:device_pm_callback_start", "field:__data_loc char[] device;\n"
     ) == 'device == "1c00000.pcie" || device == "0000:00:00.0" || device == "0000:01:00.0"'
