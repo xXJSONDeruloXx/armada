@@ -5098,3 +5098,60 @@ wording is superseded, not an additional firmware difference.
 No device state changed. Next resolve the entry's `__fixups__` target and look
 for a safe way to establish the selected/merged DT without rebooting away from
 the current Linux access path. Do not repeat the closed stats-offset probe.
+
+### 2026-09-19 22:23 UTC — Android PCIe noirq ordering separates two suspend paths
+
+Resolved entry 51's overlay target fixup: `__fixups__.pcie1` patches
+`/fragment@30:target:0`, whose `target` word is otherwise `0xffffffff`. The
+base-DT symbol path for `pcie1` is not present in the available device-tree
+checkout. The overlay also has a second pcie1 target fixup at `fragment@32`;
+the L1SS and `qcom,no-client-based-bw-voting` additions are specifically in
+`fragment@30/__overlay__`. The bounded parse is in
+`receipts/2026-09-19-android-dtbo-a-scan.txt`.
+
+The nearby public Android kernel at `Ayn8550Dev/android_kernel_ayn_qcs8550`
+commit `93c5cc6ad1d0b807510cfa0fb1d06f47407881f9` makes the two possible host
+power-down routes and their ordering explicit:
+
+1. `msm_pcie_pm_suspend_noirq()` is attached to the `pci-msm` platform
+   controller driver. If the host is enumerated and `power_on`, the property
+   path polls PARF L1SS bit 8; on success it disables config access, clocks,
+   GDSC, and analog rails, and `qcom_pcie_icc_bw_update(..., 0, 0)` clears the
+   PCIe ICC request. This branch does not assert endpoint PERST or set the PCI
+   function to D3. If link L1SS is not confirmed, it returns without shutting
+   the host down.
+2. The driver separately registers `DECLARE_PCI_FIXUP_SUSPEND_LATE` for
+   Qualcomm PCI devices. For a root-bus PCI device with the link enabled, the
+   fixup calls `msm_pcie_pm_suspend()`: it saves/loads config state, sends
+   PME_TURNOFF, polls L23, selects sleep pins, then calls
+   `msm_pcie_disable()`. Disable sets `power_on=false`, asserts endpoint reset,
+   and disables controller resources. Its `msm_pcie_clk_deinit()` clears the
+   ICC request with `icc_set_bw(..., 0, 0)`.
+
+In this tree, the controller calls `devm_pci_alloc_host_bridge(&pdev->dev)`,
+so the PCI host bridge is a child of the platform device. The root PCI device
+is below that bridge. DPM's noirq parent callback waits for subordinate
+children; `pci_pm_suspend_noirq()` invokes the PCI `SUSPEND_LATE` fixup at its
+end. Therefore, **if the root PCI device is not skipped and its fixup runs**,
+that fixup powers the controller down before the platform noirq callback. The
+latter then sees `power_on=false` and skips its `enumerated && power_on`
+body, so the APSS/L1SS property branch did not produce that cycle. If the root
+PCI device is skipped, the platform callback can still take the APSS/L1SS
+route. This conditional ordering is source-proven; which branch the Android
+run actually took is not.
+
+This revises the earlier shorthand that the APSS/L1SS route was the likely
+Android explanation. The existing Android capture shows the WCN driver
+successfully armed firmware WoW and completed bus suspend, but has no PCIe
+fixup/host callback log. It does not establish which root-port suspend
+callback ran, what D-state the WCN endpoint reported, or whether PME_TURNOFF
+and PERST were used. Do not conflate successful WCN bus suspend with root-port
+or endpoint D3 state.
+
+Relevant public-source line ranges (nearby source only; image kernel
+`5.15.123-android13-8-g697b78910a71-dirty` is not matched to this commit):
+
+- [Android PCIe ICC helper and L1SS property parse](https://github.com/Ayn8550Dev/android_kernel_ayn_qcs8550/blob/93c5cc6ad1d0b807510cfa0fb1d06f47407881f9/drivers/pci/controller/pci-msm.c#L3853-L3905), [property read](https://github.com/Ayn8550Dev/android_kernel_ayn_qcs8550/blob/93c5cc6ad1d0b807510cfa0fb1d06f47407881f9/drivers/pci/controller/pci-msm.c#L7598-L7602)
+- [Android host noirq route](https://github.com/Ayn8550Dev/android_kernel_ayn_qcs8550/blob/93c5cc6ad1d0b807510cfa0fb1d06f47407881f9/drivers/pci/controller/pci-msm.c#L8574-L8728), [resume route](https://github.com/Ayn8550Dev/android_kernel_ayn_qcs8550/blob/93c5cc6ad1d0b807510cfa0fb1d06f47407881f9/drivers/pci/controller/pci-msm.c#L8730-L8876)
+- [Controller platform driver and host bridge allocation](https://github.com/Ayn8550Dev/android_kernel_ayn_qcs8550/blob/93c5cc6ad1d0b807510cfa0fb1d06f47407881f9/drivers/pci/controller/pci-msm.c#L8920-L8933), [root-bus fixup](https://github.com/Ayn8550Dev/android_kernel_ayn_qcs8550/blob/93c5cc6ad1d0b807510cfa0fb1d06f47407881f9/drivers/pci/controller/pci-msm.c#L9420-L9558), [clock teardown removes ICC](https://github.com/Ayn8550Dev/android_kernel_ayn_qcs8550/blob/93c5cc6ad1d0b807510cfa0fb1d06f47407881f9/drivers/pci/controller/pci-msm.c#L4031-L4054)
+- [PCI noirq runs the late fixup](https://github.com/Ayn8550Dev/android_kernel_ayn_qcs8550/blob/93c5cc6ad1d0b807510cfa0fb1d06f47407881f9/drivers/pci/pci-driver.c#L812-L897), [DPM parent waits for child callbacks](https://github.com/Ayn8550Dev/android_kernel_ayn_qcs8550/blob/93c5cc6ad1d0b807510cfa0fb1d06f47407881f9/drivers/base/power/main.c#L1203-L1253), [host bridge parent and root bus hierarchy](https://github.com/Ayn8550Dev/android_kernel_ayn_qcs8550/blob/93c5cc6ad1d0b807510cfa0fb1d06f47407881f9/drivers/pci/probe.c#L623-L635)

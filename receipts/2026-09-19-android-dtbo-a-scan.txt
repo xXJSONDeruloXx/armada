@@ -43,9 +43,10 @@ also contains qcom,no-client-based-bw-voting in the same overlay fragment.
 Index 51's root match data exactly matches the public RP6 Android DT source:
 qcom,msm-id = <603 0x20000> (603 decimal is 0x25b) and
 qcom,board-id = <0x1001f 0>. Its model string says KalamaP HDK. The overlay's
-fragment@30 target is an unresolved phandle placeholder in the blob; its
-__fixups__ mapping and the bootloader's selected-overlay result still need to
-be resolved. This makes index 51 the strongest candidate, not proof that it
+fragment@30's target placeholder is mapped by `__fixups__.pcie1` to the base-DT
+symbol `pcie1`; the base-DT symbol's resolved node path is not in this source
+checkout. The bootloader's selected-overlay result still needs to be
+established. This makes index 51 the strongest candidate, not proof that it
 was selected or that the property was present in the merged runtime DT.
 
 Correction history: the first read of this header reversed dt_entry_count and
