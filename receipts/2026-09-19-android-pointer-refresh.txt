@@ -1,0 +1,79 @@
+Android rooted read-only refresh, 2026-09-19 01:34 UTC
+
+uname -a
+Linux localhost 5.15.123-android13-8-g697b78910a71-dirty #1 SMP PREEMPT Mon Jul 20 10:48:54 UTC 2026 aarch64 Toybox
+
+uname -r
+5.15.123-android13-8-g697b78910a71-dirty
+
+ro.build.fingerprint
+qti/kalama/kalama:13/TKQ1.231222.001/eng.RPN.20260722.081626:user/release-keys
+
+ro.product.device
+kalama
+
+ro.boot.slot_suffix
+_a
+
+relevant kernel config
+CONFIG_MODULE_UNLOAD=y
+CONFIG_MODVERSIONS=y
+CONFIG_MODULE_SIG=y
+# CONFIG_MODULE_SIG_FORCE is not set
+CONFIG_MODULE_SIG_ALL=y
+CONFIG_KALLSYMS=y
+CONFIG_KALLSYMS_ALL=y
+CONFIG_KPROBES=y
+CONFIG_DEBUG_FS=y
+CONFIG_KPROBE_EVENTS=y
+
+platform driver
+/sys/bus/platform/devices/c3f0000.soc-sleep-stats -> /sys/bus/platform/drivers/soc_sleep_stats
+
+device-tree compatible
+qcom,rpmh-sleep-stats
+
+device-tree reg bytes
+0c 3f 00 00 00 00 04 00
+
+decoded resource
+start=0x0c3f0000 size=0x400 end_inclusive=0x0c3f03ff
+
+module paths
+/vendor_dlkm/lib/modules/soc_sleep_stats.ko
+/vendor_dlkm/lib/modules/subsystem_sleep_stats.ko
+/vendor_dlkm/lib/modules/sys_pm_vx.ko
+
+holders/refcounts
+soc_sleep_stats: refcnt=1 holder=subsystem_sleep_stats
+subsystem_sleep_stats: refcnt=1 holder=sys_pm_vx
+sys_pm_vx: refcnt=0
+
+vermagic (embedded in each stock module)
+5.15.123-g697b78910a71-dirty SMP preempt mod_unload modversions aarch64
+
+stock module SHA-256
+b7a72e68683fa64f46003f04556ab95ad41fc77a5b5d1eb0fb1296df6c7da22a  soc_sleep_stats.ko
+92c69e7b5181abca9998cd76d4401cdd56e3cb4304151d3198eb0bb27a9cad85  subsystem_sleep_stats.ko
+60783c435d0ac12b778579541b8c717b222406d4e0d43698c3fd7fece8870d57  sys_pm_vx.ko
+
+source path embedded in soc_sleep_stats.ko strings
+/home/liuwen/q9ex/VENDOR.13.2.6/kernel_platform/msm-kernel/drivers/soc/qcom/soc_sleep_stats.c
+
+pointer-word values from the existing stock-driver kprobe receipt
+resource+0x4  = 0x000f0048
+resource+0x1c = 0x000f00b8
+
+normal-driver signature values in the same receipt
+0x64736f61  aosd
+0x64737863  cxsd
+0x20726464  ddr
+0xa1157a75  DDR magic
+
+normalized bases
+0x0c3f0000 | 0x000f0048 = 0x0c3f0048  (offset +0x48)
+0x0c3f0000 | 0x000f00b8 = 0x0c3f00b8  (offset +0xb8)
+
+No module, kernel, DT, boot, trace, or persistent setting was changed during
+this refresh. The pointer words and signatures are from the earlier bounded
+stock-driver kprobe receipt at receipts/2026-09-19-soc-sleep-kprobe-values.txt.
