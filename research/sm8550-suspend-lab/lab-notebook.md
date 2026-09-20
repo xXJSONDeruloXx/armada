@@ -6616,6 +6616,27 @@ staging. I have not pulled it; first budget the unpacked storage so the build
 does not crowd the live device. No deployment changed. Details are in the
 [bootc base/space receipt](receipts/2026-09-20-bootc-base-and-space.md).
 
+### 2026-09-20 15:06 UTC — bootc apply and Nova boot-image rollback path verified
+
+Read-only inspection confirmed that bootc switch --download-only can stage
+the local image without rebooting, while --from-downloaded --apply reboots
+immediately. Armada's shutdown unit rebuilds the next deployment's ABL
+/KERNEL from its kernel, initramfs, and supported DTBs. Before boot, its
+startup path snapshots the currently stamped /KERNEL to KERNEL.BAK. The
+current /KERNEL and KERNEL.BAK are identical at SHA-256
+0b0d7c03a88e77c480ad31d145a6718916638ba62287ff5a2b427c0f75475000, so a
+known-good image is present now.
+
+That startup snapshot would replace the old backup with the candidate after a
+successful candidate boot. The temporary image must therefore include a
+systemd drop-in that clears only the --snapshot-prev argument while keeping
+the updater check and shutdown updater. The existing armada-bootimg-finalize
+rollback only covers failure to regenerate /KERNEL; neither it nor the
+initramfs remapper proves automatic recovery from a kernel hang. The backup is
+a manual recovery path if SSH does not return. No deployment or ESP file was
+changed. Full facts and source references are in the
+[bootimg-recovery-path.md](receipts/2026-09-20-bootimg-recovery-path.md).
+
 ### 2026-09-20 14:52 UTC — Linux SSH is available; matching-config rebuild is active
 
 The user confirmed Armada Linux is Nova's default boot; if the device is on
