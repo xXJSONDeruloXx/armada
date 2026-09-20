@@ -6,7 +6,7 @@ the chronological record, including failed runs and superseded interpretations.
 Update this page when a checklist item changes; put raw output in a dated
 receipt and explain the result in the notebook.
 
-Status as of 2026-09-20 20:18 UTC. Branch `feat/sm8550-suspend-lab`.
+Status as of 2026-09-20 20:22 UTC. Branch `feat/sm8550-suspend-lab`.
 
 ## Current goal checklist
 
@@ -25,6 +25,8 @@ Status as of 2026-09-20 20:18 UTC. Branch `feat/sm8550-suspend-lab`.
   The image has not been staged or applied.
 - [x] Verify the rollback command reboots into the previous deployment and
   that the automatic bootc update timer is masked on the device.
+- [x] Check Linux-visible USB, EFI, and watchdog surfaces for a remote
+  early-boot recovery route; none is currently exposed.
 - [ ] Explain the previous candidate boot's missing SSH observation and
   establish recovery for failures before systemd. Do not boot the candidate
   or run another suspend A/B until this gate is met.
@@ -67,6 +69,13 @@ so it will not automatically undo the rollback during a test. The attached
 independent boot-control channel. The host reports no ADB or fastboot device;
 the Linux UDC exists but no USB gadget configuration is mounted. This adds no
 recovery path for a kernel/initramfs failure before systemd.
+
+At 20:22 UTC, the Linux host still exposes no ADB/fastboot device, `bootctl`
+reports “Not booted with EFI,” and both `/dev/watchdog*` and
+`/sys/class/watchdog` are absent/empty. The ESP contents could not be inspected
+as the SSH user lacks permission and passwordless sudo is unavailable; no
+bootloader fallback control was changed or assumed. This does not establish a
+pre-systemd rescue path.
 
 Before rebooting from Android to Linux, I reasserted `adb_wifi_enabled=1` and
 `persist.adb.tls_server.enable=1`; legacy TCP ADB remained unset. This booted

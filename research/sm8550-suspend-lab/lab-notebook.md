@@ -7116,3 +7116,19 @@ systemd can start the five-minute timer, and no independent reset/boot control
 is currently available remotely. The guarded OPP image remains unstaged.
 
 No suspend, reboot, update, storage write, or boot-order change was performed.
+
+### 2026-09-20 20:22 UTC — Linux exposes no remote early-boot rescue control
+
+Checked the currently running Linux boot's command line and recovery-facing
+interfaces. `bootctl status` reports “Not booted with EFI”; no EFI variables
+were visible, `/dev/watchdog*` is absent, and `/sys/class/watchdog` is empty.
+The host's `adb devices -l` and `fastboot devices` lists are empty. This
+confirms that the present Linux userspace does not expose an independent
+remote boot selector or watchdog device that can be relied on for a failed
+pre-systemd candidate boot.
+
+The SSH user cannot read the ESP and passwordless sudo is unavailable, so this
+check did not inspect ABL/ESP boot policy. No attempt was made to change
+bootloader settings. Current boot ID, kernel, deployment, and boot order remain
+stock and unchanged; the diagnostic image remains unstaged. The rollback
+timer only closes the post-systemd/network failure case.
