@@ -6,11 +6,11 @@ the chronological record, including failed runs and superseded interpretations.
 Update this page when a checklist item changes; put raw output in a dated
 receipt and explain the result in the notebook.
 
-Status as of 2026-09-20 00:18 UTC. Repository branch
-`feat/sm8550-suspend-lab`, pushed tip `7ccf2b52bdcebe32f5bc145f937238f5b4449a99`.
-The current local work adds a read-only ICC attribution profile and is not yet
-committed or pushed. The user supplied anchor `054766d5...` is an earlier
-commit; work continues from the newer pushed tip.
+Status as of 2026-09-20 00:30 UTC. Repository branch
+`feat/sm8550-suspend-lab`. The read-only ICC attribution profile and tests are
+committed on this branch; the latest public Android PCIe-source review is
+recorded below and in the chronological notebook. The user supplied anchor
+`054766d5...` is an earlier commit; work continues from the newer branch tip.
 
 ## Current objective
 
@@ -45,6 +45,7 @@ open until measured.
 | Observed | The PCIe host's D3cold eligibility check fails on Qualcomm root port `0000:00:00.0` (`17cb:0113`) in `PCI_UNKNOWN`. Binding `pcieport` after a temporary boot-argument test did not change that result or clear the zero counters. Original `pcie_ports=compat` was restored. |
 | Correlation | PCIe consumer pre-suspend peak requests of 500,000 and 1,000,000 kB/s coincide with MC0/SH0 SLEEP words encoding 476 and 952. Wi-Fi-off removed one 476 component in a prior matched run, but other clients also differ. Do not assign the whole floor to PCIe yet. |
 | Source, public match only | Available Android source `Ayn8550Dev/android_kernel_ayn_qcs8550` at `93c5cc6...` has a Qualcomm `pci-msm.c` noirq path gated by `qcom,apss-based-l1ss-sleep`. When selected and L1SS is confirmed, it disables config access, host clocks/GDSC/analog rails, and clears its ICC request; it does not set root-port or endpoint D3 state in that branch. Android logs confirm WCN/WoW bus-suspend success, not the endpoint's PCI power state. Running Android reported `g697b78910a71-dirty`, not matched to this public commit. |
+| Source, public match only | The same `pci-msm.c` parses `qcom,no-client-based-bw-voting`. When true, its PCIe helper votes average bandwidth as `link_speed_bandwidth * link_width` with no peak vote; otherwise it uses fixed average/peak constants. This is a different vote shape from Armada's observed `avg=0, peak=500000`, even if a link-speed calculation yields the same scalar. Both known host-off paths clear the request: the APSS/L1SS noirq path calls `icc_set_bw(..., 0, 0)`, and the root-bus suspend-late route reaches `msm_pcie_clk_deinit()`, which also clears it. Thus Android's overlay property changes the steady-state vote form but does not imply the vote is kept in suspend. Actual runtime DT/path remain unknown. [Property and helper](https://github.com/Ayn8550Dev/android_kernel_ayn_qcs8550/blob/93c5cc6ad1d0b807510cfa0fb1d06f47407881f9/drivers/pci/controller/pci-msm.c#L3853-L3905), [property read](https://github.com/Ayn8550Dev/android_kernel_ayn_qcs8550/blob/93c5cc6ad1d0b807510cfa0fb1d06f47407881f9/drivers/pci/controller/pci-msm.c#L7598-L7603), [L1SS vote clear](https://github.com/Ayn8550Dev/android_kernel_ayn_qcs8550/blob/93c5cc6ad1d0b807510cfa0fb1d06f47407881f9/drivers/pci/controller/pci-msm.c#L8645-L8665), [root teardown vote clear](https://github.com/Ayn8550Dev/android_kernel_ayn_qcs8550/blob/93c5cc6ad1d0b807510cfa0fb1d06f47407881f9/drivers/pci/controller/pci-msm.c#L4031-L4050). |
 | Observed, read-only Android DTBO | `dtbo_a` is a standard table with `dt_entry_size=32`, `dt_entry_count=56`. Seven entries contain the zero-length L1SS property. Entry 51 (`0xb71079`, size 378,507) has root IDs `<0x25b 0x20000>` and `<0x1001f 0>`, matching the public RP6 DT source IDs; its model label is KalamaP HDK. Its `fragment@30` adds both `qcom,apss-based-l1ss-sleep` and `qcom,no-client-based-bw-voting`; `__fixups__.pcie1` points that fragment's `target` at base-DT symbol `pcie1`. The base symbol path and runtime selection remain unproven. See `receipts/2026-09-19-android-dtbo-a-scan.txt`. The earlier 32-by-56 interpretation was a field-order mistake and is superseded. |
 | Source, Android DT selection unresolved | Entry 51 is the strongest RP6 candidate by matching public SoC/board IDs, but matching IDs do not prove ABL selected it for the observed run. Its `fragment@30` target fixup, exact ABL overlay-selection behavior, and merged runtime DT remain to be verified. The public RP6 overlay source does not itself declare the L1SS property. |
 | Source, two Android PCIe suspend hooks | The nearby public driver has both a host-platform `suspend_noirq` path gated by `qcom,apss-based-l1ss-sleep` and a root-PCI-device `SUSPEND_LATE` fixup. Source ordering puts the root PCI device's noirq fixup before its parent host-platform callback: the host bridge is allocated as a child of the PCIe platform device, and DPM makes a parent wait for children. If the fixup runs, it calls PME_TURNOFF/L23, then `msm_pcie_disable()`; `msm_pcie_clk_deinit()` clears the ICC vote and `msm_pcie_disable()` sets `power_on=false`, so the later host callback skips its `enumerated && power_on` body, including APSS/L1SS logic. If the root PCI device is skipped, the host callback may take the APSS/L1SS path instead. The public source proves the ordering and conditions, not which runtime branch executed on this build. |
@@ -53,7 +54,7 @@ open until measured.
 | Observed, source mapping | Mainline SM8550 maps BCM MC0 to EBI and SH0 to LLCC. Replaying the exact v7.2.3 aggregation formula against the 19:03 awake snapshot predicts MC0/SH0 `vote_x=525, vote_y=2034`; the captured SLEEP TCS instead has `vote_x=0, vote_y=952` (`0x600003b8`). GPU, UFS, and display requests change before that TCS; PCIe has no corresponding update. The awake summary is therefore not the final SLEEP-bucket input and cannot prove the exact client contribution. |
 | Observed/source | `interconnect_summary` includes each request's current tag and bandwidth, while `icc_set_bw` tracepoints omit request tags and enabled state. The suspend trace records several client bandwidth changes before SLEEP staging. Exact final per-request SLEEP membership is still unknown; a pre-suspend-only attribution calculator would be misleading. |
 | Source, Linux v7.2.3 | `icc_summary_show()` and `aggregate_requests()` both traverse the node's `req_list` using the same hlist iteration order. The qcom RPMh provider callback receives each request's tag/avg/peak before the core `icc_set_bw` tracepoint reports the node aggregate. This provides a source-grounded way to attach callback inputs to the fresh request list, with the generic aggregate tracepoint as a cross-check. Sources: [summary traversal](https://github.com/gregkh/linux/blob/v7.2.3/drivers/interconnect/core.c#L48-L69), [aggregate traversal](https://github.com/gregkh/linux/blob/v7.2.3/drivers/interconnect/core.c#L255-L283), [ICC update tracepoints](https://github.com/gregkh/linux/blob/v7.2.3/drivers/interconnect/core.c#L673-L720), [qcom RPMh aggregate](https://github.com/gregkh/linux/blob/v7.2.3/drivers/interconnect/qcom/icc-rpmh.c#L69-L104). |
-| Harness work, local only | A new `icc-attribution` trace profile captures per-request qcom aggregation inputs for EBI/LLCC, checks the request-list/tag order and trace loss, verifies sums/maxima against `icc_set_bw`, and records the observed Apps-RSC SLEEP command group. It checks command-index continuity but cannot prove firmware acceptance. It is guarded by the inspected 7.2.3 release/BTF hash and reports unresolved instead of assigning clients when checks fail. Unit/smoke tests pass; it has not run on the device. No votes, kernel behavior, or power policy changed. |
+| Harness, pushed / live unverified | Commit `ff1a541` adds `icc-attribution`: it captures per-request qcom aggregation inputs for EBI/LLCC, checks request-list/tag order and trace loss, verifies sums/maxima against `icc_set_bw`, and records the observed Apps-RSC SLEEP command group. It checks command-index continuity but cannot prove firmware acceptance. It is guarded by the inspected 7.2.3 release/BTF hash and reports unresolved instead of assigning clients when checks fail. Unit/smoke tests pass; it has not run on the device. No votes, kernel behavior, or power policy changed. |
 | Observed/source | Android SLEEP TCS contains LDOE1/LDOE3 sleep-context commands. Mainline qcom-rpmh-regulator currently submits ACTIVE_ONLY requests and does not provide an equivalent sleep-context API. The awake regulator summary does not show what firmware applies in suspend. |
 | Source, Armada DT | For Nova, LDOE1 (`vreg_l1e_0p88`) supplies PCIe PHY, DSI0 PHY, and USB HS PHY. LDOE3 (`vreg_l3e_1p2`) supplies DSI0, PCIe PHY PLL, UFS PHY PLL, USB HS PHY, and USB/DP QMP PHY. RP6 disables DSI1. These consumers make a blanket rail-off change unsafe to infer from the TCS alone. |
 | Unknown | Which of the seven Android DTBO candidate overlays were selected and whether the observed run used the APSS/L1SS branch; ordering of the host noirq callback versus the PCI suspend-late fixup; which root-port/endpoint power states and wake path it reached; exact matching Android source/build and merged runtime DT; final sleep-bucket per-client contributions to each BCM value; which LDOE consumers may be changed safely at sleep; whether any one request difference causes the counter difference. |
@@ -61,10 +62,11 @@ open until measured.
 ## Current hypothesis ranking and decision
 
 1. **PCIe/other ICC sleep requests remain active.** This has the strongest
-   direct support: Armada's Qualcomm root port fails D3cold eligibility, the
-   controller does not reach its normal noirq teardown, and its bandwidth
-   request correlates with the MC0/SH0 floors. The exact final SLEEP-bucket
-   clients are still unmeasured, so this is not yet causal proof.
+   direct support: the nearby Android driver clears its PCIe ICC request in
+   both source-visible host-off routes, while Armada's D3cold veto returns
+   before equivalent host teardown and its bandwidth request correlates with
+   the MC0/SH0 floors. The exact Android route/build and final Armada
+   SLEEP-bucket client list remain unverified, so this is not yet causal proof.
 2. **Android's broader BCM request set changes shared fabric sleep state.** The
    captured Android and Armada TCS command sets differ substantially, but a
    staged request is not proof the AOP accepted it, and multiple resources
@@ -87,6 +89,10 @@ BCM/regulator request differences before choosing one variable.
 - [x] Inspect the public `pci-msm.c` implementation and the RP6 Android DT
   overlay; mark their applicability provisional where the actual vendor base
   DT/build is missing.
+- [x] Resolve the nearby public driver's `qcom,no-client-based-bw-voting`
+  behavior: it changes the link-speed vote form, while both source-visible
+  host-off routes clear the PCIe ICC request. Do not assume this property
+  suppresses suspend bandwidth votes or proves the runtime route.
 - [x] Read the Android slot `_a` DTBO partition without changing device state;
   parse its standard 32-byte entries and identify the seven property-bearing
   overlays. Entry 51 matches the public RP6 SoC/board IDs.

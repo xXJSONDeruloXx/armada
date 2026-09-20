@@ -5202,3 +5202,37 @@ test is one 10-second direct-deep run with Wi-Fi/Bluetooth preserved and
 [investigation-status.md](investigation-status.md). If the profile fails any
 guard, keep the floor attribution unresolved; do not infer a client from the
 awake snapshot or change a vote.
+
+### 2026-09-20 00:26 UTC — Android PCIe DT bandwidth property is handled; both host-off routes clear ICC
+
+Correction to the quick web-page source inspection: GitHub's rendered code
+search did not expose the `qcom,no-client-based-bw-voting` handler. I checked
+the actual sparse checkout of the exact nearby public commit
+`93c5cc6ad1d0b807510cfa0fb1d06f47407881f9` and found the property read in
+`pci-msm.c`. It is not ignored in that source. With the property set,
+`qcom_pcie_icc_bw_update()` converts the link-speed table times link width into
+an average vote and sets peak to zero; otherwise it uses fixed average/peak
+constants. At suspend, `speed == 0` clears either form with `icc_set_bw(0,0)`.
+
+More significantly, each source-visible Android host-off route clears the
+PCIe request: the APSS/L1SS noirq path calls the zero vote directly, and the
+root-bus suspend-late fixup disables the controller through
+`msm_pcie_clk_deinit()`, which also clears the vote. This makes a retained
+Armada PCIe request a stronger request-generation explanation: Linux's
+D3cold eligibility veto returns before host teardown, and Armada 0513 leaves
+the active deep OPP in that path. The observed 500,000/1,000,000 kB/s to
+476/952 MC0/SH0 association remains correlation until the new live callback
+profile attributes the final SLEEP inputs; even exact attribution would not
+alone prove that the vote blocks AOSD/CXSD/DDR residency.
+
+Source links (nearby public Android source, not matched to the running
+`g697b78910a71-dirty` kernel): [ICC vote helper](https://github.com/Ayn8550Dev/android_kernel_ayn_qcs8550/blob/93c5cc6ad1d0b807510cfa0fb1d06f47407881f9/drivers/pci/controller/pci-msm.c#L3853-L3905),
+[DT property parsing](https://github.com/Ayn8550Dev/android_kernel_ayn_qcs8550/blob/93c5cc6ad1d0b807510cfa0fb1d06f47407881f9/drivers/pci/controller/pci-msm.c#L7598-L7603),
+[L1SS host path clears ICC](https://github.com/Ayn8550Dev/android_kernel_ayn_qcs8550/blob/93c5cc6ad1d0b807510cfa0fb1d06f47407881f9/drivers/pci/controller/pci-msm.c#L8645-L8665),
+[controller teardown clears ICC](https://github.com/Ayn8550Dev/android_kernel_ayn_qcs8550/blob/93c5cc6ad1d0b807510cfa0fb1d06f47407881f9/drivers/pci/controller/pci-msm.c#L4031-L4050).
+
+No runtime path selection, device test, kernel build, or behavior change
+occurred. The source result refines the leading hypothesis but does not justify
+forcing D3hot/D3cold, dropping the active vote manually, or changing shared
+regulators. Need the device back on Armada for the read-only attribution run;
+the exact Android source/build and selected DT overlay are still open.
