@@ -7452,3 +7452,27 @@ suspend state was changed. This guard improves early timer coverage but does
 not close the recovery gap, so the PCIe OPP candidate remains un-staged. Full
 build and verification details are in the
 [`early-target guard receipt`](receipts/2026-09-20-initrd-guard-early-target-build.md).
+
+### 2026-09-20 22:58 UTC — Android WCN wake evidence boundary
+
+Re-read the saved rooted-Android suspend excerpt before deciding whether the
+LDOE sleep-only requests can be considered safe. In its first suspend attempt,
+the WLAN driver reports firmware WoW enabled and bus suspend succeeded; HIF
+IRQ 324 is logged shortly before suspend aborts, while the kernel reports
+`[timerfd]` as an active/pending wakeup-source label. The earlier eventpoll
+source audit shows this label can name an `EPOLLWAKEUP` source for an
+epoll-watched timerfd; it does not prove timer expiration or identify the
+abort cause. WLAN resumes and logs a wake packet. In the following attempt,
+WLAN again arms system WoW and suspends its bus; the kernel takes secondary
+CPUs offline, then reports `pm8xxx_rtc_alarm` as the wake source. These events
+are preserved at lines 1-4, 19-41, and 56-101 of
+[`android-icc-suspend-excerpt.txt`](../../receipts/2026-09-19-android-deep-rpmh/android-icc-suspend-excerpt.txt).
+
+This proves the Android WCN suspend preparation and WoW enable sequence ran,
+and that an HIF wake IRQ was logged during an incomplete attempt. It does not
+establish that the HIF IRQ caused the abort or that Wi-Fi can wake the device
+from the completed deep interval or after LDOE1/LDOE3 were physically disabled.
+The successful deep entry woke by RTC; no matching per-device UFS, USB, DSI,
+or DP suspend/wake record is in the preserved excerpt. Keep shared-rail wake
+safety open and do not infer it from the staged RPMh requests. See the
+[`Android WCN wake evidence boundary receipt`](../../receipts/2026-09-20-android-wcn-wake-evidence-boundary.md).
