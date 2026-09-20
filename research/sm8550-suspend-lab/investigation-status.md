@@ -6,7 +6,7 @@ the chronological record, including failed runs and superseded interpretations.
 Update this page when a checklist item changes; put raw output in a dated
 receipt and explain the result in the notebook.
 
-Status as of 2026-09-20 13:27 UTC. Branch `feat/sm8550-suspend-lab`.
+Status as of 2026-09-20 13:45 UTC. Branch `feat/sm8550-suspend-lab`.
 
 The sleep-stats offset question is closed: Android and Armada both resolve the
 SM8550 records at `+0x48` and `+0xb8`. Android's successful deep path advances
@@ -17,22 +17,25 @@ correlate: Linux leaves 500,000 or 1,000,000 kB/s requested when PCI D3cold
 eligibility vetoes host teardown. Correlation is not causation.
 
 The preferred first A/B is still a test-only module that stages only the
-Android MC4/SH5 request pair. The first insertion attempt was safely rejected
-before module init because its `struct module` section was 1216 bytes while
-the running kernel expects 1280 bytes. Live BTF and config show that
-`CONFIG_DEBUG_INFO_BTF_MODULES=y`; local `make modules_prepare` normalized it
-off, removing four fields and causing the size mismatch. Do not retry that
-artifact. Rebuild with the live BTF-module setting restored and compare the
-relevant ABI layouts before another load. The failure receipt records the
-exact error and evidence.
+Android MC4/SH5 request pair. The first artifact was safely rejected before
+module init because its `struct module` section was 1216 bytes instead of the
+running kernel's 1280. After restoring BTF-module config, the rebuilt module's
+section is `0x500` (1280 bytes), matching a shipped module, and its relevant
+struct layouts and API prototypes match live BTF. The corrected hash is
+`548d9244a327cc16ba04d2ad644a0b87b08660dfd37e8db5144e07a0065eda2f`; it has
+not yet been copied to the device. Exact source/image identity is not fully
+proven, and `CONFIG_MODVERSIONS` is disabled. The failure and rebuild receipts
+record the checks.
 
-The probe is in `/tmp` only, not loaded or installed. It staged no RPMh
-requests and no suspend was attempted. Nova Linux remains awake on kernel
+Only the rejected artifact is in `/tmp`; it is not loaded or installed. It
+staged no RPMh requests and no suspend was attempted. The corrected artifact
+exists only in the host build directory. Nova Linux remains awake on kernel
 `7.2.3`, image `20260915.feca679`, with Wi-Fi/SSH healthy and the same boot ID;
 no boot deployment or device configuration changed. The earlier source, API,
 CMD-DB, RPMh, and `tcs_cmd` checks remain useful but did not cover the module
-container layout. `CONFIG_MODVERSIONS` is off, so matching vermagic is not an
-ABI guarantee.
+container layout. BTF validation is enabled and mismatch is not allowed, so the
+kernel can reject a base-type mismatch before module init; this complements but
+does not replace the missing symbol-version CRC checks.
 
 The exact Android source commit remains unidentified; runtime claims are
 anchored by hash-matched binaries, live DT, and traces, with nearby public
@@ -61,10 +64,11 @@ is isolated. Details and trace hash are in
 
 Determine why Linux's successful deep path does not advance the same firmware
 residency counters as Android. The MC4/SH5 request-pair A/B remains the
-smallest selected variable, but the first module artifact failed the loader's
-struct-size ABI gate. First rebuild with BTF-module fields enabled and compare
-the probe's relevant ABI against live BTF. Do not attempt another insertion or
-suspend until that gate passes.
+smallest selected variable. The first artifact failed the loader's struct-size
+gate; the corrected build now matches the runtime module size and relevant
+live BTF layouts/prototypes. The next step is one insertion attempt with that
+exact hash. Do not suspend unless init logs confirm both CMD-DB addresses and
+both RPMh contexts were queued.
 
 ## Closed question: sleep-stat offsets
 
@@ -88,6 +92,7 @@ open until measured.
 |---|---|
 | Observed, exact Android binary + live DT | The exact A-slot `dcvs_fp.ko` (`vermagic` `5.15.123-g697b78910a71-dirty`, live `scmversion` matches) is bound to `/soc/apps_rsc@17a00000/drv@2/qcom,dcvs-fp`. Its live properties select `qcom,ddr-bcm-name=MC4` and `qcom,llcc-bcm-name=SH5`; the module disassembly reads the names through CMD-DB, then submits two RPMh commands in SLEEP and WAKE_ONLY contexts during probe. This identifies the software producer of the MC4/SH5 commands in Android's successful TCS capture. It does not show firmware acceptance by itself or establish that these two votes cause residency. Receipt: `../../receipts/2026-09-20-android-dcvs-fp-binary-and-dt.md`. |
 | Observed, live Linux module ABI gate | The probe's first `insmod` was rejected before init: `.gnu.linkonce.this_module` is 1216 bytes, while live BTF says `struct module` is 1280 bytes. The rejected object omits four fields gated by `CONFIG_DEBUG_INFO_BTF_MODULES`; this option is enabled live but was normalized off by local `make modules_prepare`. No RPMh requests were issued and no suspend was run. The module must be rebuilt and its relevant ABI checked before a retry. Receipt: `../../receipts/2026-09-20-rpmh-dcvs-pair-insertion-failure.md`. |
+| Observed, corrected module static gate | Re-enabling `CONFIG_DEBUG_INFO_BTF_MODULES` and cleaning before rebuild produced `.gnu.linkonce.this_module=0x500` (1280 bytes), equal to a shipped module. Live BTF and module DWARF layouts match for `module`, `device`, `bus_type`, and `tcs_cmd`; canonical function signatures match for the RPMh/CMD-DB and device-bus APIs used. The artifact remains host-only. Exact build identity is not proven and live `CONFIG_MODVERSIONS` is disabled. Receipt: `../../receipts/2026-09-20-rpmh-dcvs-pair-btf-rebuild.md`. |
 | Source + live Linux, mainline v7.2.3 RPMh interface | Mainline lacks Android `dcvs_fp` and its active fast-path APIs, but exports `cmd_db_read_addr()` and `rpmh_write_async()`; SLEEP/WAKE requests are cached and flushed by `rpmh-rsc` before low-power entry. Live Nova Linux has `17a00000.rsc` (`qcom,rpmh-rsc`, `qcom,drv-id=<2>`) with bound child `17a00000.rsc:regulators-0` directly beneath it. A test module can reuse that existing child as the API client, so no DT overlay is needed. Live config has `CONFIG_DEBUG_INFO_BTF=y`, `CONFIG_DEBUG_INFO_BTF_MODULES=y`, and `CONFIG_MODVERSIONS` disabled. Matching vermagic and one API type were insufficient to load the first build. |
 | Observed, live Android merged DT | Runtime model is KalamaP HDK with IDs matching the public Nova DTBO candidate. Active WCN is under `pcie@1c00000`, has `qcom,drv-name=lpass`, and lacks `qcom,apss-based-l1ss-sleep`, `qcom,no-client-based-bw-voting`, and `qcom,pcie-switch-type`; pcie1 is disabled. The exact successful mode-0 trace, combined with the absent switch-type property/default 0, establishes the connected-DRV branch and connected flag for that run. The `qcom,drv-supported` fallback and exact runtime DT are in `../../receipts/2026-09-20-android-live-runtime.md`; callback and module identity evidence is in `../../receipts/2026-09-20-android-live-pcie-validation.md`. |
 | Observed, earlier Android suspend attempts | Before the successful capture below, this boot had `success=0`, `fail=3`. One natural attempt logged WLAN bus-suspend success then a `NETLINK` abort. Direct `rtcwake -m mem` returned `EBUSY`; its alarm was cleared. A later unarmed `forceSuspend()` returned false. The short s2idle intervals around those attempts remain unattributed. Do not repeat direct `rtcwake -m mem` or call forceSuspend before a verified RTC alarm. Receipt: `../../receipts/2026-09-20-android-live-runtime.md`. |
@@ -336,11 +341,12 @@ PCI D-state, or infer safe D3 support from `d3cold_allowed=1` alone.
   it before init because its `this_module` section was 64 bytes smaller than
   live `struct module`; no RPMh request was staged and no suspend was run.
   See the [failure receipt](../../receipts/2026-09-20-rpmh-dcvs-pair-insertion-failure.md).
-- [ ] Rebuild with `CONFIG_DEBUG_INFO_BTF_MODULES=y`; verify `struct module`
-  size and member offsets plus the probe's relevant API type layouts against
-  live BTF. Do not retry unless these comparisons pass.
+- [x] Rebuild with `CONFIG_DEBUG_INFO_BTF_MODULES=y`; verify `struct module`
+  size/member offsets, the probe's relevant struct layouts, and its API
+  prototypes against live BTF. The corrected artifact remains host-only.
 - [ ] Load the module and verify both SLEEP and WAKE_ONLY requests succeeded.
-  If either fails, do not suspend; reboot immediately if SLEEP was accepted but
+  Copy the corrected hash and verify it on-device first. If insertion, lookup,
+  or either request fails, do not suspend; reboot if SLEEP was accepted but
   WAKE_ONLY failed.
 - [ ] If insertion succeeds, run one 10-second-minimum RTC-woken direct-deep
   A/B with `rpmh-aoss` tracing and capture RPMh command payloads plus residency
@@ -378,14 +384,15 @@ PCI D-state, or infer safe D3 support from `d3cold_allowed=1` alone.
 
 ## Next action
 
-The first module load was rejected by an exact `struct module` size mismatch;
-the four absent BTF metadata fields explain the 64-byte difference. Rebuild the
-probe with the live BTF-module setting, compare its `struct module` and relevant
-API type layouts against live BTF, and verify source/build identity before any
-retry. If that ABI gate passes, load the module once and require its
-`SLEEP_AB` success log before using the 10-second-minimum direct-deep harness
-with `rpmh-aoss` tracing. Otherwise stop without suspending. The failure receipt
-is [here](../../receipts/2026-09-20-rpmh-dcvs-pair-insertion-failure.md).
+Copy the corrected module with SHA-256
+`548d9244a327cc16ba04d2ad644a0b87b08660dfd37e8db5144e07a0065eda2f` to `/tmp`
+and verify the hash on the Nova. Attempt one insertion and check that the
+module loads and logs successful CMD-DB lookups plus SLEEP and WAKE_ONLY
+requests. If insertion or any request fails, do not suspend. If both requests
+succeed, run the 10-second-minimum direct-deep harness with `rpmh-aoss` tracing,
+then reboot the unchanged deployment to clear the cached RPMh pair. Receipts:
+[failed first build](../../receipts/2026-09-20-rpmh-dcvs-pair-insertion-failure.md)
+and [corrected build checks](../../receipts/2026-09-20-rpmh-dcvs-pair-btf-rebuild.md).
 
 The archived Linux trace and host reanalysis remain under
 `.external-research/sm8550-suspend-lab-runs/`; do not edit their raw data.

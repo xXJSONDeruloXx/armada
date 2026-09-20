@@ -6471,3 +6471,35 @@ the compiled `struct module` size/member offsets and the probe's relevant
 kernel API type layouts against live BTF. Do not reload anything until those
 checks pass; `CONFIG_MODVERSIONS` is off, so vermagic cannot protect against
 remaining ABI mismatch.
+
+### 2026-09-20 13:45 UTC — rebuilt probe matches the live module layout
+
+I re-enabled `CONFIG_DEBUG_INFO_BTF` and
+`CONFIG_DEBUG_INFO_BTF_MODULES`, regenerated the module-preparation headers,
+cleaned the out-of-tree module, and rebuilt only the probe. The corrected
+artifact SHA-256 is
+`548d9244a327cc16ba04d2ad644a0b87b08660dfd37e8db5144e07a0065eda2f`; its
+`.gnu.linkonce.this_module` size is `0x500` (1280 bytes), exactly equal to a
+stock device `crypto_engine.ko` and live `struct module` BTF.
+
+Live BTF and the new module agree on `struct module`, `struct device`,
+`struct bus_type`, and `struct tcs_cmd` sizes/member offsets; the RPMh state
+values also match. Canonical live-versus-build-tree BTF signatures match for
+`bus_find_device`, `device_match_name`, `put_device`, `cmd_db_read_addr`, and
+`rpmh_write_async`. The module BTF is built with `.BTF.base`; the 7.2.3 source
+loader relocates module base BTF against live vmlinux BTF and rejects a
+mismatch unless the allow-mismatch option is enabled, which is disabled on the
+device. `CONFIG_MODVERSIONS` remains off, and the local vmlinux build ID differs
+from the running image, so this is a guarded ABI match rather than proof of
+identical source/image identity. The device reports 144 package patches and
+the package `patches/series` has 144 entries; the local build also has the
+separate PCIe OPP diagnostic C/DT edits, which do not affect the probe's API
+types.
+
+The corrected module has not been copied to or loaded on Linux. The failed
+older artifact is still unloaded in `/tmp`; the attempted insertion queued no
+RPMh requests and no suspend ran. The device remains on the same healthy boot.
+Next I will copy the corrected hash, verify it on-device, and try one
+insertion. I will only start the RTC-bounded deep test if init confirms both
+CMD-DB lookups and the SLEEP/WAKE_ONLY requests succeeded. See the [BTF rebuild
+receipt](../../receipts/2026-09-20-rpmh-dcvs-pair-btf-rebuild.md).
