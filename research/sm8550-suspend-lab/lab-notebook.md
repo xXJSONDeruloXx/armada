@@ -6927,3 +6927,56 @@ request for boot-persistent Wireless debugging, the remaining step is to
 install a small Magisk late-start helper once Android is reachable again, then
 verify its setting and TLS listener. Keep legacy TCP ADB disabled. No further
 device change or reboot was made from this check.
+
+### 2026-09-20 19:23 UTC — Android module transplant is not viable; Linux evidence checked
+
+The user asked whether Android's working sleep path could be reused by
+mounting Android or loading its `.ko` files while Armada Linux is running.
+The answer is: reuse the request semantics by porting them to Linux, but do not
+load the Android binaries. Android runs
+`5.15.123-android13-8-g697b78910a71-dirty`; Armada runs `7.2.3`. The exact
+Android `dcvs_fp.ko` is built for 5.15.123 with module-versioning enabled,
+depends on `cmd-db,qcom_rpmh`, and imports vendor-only
+`rpmh_init_fast_path()`/`rpmh_update_fast_path()`. The live Linux symbol table
+has `rpmh_write_async()` but neither fast-path symbol, and Linux's captured
+config does not enable `CONFIG_MODVERSIONS`. Forcing vermagic could not add
+the missing functions or make the kernel ABI compatible.
+
+The current Linux config has `CONFIG_QCOM_RPMH=y`,
+`CONFIG_INTERCONNECT_QCOM=y`, `CONFIG_REGULATOR_QCOM_RPMH=y`,
+`CONFIG_PCIE_QCOM=y`, and `CONFIG_PCIE_DW=y`; these drivers are built into the
+running kernel. The awake read-only snapshot shows the Qualcomm host
+`0000:00:00.0` and WLAN endpoint `0000:01:00.0` both in D0, with
+`d3cold_allowed=1`. The existing rollback timer is disabled. No module was
+loaded, no suspend request or vote was changed, and no reboot or sleep test
+was run. The direct module compatibility check and port alternatives are in
+[Android module reuse analysis](android-module-reuse.md).
+
+The exact Android MC4/SH5 SLEEP/WAKE_ONLY pair has already been reproduced by
+a Linux-native 7.2.3 test module. Its commands appeared in the Apps-RSC trace,
+but AOSD/CXSD/scalar DDR did not advance. That tested subset is insufficient
+alone in the observed run; it does not exclude regulator-context or coordinated
+PCIe/WCN behavior. See the
+[DCVS-pair A/B receipt](receipts/2026-09-20-rpmh-dcvs-pair-ab.md).
+
+I checked retained diagnostics after the candidate boot did not return SSH:
+the persistent journal index has only the pre-candidate boot and the recovered
+stock boot; it has no separate candidate boot ID. Root-read pstore and
+`/var/lib/systemd/pstore` contain no crash record. The user's “Preparing
+Armada” observation therefore remains the only candidate-boot symptom; the
+failure point is still unknown.
+
+The candidate boot image's `ostree=` identifier differs from its staged
+container/OSTree checksum, but that is not evidence of a bad path by itself.
+On the current stock system, `/ostree/boot.0/default/fe4d.../0` is a symlink to
+the actual deployment `ec096...3`, demonstrating that the BLS boot-path key
+and deployment checksum are distinct. The candidate link target was removed
+by rollback and cannot now be checked. The two saved Android boot images have
+the same reported load addresses and page geometry. No source-level boot-image
+defect has been established.
+
+No further live Linux suspend A/B is justified while the diagnostic candidate
+has an unexplained boot failure and its rollback timer is disabled. Keep the
+working stock boot; next resolve boot observability/recovery before staging a
+candidate again. Full findings are in
+[Android module reuse analysis](android-module-reuse.md).

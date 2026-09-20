@@ -6,7 +6,7 @@ the chronological record, including failed runs and superseded interpretations.
 Update this page when a checklist item changes; put raw output in a dated
 receipt and explain the result in the notebook.
 
-Status as of 2026-09-20 18:52 UTC. Branch `feat/sm8550-suspend-lab`.
+Status as of 2026-09-20 19:23 UTC. Branch `feat/sm8550-suspend-lab`.
 
 ## Latest device recovery state
 
@@ -279,6 +279,15 @@ the exact `dcvs_fp` binary/live-DT attribution below. Keep these as separate
 request-generation facts, not proof of why residency advances.
 Detailed extraction, hashes, and ELF offsets: [module receipt](../../receipts/2026-09-20-android-live-rpmh-module-decomp.md).
 
+The Android `.ko` files cannot be loaded into the running 7.2.3 kernel: the
+exact `dcvs_fp.ko` is built for Android 5.15.123, expects `modversions`, and
+imports `rpmh_init_fast_path()`/`rpmh_update_fast_path()`, which are absent
+from Linux. Armada already has its RPMh, qcom regulator, interconnect, and
+Qualcomm PCIe drivers built in. The useful route is to port specific behavior
+to those Linux APIs, not mount or force-load Android modules. The static
+MC4/SH5 subset was already tried with a native 7.2.3 module and was
+insufficient in that run. Details: [Android module reuse analysis](android-module-reuse.md).
+
 ## Current hypothesis ranking and decision
 
 1. **The retained PCIe request is the strongest directly observed Linux-side
@@ -523,10 +532,13 @@ The stock Linux boot is healthy and boot selection is normalized. Next inspect
 the candidate kernel/DT changes and the available boot logs to explain why its
 first deployment did not return SSH; the candidate image is still local and
 can be restaged without a full rebuild. Do not rerun it until a concrete
-recovery/observation plan is ready. The PCIe-MEM OPP A/B remains unrun. For
-persistent Android Wireless debugging, wait until Android is reachable and add
-a Magisk late-start helper rather than editing its unmounted userdata from
-Linux. Do not select **UNINSTALL CFW** in ABL if recovery is needed. See the
+recovery/observation plan is ready. The retained journal has no candidate boot
+ID and pstore is empty, so current Linux cannot identify the stall stage. The
+PCIe-MEM OPP A/B remains unrun. Do not directly load Android modules; port
+behavior against Linux 7.2.3. For persistent Android Wireless debugging, wait
+until Android is reachable and add a Magisk late-start helper rather than
+editing its unmounted userdata from Linux. Do not select **UNINSTALL CFW** in
+ABL if recovery is needed. See the
 [Android rollback receipt](receipts/2026-09-20-android-esp-rollback.md),
 [ABL access notes](receipts/2026-09-20-post-apply-device-reachability.md), and
 completed MC4/SH5 receipt:
