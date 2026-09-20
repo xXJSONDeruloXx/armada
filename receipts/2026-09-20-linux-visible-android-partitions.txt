@@ -1,0 +1,23 @@
+# Android partition inventory from Armada Linux
+
+Captured 2026-09-20 03:25 UTC with read-only `lsblk` and
+`/dev/disk/by-partlabel` listing. No partition was mounted, opened, or written.
+
+Android-relevant labels visible on the device:
+
+```text
+sda14  super             12G
+sda15  vbmeta_system_a    64K
+sda16  vbmeta_system_b    64K
+sde66  boot_a             96M
+sde67  boot_b             96M
+sde68  dtbo_a             24M
+sde69  dtbo_b             24M
+sde75  vendor_boot_a      96M
+sde76  vendor_boot_b      96M
+```
+
+The `super` partition is not mounted as a filesystem. Current Linux is on the
+separate Armada EFI, boot, and root partitions; Wi-Fi SSH remains reachable.
+This may permit read-only inspection of the installed Android vendor images
+without rebooting, if available local tooling can parse their formats.

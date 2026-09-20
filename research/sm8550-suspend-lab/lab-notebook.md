@@ -5517,8 +5517,135 @@ PCI config space; both capability lists start at `0x40`, so this did not reveal
 their PCI PM capability. The `d3cold_allowed` flag alone does not establish
 that D3 is supported or wake-safe. Full output: `../../receipts/2026-09-20-live-pcie-pm-readout.txt`.
 
+After the privileged capability read, a separate read-only check confirmed
+the live `/proc/cmdline` still has `pcie_ports=compat`, the root port is
+enabled but unbound, and WCN7850 is enabled and bound to `ath12k_wifi7_pci`.
+
 No device state changed. The source audit now establishes that an untagged
 Android request would ordinarily belong to SLEEP and that multiple source-
 visible PCIe paths can clear it. The exact Android path is still unknown, and
 the staged-request difference still does not prove the Linux 476 floor blocks
 firmware residency. No behavioral A/B is justified yet.
+
+### 2026-09-20 03:25 UTC — PCI PM capability exists; current compat-mode root veto is software state
+
+The user had authorized device admin access. A one-shot privileged, read-only
+`od` of the two PCI config spaces read 256 bytes each; no configuration was
+written and no service or policy changed. Both root `0000:00:00.0` (`17cb:0113`)
+and WCN7850 `0000:01:00.0` (`17cb:1107`) have a PM capability at `0x40` with
+bytes `01 50 03 c8 08 00`: capability ID `0x01`, next capability `0x50`,
+PMC `0xc803`, PMCSR `0x0008`. Linux v7.2.3's `pci_regs.h` definitions decode
+this as PME supported from D0, D3hot, and D3cold (not D1/D2); PMCSR reports
+D0 and PME enable clear. Both devices' sysfs `power/wakeup` is disabled in
+the current awake state. Raw values: `../../receipts/2026-09-20-live-pcie-pm-capabilities.txt`.
+
+The v7.2.3 PCI core explains the previously observed root-port veto on the
+current boot. `pcie_ports=compat` leaves the root port unbound. In
+`pci_pm_suspend_noirq()`, a device with no PM ops has config saved and jumps
+to `set_unknown`; `pci_pm_set_unknown_state()` changes D0 to `PCI_UNKNOWN`
+because firmware may alter it during suspend. The D3cold walker skips an
+unbound device only if it is also disabled; the root is enabled, so the next
+state check rejects it because it is not D3hot. This matches the captured
+`pdev_state=5` veto and means missing PME/D3 hardware support is not the
+current compat-mode failure. Sources: [PCI noirq fallback](https://github.com/gregkh/linux/blob/v7.2.3/drivers/pci/pci-driver.c#L883-L950),
+[D0-to-unknown fallback](https://github.com/gregkh/linux/blob/v7.2.3/drivers/pci/pci-driver.c#L624-L636),
+[D3cold per-device predicate](https://github.com/gregkh/linux/blob/v7.2.3/drivers/pci/controller/pci-host-common.c#L286-L310),
+[PM capability bits](https://github.com/gregkh/linux/blob/v7.2.3/include/uapi/linux/pci_regs.h#L247-L263).
+
+Important boundary: the earlier one-shot pcieport-binding test also observed
+`PCI_UNKNOWN`. The unbound-device path explains the current `pcie_ports=compat`
+boot but not that bound-port result. A bound bridge can also be required to
+remain in D0 when a child stays in D0; we do not have the contemporaneous
+`skip_bus_pm`/endpoint state needed to confirm that explanation. Do not infer
+that PME support alone makes host shutdown safe. Previous Wi-Fi-off testing
+lowered MC0/SH0 from 952 to 476 but left AOSD/CXSD/DDR at zero, so the PCIe
+request difference remains a request-generation explanation, not a complete
+residency cause. No behavioral change or suspend run was made during this
+read.
+
+### 2026-09-20 03:29 UTC — Android boot and super partitions are available from Linux
+
+Read-only `lsblk` shows the installed Android `super` partition and A/B
+`boot`, `dtbo`, and `vendor_boot` partitions alongside Armada's separate boot
+and root volumes. Android's dynamic `super` partition is not mounted. This
+creates a possible offline route to identify the installed Android build and
+inspect its vendor/WCN modules while keeping the device on Linux. No Android
+partition has been read, mounted, or modified yet. Concise inventory:
+`../../receipts/2026-09-20-linux-visible-android-partitions.txt`.
+
+### 2026-09-20 03:34 UTC — validated the exact A-slot vendor_dlkm extent
+
+Read only the first 256 KiB of `super` and parsed the AOSP v10.2 logical-
+partition metadata. Geometry checksums, all four metadata header checksums,
+and all four table checksums validate. The slot-0 map includes one read-only
+linear `vendor_dlkm_a` extent of 128,798,720 bytes at super sector 10,979,328;
+this is consistent with the Android boot previously reporting slot `_a`. This
+gives a bounded way to inspect the installed CNSS/WCN module without mounting
+or copying the 12 GiB `super` partition. No vendor extent has been read yet.
+Details: `../../receipts/2026-09-20-android-super-layout.txt`.
+
+### 2026-09-20 03:49 UTC — exact installed Android PCIe/WCN modules expose the suspend call chain
+
+While the Nova remained on Armada Linux, I extracted only the previously
+validated A-slot `vendor_dlkm_a` extent from the Android `super` partition.
+Its installed `qca_cld3_kiwi_v2.ko`, `cnss2.ko`, and `pci-msm-drv.ko` all
+carry vermagic `5.15.123-g697b78910a71-dirty`, matching the Android kernel
+captured in the earlier rooted run. Build IDs, hashes, and read-only
+disassembly evidence are in
+`../../receipts/2026-09-20-android-exact-pcie-modules.txt`.
+
+This closed an important source-availability gap: the exact installed WLAN
+binary contains `wlan_hdd_pld_suspend()` calling
+`wlan_hdd_bus_suspend()`, and the saved `kiwi_v2` bus-suspend-success line
+comes from that path. A first-pass read suggested the CNSS bus path always
+requested PCI state 3 (D3hot); that interpretation was too broad and is
+corrected in the 05:20 entry below. The exact CNSS2 binary contains both host
+suspend modes, and the exact host module contains APSS/L1SS noirq and
+ICC-clear code. No device state changed and no new suspend was run.
+
+### 2026-09-20 05:20 UTC — manual binary reconstruction narrows the Android branch
+
+I disassembled the exact installed A-slot `qca_cld3_kiwi_v2.ko`, `cnss2.ko`,
+and `pci-msm-drv.ko` from the read-only extraction. The crucial correction is
+that the explicit endpoint D3hot calls in `cnss_pci_suspend_bus()` run only
+when the saved DRV-connected byte is zero. A nonzero byte jumps over
+`pci_clear_master()`, `pci_disable_device()`, and
+`pci_set_power_state(..., 3)` before host link-down.
+
+The CNSS suspend guard returns `-EAGAIN` when DRV support is enabled, the
+disable-DRV quirk is clear, and the connection flag is false. Thus, if the
+effective pcie0 DT enables DRV support and the quirk is clear, successful
+CNSS suspend requires the connected path, which skips explicit endpoint
+D3hot. The inspected base-DT variants contain `qcom,drv-name = "lpass"` on
+pcie0, but the exact merged runtime DT, controller association, and quirk
+state are not known.
+
+`cnss_set_pci_link()` selects host mode 0 (DRV suspend) when the saved
+connected flag is true; with it false, switch type 1 also chooses mode 0,
+otherwise it chooses normal mode 1. The exact binary reads
+`qcom,pcie-switch-type` into private offset `+0x1f08` and stores zero when
+the property read fails. Scanned Android base DTs and DTBOs lack that
+property, so those inputs default to zero.
+
+The exact host module has three independent PCIe ICC-clear routes: DRV
+`msm_pcie_drv_suspend()`, normal `msm_pcie_clk_deinit()` reached by
+`msm_pcie_pm_suspend()` and the root-device late fixup, and the gated
+APSS/L1SS `suspend_noirq` path. Each calls the helper that submits zero
+average and peak bandwidth. The final SLEEP TCS cannot distinguish which
+route ran. The candidate APSS/L1SS property is on pcie1 in the nearby public
+RP6 tree, which disables pcie1 and places WCN under pcie0; exact overlay
+selection remains unknown.
+
+The saved Android log proves only that the WLAN bus-suspend callback
+reported success. It has no `Use PCIe DRV suspend` marker, recorded
+`drv_connected_last` value, or host-mode/root-fixup/noirq marker. Neither a
+conditional PCI state request nor the final TCS proves actual endpoint state,
+host power collapse, or Wi-Fi wake behavior. Detailed pseudo-C, symbol
+offsets, evidence limits, and reproduction method are in
+`../../receipts/2026-09-20-android-pcie-binary-decomp.md`. No device state
+changed and no new suspend was run.
+
+Next useful evidence is an Android log window from one successful suspend
+containing CNSS DRV-connected state and `msm_pcie_pm_control()` mode, plus
+root-fixup/noirq markers and merged-DT APSS/L1SS property state. No behavioral
+A/B is justified until those facts distinguish the actual host route.

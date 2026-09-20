@@ -1,0 +1,68 @@
+# Exact installed Android PCIe/WCN modules (read-only offline audit)
+
+Captured 2026-09-20 03:49 UTC while the Nova was running Armada Linux and was
+reachable over Wi-Fi. No Android partition was mounted or written. The
+`vendor_dlkm_a` linear extent was read from `/dev/sda14` using the validated
+AOSP logical-partition map in `2026-09-20-android-super-layout.txt`; only the
+bounded 128,798,720-byte extent was copied. The earlier Android preflight
+records slot `_a`, build fingerprint
+`qti/kalama/kalama:13/TKQ1.231222.001/eng.RPN.20260722.081626:user/release-keys`,
+and kernel `5.15.123-android13-8-g697b78910a71-dirty`.
+
+## Module identity
+
+All three installed A-slot modules carry the same Android kernel vermagic as
+that prior Android capture:
+
+| Module | Name / role | Build ID | SHA-256 |
+|---|---|---|---|
+| `qca_cld3_kiwi_v2.ko` | WLAN host device driver; `.modinfo` name `kiwi_v2`, depends on `cnss2` | `9af89692cd3edf81f7481e402242b980147cf44f` | `fd7587579716167898cd6ee0b23eeab9d14a1033fac5b04db7b0d4890888b64b` |
+| `cnss2.ko` | Qualcomm CNSS2 platform/PCI client | `ad2997fa5bc5dd9422143ac22f5efe98792693bc` | `7c23fc2fdf9a19b3ea2797eea377325c83cc5263df79c040b257908eb549c1b2` |
+| `pci-msm-drv.ko` | Qualcomm PCIe root-complex driver; `.modinfo` name `pci_msm_drv` | `f2c4091f1e52f30960c7ea2c70063f1f3cf2fbec` | `675761030ef72886097cabe87e6c2191e30a4e8d2b7a7d412abd564416ac3a2c` |
+
+## What the exact binaries establish
+
+* `qca_cld3_kiwi_v2.ko` contains `wlan_hdd_pld_suspend()`; its call at
+  `.text+0x43894` enters `wlan_hdd_bus_suspend()`. That function sends the
+  WLAN firmware bus-suspend request through `pmo_core_psoc_bus_suspend_req()`.
+  The saved Android kernel log's `kiwi_v2: __wlan_hdd_bus_suspend: bus
+  suspend succeeded` line is emitted by this same module path. The PLD PCIe
+  suspend wrapper dispatches the registered upper-driver suspend callback.
+* In `cnss2.ko`, `cnss_pci_suspend()` calls `cnss_pci_suspend_bus()` after a
+  successful upper-driver callback. The bus path requests D3hot only when
+  its saved DRV-connected byte is zero. If that byte is nonzero, it skips
+  `pci_clear_master()`, `pci_disable_device()`, and
+  `pci_set_power_state(..., 3)` and proceeds to host link-down. The prior
+  blanket D3hot description was incorrect; the exact branches are reconstructed
+  in [`2026-09-20-android-pcie-binary-decomp.md`](2026-09-20-android-pcie-binary-decomp.md).
+* `cnss_set_pci_link()` contains calls to
+  `msm_pcie_pm_control(MSM_PCIE_DRV_SUSPEND)` and
+  `msm_pcie_pm_control(MSM_PCIE_SUSPEND)`; the `cnss2.ko` relocations and
+  AArch64 arguments show both enum values are possible on its link-down path.
+  `MSM_PCIE_RESUME` is also used by the link-up path. Which suspend enum was
+  selected depends on CNSS runtime state/firmware support; the saved Android
+  receipts do not contain the corresponding `Use PCIe DRV suspend` or
+  non-DRV rejection message.
+* Exact `pci-msm-drv.ko` contains both `msm_pcie_drv_suspend()` and
+  `msm_pcie_pm_suspend_noirq()`, the `qcom,apss-based-l1ss-sleep` property
+  string, and the ICC update helper. Its APSS/L1SS noirq path is present in
+  the binary and can clear the PCIe ICC request when its runtime gates pass.
+  This confirms available code, not that the property or path applied to the
+  active pcie0/WCN host in the captured run. The inspected public RP6 DTBO
+  candidate targets `pcie1`; public RP6 source disables that host.
+
+The exact Android endpoint-side path is now visible without rebooting into
+Android. Remaining runtime uncertainty is whether the successful suspend used
+the connected DRV branch (which skips explicit endpoint D3hot) or a
+non-DRV route, and which host noirq/root-fixup path was selected. A D3hot
+request in one driver branch does not prove that branch ran, the final
+hardware state, or wake behavior.
+
+## Limits and device safety
+
+The A-slot modules' vermagic matches the recorded Android kernel, but static
+binary contents do not prove which internal branch executed in the saved RTC
+run. The exact Android source tree and merged runtime DT remain unavailable.
+No device state, PCI configuration, ICC request, regulator, suspend policy,
+kernel, or Android image was changed; no suspend test was run during this
+inspection.

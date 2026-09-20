@@ -1,0 +1,25 @@
+# Android logical partition layout from Linux
+
+Captured 2026-09-20 from a read-only 256 KiB prefix read of `/dev/sda14`
+(`super`) on the running Linux system. No Android partition was mounted or
+written. The Android run previously recorded on this device used slot `_a`.
+
+Using the AOSP logical-partition metadata layout, the geometry copies at
+`0x1000` and `0x2000` both validate and report metadata max size `0x10000`,
+three metadata slots, and 4096-byte logical blocks. Metadata copies at
+`0x3000`, `0x13000`, `0x23000`, and `0x33000` each pass their header and table
+SHA-256 checks. The metadata format is version 10.2 with 14 partition rows.
+
+Slot 0 (`_a`) contains a single linear, read-only `vendor_dlkm_a` extent:
+
+```text
+logical size:       128,798,720 bytes
+super sector:       10,979,328 (512-byte sectors)
+super byte offset:  5,621,415,936
+extent length:      251,560 sectors
+```
+
+This is the exact installed A-slot vendor module image. It can be read by
+copying only that extent from `/dev/sda14`; the raw `super` partition does not
+need to be mounted or copied wholesale. Metadata format source:
+[AOSP `metadata_format.h`](https://android.googlesource.com/platform/system/core/+/refs/heads/main/fs_mgr/liblp/include/liblp/metadata_format.h#L120).

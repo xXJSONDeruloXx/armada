@@ -1,0 +1,31 @@
+# Live Linux PCI PM capability read
+
+Captured 2026-09-20 03:25 UTC from the awake Armada Linux 7.2.3 boot
+`45137c86-bb9a-4021-9973-4bc6200fc9e6`. This was a privileged but
+read-only `od` of the first 256 bytes of each PCI config space. No config,
+power, wake, PCIe, or ICC state was written.
+
+Live `/proc/cmdline` contains `pcie_ports=compat`. Root port
+`0000:00:00.0` is enabled (`enable=1`) and unbound; endpoint
+`0000:01:00.0` is enabled and bound to `ath12k_wifi7_pci`.
+
+```text
+0000:00:00.0 17cb:0113 Qualcomm root port
+capability pointer: 0x40
+0x40: 01 50 03 c8 08 00 00 00 00 00 00 00 00 00 00 00
+
+0000:01:00.0 17cb:1107 Qualcomm WCN7850
+capability pointer: 0x40
+0x40: 01 50 03 c8 08 00 00 00 00 00 00 00 00 00 00 00
+```
+
+Decoded using the v7.2.3 `include/uapi/linux/pci_regs.h` definitions:
+
+- Capability ID `0x01`, next capability `0x50`.
+- PMC `0xc803`: version 3; PME support from D0, D3hot, and D3cold; no D1/D2
+  support.
+- PMCSR `0x0008`: current power-state bits are D0; PME enable is clear.
+
+Current sysfs reports `power/wakeup=disabled` for both. This proves the
+standard PM capability is present, not that either function entered D3 during
+the earlier suspend trace or that a wake path was armed.
