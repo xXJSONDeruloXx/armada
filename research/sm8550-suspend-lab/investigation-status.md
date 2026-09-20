@@ -6,20 +6,35 @@ the chronological record, including failed runs and superseded interpretations.
 Update this page when a checklist item changes; put raw output in a dated
 receipt and explain the result in the notebook.
 
-Status as of 2026-09-20 18:21 UTC. Branch `feat/sm8550-suspend-lab`.
+Status as of 2026-09-20 18:52 UTC. Branch `feat/sm8550-suspend-lab`.
 
 ## Latest device recovery state
 
-The Nova was recovered into rooted Android 13 through ABL after the user
-reported that Linux stopped at “Preparing Armada.” Wireless ADB is currently
-authenticated over TLS. On the ABL ESP (`/dev/block/sda18`, vfat), diagnostic
-`KERNEL` was replaced with the byte-verified stock image from `KERNEL.BAK`.
-Both files now hash to
-`0b0d7c03a88e77c480ad31d145a6718916638ba62287ff5a2b427c0f75475000`; the
-candidate is saved on `/Volumes/NovaKernelBuild`. No BLS or image-ID stamp was
-changed. Android's `adb_wifi_enabled` and `persist.adb.tls_server.enable` are
-both `1`, with legacy TCP ADB unset. Linux has not yet been rebooted after the
-restoration. See the [Android rollback receipt](receipts/2026-09-20-android-esp-rollback.md).
+The Nova is running the original Armada beta image, kernel `7.2.3`, boot ID
+`aa40c55e-d558-46a9-a710-3a7d926b9e9e`. Systemd is `running` with no failed
+units; Wi-Fi/SSH and the Gamescope Steam session are active. Steam CEF reports
+Big Picture, Main Menu, and Quick Access pages. The display itself was not
+captured.
+
+The test deployment has been removed from OSTree with
+`rpm-ostree cleanup --pending`; `bootc status` is now `bootOrder=default`,
+`rollback=null`, `rollbackQueued=false`, `staged=null`. Its candidate OCI image
+remains in local Podman storage at the recorded digest for restaging. Armada's
+boot-image updater has regenerated stock `/KERNEL`; root-level hashes for
+`KERNEL` and `KERNEL.BAK` are both the pre-test stock hash, and the active
+image-ID stamp is stock. The candidate's stale queue and stamp mismatch are
+resolved. See the [Android rollback receipt](receipts/2026-09-20-android-esp-rollback.md).
+
+Before rebooting from Android to Linux, I reasserted `adb_wifi_enabled=1` and
+`persist.adb.tls_server.enable=1`; legacy TCP ADB remained unset. This booted
+into Linux, so persistence through another Android reboot is not yet tested.
+At 18:52 UTC, `adb devices` was empty and reconnecting to the prior Android
+TLS endpoint timed out. Linux has no `adbd` process/listener. Android's
+`userdata` partition (`/dev/sda17`) is unmounted and has no filesystem type
+reported by Linux; do not edit it offline. To make Wireless debugging
+boot-persistent, the remaining safe route is a small Magisk late-start helper
+after Android is reachable again. Keep Android's authenticated TLS mode and
+leave legacy TCP ADB disabled.
 
 The sleep-stats offset question is closed: Android and Armada both resolve the
 SM8550 records at `+0x48` and `+0xb8`. Android's successful deep path advances
@@ -488,11 +503,12 @@ PCI D-state, manually change an ICC vote, or infer safe D3 support from
 
 ## Safety and continuity constraints
 
-- The current OS is Android 13 and the ESP contains the restored stock boot
-  image, freshly hash-verified at 18:21 UTC. The user reports the preceding
-  Linux attempt stopped at “Preparing Armada.” The Linux boot after restoration
-  is not yet tested; boot ID, bootc deployment state, Wi-Fi/SSH, and UI health
-  remain unknown. Do not run a suspend test until these are checked.
+- The current OS is stock Armada Linux 7.2.3 with a clean bootc default order,
+  no staged/pending deployment, and verified stock `KERNEL`/`KERNEL.BAK`.
+  The candidate boot previously failed to return SSH and the user observed
+  “Preparing Armada”; its precise failure phase is unknown. Do not rerun the
+  candidate or suspend test until its boot failure is diagnosed and recovery
+  remains available.
 - Do not force PCI D3hot, bypass `pci_host_common_d3cold_possible()`, change
   `pcie_ports` again, manually alter ICC votes, blindly disable shared rails,
   send AOSS/QMP commands, or access guessed MMIO/AOP memory.
@@ -503,11 +519,14 @@ PCI D-state, manually change an ICC vote, or infer safe D3 support from
 
 ## Next action
 
-The ESP rollback is complete and hash-verified. Next, use the user's requested
-Android restart to boot Linux, then read boot ID, kernel/version, bootc
-booted/staged/rollback deployments, Wi-Fi/SSH, and ESP hashes. Confirm the
-system reaches the UI before any suspend test. Do not select **UNINSTALL CFW**
-in ABL if recovery is needed. The PCIe-MEM OPP A/B remains unrun. See the
+The stock Linux boot is healthy and boot selection is normalized. Next inspect
+the candidate kernel/DT changes and the available boot logs to explain why its
+first deployment did not return SSH; the candidate image is still local and
+can be restaged without a full rebuild. Do not rerun it until a concrete
+recovery/observation plan is ready. The PCIe-MEM OPP A/B remains unrun. For
+persistent Android Wireless debugging, wait until Android is reachable and add
+a Magisk late-start helper rather than editing its unmounted userdata from
+Linux. Do not select **UNINSTALL CFW** in ABL if recovery is needed. See the
 [Android rollback receipt](receipts/2026-09-20-android-esp-rollback.md),
 [ABL access notes](receipts/2026-09-20-post-apply-device-reachability.md), and
 completed MC4/SH5 receipt:

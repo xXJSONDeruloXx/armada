@@ -6835,3 +6835,95 @@ The Android restart to Linux has not yet been issued. The next check is a
 single reboot, then verify the booted Linux deployment, bootc rollback state,
 Wi-Fi/SSH, and whether the system gets past “Preparing Armada” before doing
 any suspend experiment.
+
+### 2026-09-20 18:36 UTC — stock Linux and Steam UI recovered; candidate remains queued
+
+The Android restart returned to SSH on `armada`. The new Linux boot ID is
+`aa40c55e-d558-46a9-a710-3a7d926b9e9e`; kernel `7.2.3` is running with the
+old base's `ostree=.../fe4d16bd.../0` command line. `bootc status --json`
+reports the original Armada beta digest booted, candidate
+`armada-pcie-opp-test:20260920-01` in `rollback`, no staged deployment,
+`spec.bootOrder=rollback`, and `rollbackQueued=true`. The live CLI help says
+the rollback-slot deployment is queued for the next boot. The sudo audit has
+no explicit `bootc rollback` command; it records the earlier
+`bootc switch --from-downloaded --apply`. The queue's origin/intent remains
+unresolved, so do not reboot again until the selected next boot is clear.
+
+Systemd is `running` with no failed units; Wi-Fi and SSH are up. The user
+Gamescope service is active, and Steam's local CEF endpoint lists
+`Steam Big Picture Mode`, `MainMenu_uid2`, and `QuickAccess_uid2`. This
+confirms Steam UI components loaded, though the physical screen was not
+captured.
+
+The current-boot `armada-bootimg-sync` log says it copied the current image to
+`KERNEL.BAK` as a known-good image, then skipped rebuilding `/KERNEL` as
+“already current (vmlinuz-7.2.3).” The updater trusts `.armada-bootimg.id`, not
+the actual `/KERNEL` bytes. That stamp still describes the candidate's BLS
+content although the pre-reboot stock image was restored. The running stock
+cmdline confirms which image booted, but post-boot ESP hashing requires root
+and was not available with the current noninteractive sudo rules. No BLS,
+image stamp, or bootc state was changed after boot. The full evidence is in
+the [Android rollback receipt](receipts/2026-09-20-android-esp-rollback.md).
+
+The PCIe-MEM OPP A/B has not run. Keep the current stock Linux/Game Mode boot
+available while resolving the bootc queue and stamp mismatch. The Android
+Wireless ADB settings were reasserted before the restart from Android to Linux
+(`adb_wifi_enabled=1`,
+`persist.adb.tls_server.enable=1`, legacy TCP port unset); persistence after a
+future Android reboot is still unverified.
+
+### 2026-09-20 18:44 UTC — queued test deployment removed; stock image normalized
+
+The first `rpm-ostree cleanup --rollback` was a no-op (`Deployments unchanged`).
+Read-only `ostree admin status` showed the candidate as the pending deployment
+and the old Armada base as the only booted deployment. The exact candidate OCI
+image was still present in rootful Podman storage.
+
+`rpm-ostree cleanup --pending` then removed one pending deployment (count
+change `-1`, 64.1 MiB freed). `bootc status` now reports the stock beta image
+booted, default boot order, no rollback, no queued rollback, and no staged
+deployment. OSTree reports only the stock booted deployment. The candidate OCI
+tag and digest remain in local Podman storage, so the test can be staged later
+without recompilation.
+
+The remaining BLS entry is the stock base. I ran Armada's own
+`armada-bootimg-update`; it regenerated `/boot/efi/KERNEL` for vmlinuz-7.2.3,
+without rebooting or touching `KERNEL.BAK`. Root-level hashes of both boot
+images match the preserved pre-test stock hash
+`0b0d7c03a88e77c480ad31d145a6718916638ba62287ff5a2b427c0f75475000`. The
+active stamp is restored to stock ID
+`d7755f13ac5a1224fef222e2d104192045fd01d61924f9b1ae31e941b73f049b`; the
+previous-image stamp records candidate ID
+`2fde9022665b5aef44d538eb1d4930548627519b16d1a6fe49ca033d3c2a91fe`.
+
+Linux remains healthy after cleanup: systemd is running with no failed units,
+Steam's user session is active, and the local Steam CEF target list includes
+Big Picture, Main Menu, and Quick Access. The panel was not captured. The
+candidate boot still has no SSH or journal evidence from its failed attempt;
+the user's “Preparing Armada” observation is the only runtime indication, so
+the exact failure point is unknown. The PCIe-MEM OPP suspend A/B has not run.
+
+Wireless debugging's native Android controls were reasserted before the
+Android-to-Linux restart (`adb_wifi_enabled=1`,
+`persist.adb.tls_server.enable=1`, legacy TCP port unset). Whether the setting
+survives another Android boot remains unverified. Full device output and
+recovery hashes are in the
+[Android rollback receipt](receipts/2026-09-20-android-esp-rollback.md).
+
+### 2026-09-20 18:52 UTC — Android Wireless ADB persistence needs Android access
+
+The recovered Linux boot remains reachable over SSH at `armada`; its boot ID
+and kernel are unchanged. `adb devices -l` is empty, and reconnecting to the
+previous Android TLS endpoint (`192.168.0.163:45935`) timed out. Linux has no
+`adbd` process or listener on the checked ADB ports. The Android `userdata`
+partition is `/dev/sda17`; it is unmounted and Linux reports no filesystem
+type. I did not attempt to mount or modify it offline.
+
+Before the Android-to-Linux restart, the native Android controls had both been
+set to `1` (`adb_wifi_enabled` and `persist.adb.tls_server.enable`), while the
+legacy TCP ADB port remained unset. This did not verify persistence through an
+Android reboot because the restart selected Linux. To satisfy the user's
+request for boot-persistent Wireless debugging, the remaining step is to
+install a small Magisk late-start helper once Android is reachable again, then
+verify its setting and TLS listener. Keep legacy TCP ADB disabled. No further
+device change or reboot was made from this check.
