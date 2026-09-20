@@ -6730,3 +6730,30 @@ apply bootc. `/var` currently has 30 GB free; rootful Podman reports 12.8 GB
 of images. Continue monitoring free space during retry and bootc staging. Exact
 failure: `netavark: nftables error: "nft" did not return successfully while
 applying ruleset`. No device firewall or network configuration was changed.
+
+### 2026-09-20 16:59 UTC — diagnostic layer staged; candidate PCI BTF verified
+
+The same on-device build context succeeded when Podman used `--network=host`;
+the hash-check step passed for the matching-config kernel Image and Nova DTB.
+The candidate OCI image has manifest digest
+`sha256:d7eb055720a28bddc8f6a3e7267d6e56c54c53de719963ed06c1228f851e101b`,
+and inspection confirms its 128 lower rootfs layers exactly match the pinned
+base, with four diagnostic layers on top. It carries the backup-preserving
+boot-image sync override and test version marker. Full recipe, digest, and
+stage data are in the [layer receipt](receipts/2026-09-20-pcie-opp-layer-stage.md).
+
+Bootc staged it download-only as OSTree checksum
+`7eb51de69c15c669d35900ff93b279c8b8a21ffec8f415e7da00d14dd2d55cbf`; status
+shows `downloadOnly=true`, `rollbackQueued=false`, and both active and rollback
+deployments still on the original base. The active ESP and `KERNEL.BAK` hashes
+remain unchanged and `/var` has 30 GB free. The candidate is not queued for
+boot, and no reboot or suspend run has occurred.
+
+Before applying it, I extracted and inspected the candidate's exact `.BTF`
+section. Its global hash differs from stock because the patch adds
+`qcom_pcie.diag_opp_active`; `pci_dev`/`pci_bus` offsets used by the trace
+probe remain identical. The harness's strict gate now allows only those two
+known BTF hashes and writes the observed hash into its trace metadata. The
+candidate offsets and harness check are recorded in the
+[BTF receipt](receipts/2026-09-20-candidate-pcie-btf.md); `host self-test`,
+`py_compile`, and `git diff --check` pass.

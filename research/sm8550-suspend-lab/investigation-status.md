@@ -6,7 +6,7 @@ the chronological record, including failed runs and superseded interpretations.
 Update this page when a checklist item changes; put raw output in a dated
 receipt and explain the result in the notebook.
 
-Status as of 2026-09-20 16:37 UTC. Branch `feat/sm8550-suspend-lab`.
+Status as of 2026-09-20 16:59 UTC. Branch `feat/sm8550-suspend-lab`.
 
 The sleep-stats offset question is closed: Android and Armada both resolve the
 SM8550 records at `+0x48` and `+0xb8`. Android's successful deep path advances
@@ -52,7 +52,7 @@ Nova DTB SHA-256 is
 `72da8e0e5151d346fe48d5b46738fe74cac74981ffd9709a81d7df79df44d422`. The
 DTB contains the opt-in property and 2 Hz diagnostic OPP with a 1000/1 kB/s
 peak and `required-opps` pointing to phandle `0x26` (`opp-64`, level `0x40`,
-the existing `low_svs` corner). No test OCI image has been built or staged.
+the existing `low_svs` corner).
 The artifact hashes and checks are in the
 [matching-config build receipt](../../receipts/2026-09-20-matching-config-pcie-opp-build.md).
 The original linked image was blocked because its config omitted scheduler-
@@ -62,13 +62,24 @@ through Kconfig before the successful build. See the
 The currently installed base is `ghcr.io/armada-os/armada:beta` at digest
 `sha256:5fe995d5fedf5034ee42a8f0e54dbd2d08e0c85adb9e3f88cfd52e55636eeb88`;
 the old local-layer recipe points at a 2026-09-01 image and kernel 7.2.0, so it
-cannot be reused verbatim. The pinned base has now been pulled into rootful
-Podman; its reported image size is 12.5 GB and `/var` has 30 GB free. The
-first image build failed at its final local hash-check step because Netavark
-could not set up its isolated nftables network. Retry with host networking,
-since the build step has no network dependency. See the
-[bootc base receipt](receipts/2026-09-20-bootc-base-and-space.md) and latest
-notebook entry for live measurements.
+cannot be reused verbatim. The candidate is built from that exact digest after
+the first attempt hit a Netavark/nftables setup error; retrying with
+`--network=host` passed the artifact hash checks. It is
+`localhost/armada-pcie-opp-test:20260920-01`, manifest digest
+`sha256:d7eb055720a28bddc8f6a3e7267d6e56c54c53de719963ed06c1228f851e101b`.
+Bootc staged it as download-only at OSTree checksum
+`7eb51de69c15c669d35900ff93b279c8b8a21ffec8f415e7da00d14dd2d55cbf`; it is
+not queued. Booted and rollback deployments remain the pinned base, and `/var`
+has 30 GB free. See the
+[layer/stage receipt](receipts/2026-09-20-pcie-opp-layer-stage.md).
+
+The diagnostic patch changes the global BTF blob by adding its private
+`qcom_pcie` state flag. Candidate BTF hash
+`cd7334c576a197a39b0e5121d2b3fb9c38fef8af6b034beb039d1b04b4bbbb44` retains
+the inspected `pci_dev`/`pci_bus` offsets used by the PCIe probe. The harness
+accepts only the stock and this exact candidate hash and records the active
+hash. See the
+[candidate BTF receipt](receipts/2026-09-20-candidate-pcie-btf.md).
 The Nova is currently on Linux, not Android: fresh SSH reports Fedora 44,
 kernel `7.2.3`, boot ID `55fdad18-019d-4c92-8ebd-8a558574c1d3`, Wi-Fi
 connected, and systemd running. Empty ADB discovery is expected in this mode.
@@ -85,15 +96,11 @@ the extracted active and backup images both match SHA-256
 archive SHA-256 is `0760f9acf1399a98186233800185b8a37a781247c0a10f12b98999da409eee16`.
 The device-scoped layer recipe is tracked at
 [`device-kernel-layer-pcie-opp.Containerfile`](device-kernel-layer-pcie-opp.Containerfile).
-Fresh bootc status shows both booted and rollback deployments at pinned base
-digest `sha256:5fe995d5fedf5034ee42a8f0e54dbd2d08e0c85adb9e3f88cfd52e55636eeb88`,
-with no image staged. After pulling the pinned base, rootful Podman reports
-12.8 GB in images and `/var` has 30 GB free. The first candidate build failed
-at its local hash-check `RUN` step because Netavark could not apply nftables;
-the same step can be retried with host networking and no network dependency.
-No candidate image has been completed or staged. Device sudo allows the lab
-runner, Podman, and bootc without a prompt; other root commands still require
-the device password, which has not been persisted.
+Fresh bootc status shows the candidate staged download-only but not queued;
+the booted and rollback deployments remain the pinned base. `/var` has 30 GB
+free. Device sudo allows the lab runner, Podman, and bootc without a prompt;
+other root commands still require the device password, which has not been
+persisted.
 
 ## Latest Android suspend attempt (historical)
 
@@ -139,14 +146,14 @@ manually changing shared bandwidth/regulator requests.
 - [x] Rebuild the matching-config candidate and inspect the Image/DTB; verify
   bootc rollback and the preserved `KERNEL.BAK` manual recovery path.
 - [x] Identify the live bootc base digest and rollback deployment; confirm the
-  old 7.2.0 local-layer recipe is stale. Fresh storage preflight shows 37 GB
-  free before pulling the 6.07 GB compressed base; monitor free space during
-  the pull/build and stop if the margin becomes unsafe.
+  old 7.2.0 local-layer recipe is stale. The pinned base and test layer fit;
+  `/var` currently has 30 GB free after build and stage.
 - [x] Read current bootc switch semantics and Armada's boot-image refresh path;
   verify the current ESP backup matches the active boot image.
 - [x] Prepare a device-scoped image recipe and backup-preservation drop-in.
-- [ ] Build and stage the candidate, then inspect it before rebooting. The
-  known-good KERNEL/KERNEL.BAK pair is now backed up off-device and hashed.
+- [x] Build and stage the candidate in download-only mode; verify its base
+  digest, artifact hashes, bootc stage, unchanged current/rollback deployments,
+  and off-device KERNEL/KERNEL.BAK backup before reboot.
 - [ ] Run one RTC-bounded deep A/B only if the artifact and rollback gates
   pass. Record the command set, residency counters, PSCI result, resume, and
   Wi-Fi state; do not use battery drain as the short-run verdict.

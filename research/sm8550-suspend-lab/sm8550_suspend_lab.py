@@ -74,9 +74,13 @@ PCI_DEVICE_FIELDS = (
     "max_link_width",
     "enable",
 )
-# Verified from this device's vmlinux BTF; refuse to dereference on another build.
+# Verified from the stock device BTF and the matching-config diagnostic BTF;
+# refuse PCI struct dereferences on any other build.
 PCIE_CURRENT_STATE_KERNEL_RELEASE = "7.2.3"
-PCIE_PDEV_BTF_SHA256 = "fb193ea5c32178ae22d52e30a62986e4bbc2c3db01bfa530f34b257fe94b45a1"
+PCIE_PDEV_BTF_SHA256_ALLOWLIST = frozenset((
+    "fb193ea5c32178ae22d52e30a62986e4bbc2c3db01bfa530f34b257fe94b45a1",
+    "cd7334c576a197a39b0e5121d2b3fb9c38fef8af6b034beb039d1b04b4bbbb44",
+))
 PCIE_CURRENT_STATE_OFFSET = 0xA8
 PCIE_D3COLD_IDENTITY_FIELDS = (
     ("pdev_busnum", "+0xd8(+0x10($arg1)):u8"),
@@ -1405,8 +1409,8 @@ def trace_prepare_suspend_kretprobe(run: DeviceRun, info: Dict[str, Any]) -> Dic
         kernel_release = read_text(Path("/proc/sys/kernel/osrelease"))
         btf = read_bytes(Path("/sys/kernel/btf/vmlinux"))
         btf_digest = hashlib.sha256(btf).hexdigest() if btf is not None else None
-        if kernel_release != PCIE_CURRENT_STATE_KERNEL_RELEASE or btf_digest != PCIE_PDEV_BTF_SHA256:
-            raise LabError("refusing PCI state dereference: kernel release/BTF differs from the inspected build")
+        if kernel_release != PCIE_CURRENT_STATE_KERNEL_RELEASE or btf_digest not in PCIE_PDEV_BTF_SHA256_ALLOWLIST:
+            raise LabError("refusing PCI state dereference: kernel release/BTF differs from inspected builds")
         pcie_probe_fields = pcie_d3cold_probe_fields()
     definition = (
         "r:%s/%s %s %s retval=$retval:s32" % (group, name, function, pcie_probe_fields)
@@ -1460,7 +1464,7 @@ def trace_prepare_suspend_kretprobe(run: DeviceRun, info: Dict[str, Any]) -> Dic
                 "class": 0x44,
             },
             "nested_bus_dereference": True,
-            "btf_sha256": PCIE_PDEV_BTF_SHA256,
+            "btf_sha256": btf_digest,
         }
         if pcie_d3cold
         else None,
