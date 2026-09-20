@@ -6,7 +6,7 @@ the chronological record, including failed runs and superseded interpretations.
 Update this page when a checklist item changes; put raw output in a dated
 receipt and explain the result in the notebook.
 
-Status as of 2026-09-20 22:43 UTC. Branch `feat/sm8550-suspend-lab`.
+Status as of 2026-09-20 22:49 UTC. Branch `feat/sm8550-suspend-lab`.
 
 ## Current goal checklist
 
@@ -622,9 +622,11 @@ PCI D-state, manually change an ICC vote, or infer safe D3 support from
 - [ ] Establish which of these consumers Android quiesced and which wake
   sources it retained. The captured run woke by RTC, so it does not validate
   PCIe/Wi-Fi or USB wake after the LDO sleep requests.
-- [ ] Describe an upstream-quality regulator API/DT model that can emit sleep
-  RPMh requests; do not blindly copy proxy properties or assume
-  `regulator-state-mem` works in the current mainline driver.
+- [x] Describe an upstream-quality regulator API/DT model that can emit sleep
+  RPMh requests. Use regulator-core suspend constraints plus provider-side
+  SLEEP requests and WAKE_ONLY restoration; `regulator-state-mem` alone is
+  insufficient until the mainline provider implements these operations. See
+  the source/design row in the evidence table above.
 
 ### 4. Selected A/B and deployment gate
 
