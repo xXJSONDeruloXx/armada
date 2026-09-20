@@ -6687,3 +6687,28 @@ The user reports Android is awake with Wireless debugging enabled, but this
 Mac still sees no ADB device or mDNS endpoint. The prior address
 `192.168.0.163:42265` does not respond. I requested the current pairing or
 connect endpoint; no ADB command, reboot, or Android modification was made.
+
+### 2026-09-20 16:34 UTC — current Linux state and ESP recovery copy verified
+
+The Nova is on Linux, not Android. Fresh SSH reports Fedora 44/kernel `7.2.3`,
+boot ID `55fdad18-019d-4c92-8ebd-8a558574c1d3`, Wi-Fi connected, and systemd
+running. ADB discovery is empty as expected. The booted and rollback bootc
+deployments still use the same pinned Armada beta digest and OSTree checksum;
+no deployment is staged. `/var` has 37 GB free, and rootful Podman contains
+only its 199 MB Fedora builder.
+
+The root-owned ESP's active `/KERNEL` and `/KERNEL.BAK` are both 75,522,048
+bytes and match SHA-256
+`0b0d7c03a88e77c480ad31d145a6718916638ba62287ff5a2b427c0f75475000`. I copied
+both into an external-drive tar and verified each extracted member against the
+device hash. The archive hash and path are in the [preflight
+receipt](receipts/2026-09-20-live-linux-preflight-and-boot-backup.md). No
+device setting, image, ESP file, or sudo/SSH policy changed. Device sudo is
+limited to the already-authorized test runner, Podman, and bootc without a
+prompt; other root commands still require the supplied device password.
+
+The 15:59 notebook paragraph and status sentence treating Android as the live
+OS were stale; the current SSH boot ID and Linux checks establish that the
+Nova remained on Linux. The Android source/binary investigation is already
+captured; this next experiment is Linux-only. The candidate OCI image has not
+yet been built or staged.

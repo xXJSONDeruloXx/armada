@@ -6,7 +6,7 @@ the chronological record, including failed runs and superseded interpretations.
 Update this page when a checklist item changes; put raw output in a dated
 receipt and explain the result in the notebook.
 
-Status as of 2026-09-20 15:58 UTC. Branch `feat/sm8550-suspend-lab`.
+Status as of 2026-09-20 16:35 UTC. Branch `feat/sm8550-suspend-lab`.
 
 The sleep-stats offset question is closed: Android and Armada both resolve the
 SM8550 records at `+0x48` and `+0xb8`. Android's successful deep path advances
@@ -66,18 +66,29 @@ cannot be reused verbatim. The base layers total 6.07 GB compressed, while
 `/var` has 37 GB free and the rootful Podman store does not contain the base.
 Check unpacked space requirements before pulling or building a new layer. See
 the [bootc base receipt](receipts/2026-09-20-bootc-base-and-space.md).
-The user reports the Nova is currently on Android with Wireless debugging
-enabled. This Mac's ADB device list and mDNS discovery are empty; the prior
-endpoint `192.168.0.163:42265` is unreachable. The current pairing/connect
-endpoint is needed before I can read Android again or reboot it to Linux. The
-user confirmed Linux is Nova's default boot, so `adb reboot` returns to Linux
-once the transport is available.
+The Nova is currently on Linux, not Android: fresh SSH reports Fedora 44,
+kernel `7.2.3`, boot ID `55fdad18-019d-4c92-8ebd-8a558574c1d3`, Wi-Fi
+connected, and systemd running. Empty ADB discovery is expected in this mode.
+The Android binary/module analysis needed for the current PCIe hypothesis is
+already captured; the next test is Linux-only.
 The [boot-image recovery receipt](receipts/2026-09-20-bootimg-recovery-path.md)
 confirms the existing KERNEL.BAK matches the current boot image and documents
 a test-layer drop-in needed to keep that backup from being replaced at the
-first diagnostic boot. The device-scoped layer recipe is now tracked at
+first diagnostic boot. At 16:34 UTC, both ESP files were freshly hashed on the
+device and copied to
+`/Volumes/NovaKernelBuild/backups/nova-esp-20260920T1634Z/boot-esp-kernel-pair.tar`;
+the extracted active and backup images both match SHA-256
+`0b0d7c03a88e77c480ad31d145a6718916638ba62287ff5a2b427c0f75475000`. The
+archive SHA-256 is `0760f9acf1399a98186233800185b8a37a781247c0a10f12b98999da409eee16`.
+The device-scoped layer recipe is tracked at
 [`device-kernel-layer-pcie-opp.Containerfile`](device-kernel-layer-pcie-opp.Containerfile).
-No test image has been staged.
+Fresh bootc status shows both booted and rollback deployments at pinned base
+digest `sha256:5fe995d5fedf5034ee42a8f0e54dbd2d08e0c85adb9e3f88cfd52e55636eeb88`,
+with no image staged. `/var` has 37 GB free. Rootful Podman has only its 199 MB
+Fedora builder, so the Armada base must be pulled for this build. No test image
+has been built or staged. Device sudo allows the lab runner, Podman, and bootc
+without a prompt; other root commands still require the device password, which
+has not been persisted.
 
 ## Latest Android suspend attempt (historical)
 
@@ -123,12 +134,14 @@ manually changing shared bandwidth/regulator requests.
 - [x] Rebuild the matching-config candidate and inspect the Image/DTB; verify
   bootc rollback and the preserved `KERNEL.BAK` manual recovery path.
 - [x] Identify the live bootc base digest and rollback deployment; confirm the
-  old 7.2.0 local-layer recipe is stale. Assess storage before pulling the
-  6.07 GB compressed base into the currently empty rootful image store.
+  old 7.2.0 local-layer recipe is stale. Fresh storage preflight shows 37 GB
+  free before pulling the 6.07 GB compressed base; monitor free space during
+  the pull/build and stop if the margin becomes unsafe.
 - [x] Read current bootc switch semantics and Armada's boot-image refresh path;
   verify the current ESP backup matches the active boot image.
 - [x] Prepare a device-scoped image recipe and backup-preservation drop-in.
-- [ ] Build and stage the candidate, then inspect it before rebooting.
+- [ ] Build and stage the candidate, then inspect it before rebooting. The
+  known-good KERNEL/KERNEL.BAK pair is now backed up off-device and hashed.
 - [ ] Run one RTC-bounded deep A/B only if the artifact and rollback gates
   pass. Record the command set, residency counters, PSCI result, resume, and
   Wi-Fi state; do not use battery drain as the short-run verdict.
