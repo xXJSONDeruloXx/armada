@@ -7476,3 +7476,16 @@ The successful deep entry woke by RTC; no matching per-device UFS, USB, DSI,
 or DP suspend/wake record is in the preserved excerpt. Keep shared-rail wake
 safety open and do not infer it from the staged RPMh requests. See the
 [`Android WCN wake evidence boundary receipt`](../../receipts/2026-09-20-android-wcn-wake-evidence-boundary.md).
+
+### 2026-09-20 23:13 UTC — live Linux check of the Android-kernel idea
+
+Read-only SSH confirms the Nova is still running Armada/Fedora on kernel
+`7.2.3`, with its command line pointing at the ARMADA OSTree root. `lsblk`
+shows Android `boot_a`, `vendor_boot_a`, and `super` partitions as unmounted
+block devices; `/usr/lib/modules` contains the running `7.2.3` module tree.
+Mounting one of those Android partitions would expose its files only. It would
+not change the active kernel or make the Android 5.15 modules executable in
+it. No Android partition was mounted or read, and no module, boot, or suspend
+state was changed. This is a live-state confirmation of the compatibility
+boundary in [`android-module-reuse.md`](android-module-reuse.md), not a new
+sleep-contract experiment.
