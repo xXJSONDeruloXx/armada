@@ -6788,3 +6788,10 @@ was rehashed and still matches its recorded SHA-256. See the
 The A/B is still pending. First regain access and establish whether the
 candidate or the stock deployment booted; verify bootc rollback state, Wi-Fi,
 ESP image hashes, and candidate BTF before considering a suspend run.
+
+At 17:19 UTC, another SSH attempt returned `No route to host` on the default
+Ethernet route. An interface-scoped route lookup selected Wi-Fi (`en1`), where
+`ping -b en1` and SSH `BindInterface=en1` both reported the host down. The old
+`.20` neighbor record remained stale. This confirms the device did not respond
+over either tested interface, but it does not distinguish a failed boot from
+Wi-Fi/network startup failure. No reboot was issued.

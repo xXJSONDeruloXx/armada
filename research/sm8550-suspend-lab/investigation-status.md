@@ -6,7 +6,7 @@ the chronological record, including failed runs and superseded interpretations.
 Update this page when a checklist item changes; put raw output in a dated
 receipt and explain the result in the notebook.
 
-Status as of 2026-09-20 17:16 UTC. Branch `feat/sm8550-suspend-lab`.
+Status as of 2026-09-20 17:19 UTC. Branch `feat/sm8550-suspend-lab`.
 
 The sleep-stats offset question is closed: Android and Armada both resolve the
 SM8550 records at `+0x48` and `+0xb8`. Android's successful deep path advances
@@ -88,9 +88,11 @@ The candidate must boot before its live BTF allowlist can be checked. See the
 [pre-boot preflight receipt](receipts/2026-09-20-pcie-opp-preboot-harness-preflight.md).
 Immediately before the apply request, SSH reported Linux kernel `7.2.3`, boot
 ID `55fdad18-019d-4c92-8ebd-8a558574c1d3`, and connected Wi-Fi. At 17:16 UTC,
-SSH, ping, and TCP/22 to `192.168.0.20` timed out; ADB listed no devices, USB
-inventory was empty, and mDNS advertised only this Mac. The running deployment
-and OS after apply are therefore unknown; do not assume the candidate booted.
+SSH, ping, and TCP/22 to `192.168.0.20` did not respond; explicit checks scoped
+to the Mac's Wi-Fi interface also reported the host down. ADB listed no
+devices, USB inventory was empty, and mDNS advertised only this Mac. The
+running deployment and OS after apply are therefore unknown; do not assume the
+candidate booted.
 The Android binary/module analysis needed for this PCIe hypothesis is already
 captured; the next test remains Linux-only.
 The [boot-image recovery receipt](receipts/2026-09-20-bootimg-recovery-path.md)
@@ -475,10 +477,11 @@ PCI D-state, manually change an ICC vote, or infer safe D3 support from
 
 - The last confirmed live device state was the stock Linux kernel `7.2.3`, boot
   ID `55fdad18-019d-4c92-8ebd-8a558574c1d3`, at 17:05 UTC before the candidate
-  apply request. At 17:16 UTC the device did not answer SSH, ICMP, or TCP/22;
+  apply request. At 17:19 UTC the device still did not answer SSH, ICMP, or
+  TCP/22; interface-scoped checks on the Mac's Wi-Fi reported the host down.
   ADB and USB discovery were empty. Its current OS, boot ID, rollback state,
-  Wi-Fi, and ESP contents are unknown. Do not launch another reboot or
-  suspend attempt while unreachable.
+  Wi-Fi, and ESP contents are unknown. Do not launch another reboot or suspend
+  attempt while unreachable.
 - Do not force PCI D3hot, bypass `pci_host_common_d3cold_possible()`, change
   `pcie_ports` again, manually alter ICC votes, blindly disable shared rails,
   send AOSS/QMP commands, or access guessed MMIO/AOP memory.

@@ -1,7 +1,7 @@
 # Post-apply device reachability check
 
 Captured 2026-09-20 17:16 UTC after requesting application of the staged PCIe
-OPP diagnostic deployment.
+OPP diagnostic deployment; follow-up connectivity checks ran at 17:19 UTC.
 
 ## Apply request
 
@@ -21,6 +21,11 @@ No subsequent command reached the device.
   devices. A 7-second `_ssh._tcp` mDNS browse found only this Mac.
 - The neighbor table retained a prior MAC entry for `192.168.0.20`, but the
   device did not answer; the stale entry does not establish reachability.
+- At 17:19 UTC, SSH via the default route returned `No route to host`. The
+  selected `en0` route was `REJECT` with an incomplete ARP entry. A separate
+  route lookup scoped to `en1` selected the Wi-Fi interface; `ping -b en1`
+  reported `Host is down`, and SSH with `BindInterface=en1` returned
+  `Host is down` as well.
 
 The candidate boot, bootc rollback state, Wi-Fi, and current ESP contents are
 unknown. No second reboot, suspend, or other device mutation was attempted.
