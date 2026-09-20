@@ -6,7 +6,7 @@ the chronological record, including failed runs and superseded interpretations.
 Update this page when a checklist item changes; put raw output in a dated
 receipt and explain the result in the notebook.
 
-Status as of 2026-09-20 16:59 UTC. Branch `feat/sm8550-suspend-lab`.
+Status as of 2026-09-20 17:05 UTC. Branch `feat/sm8550-suspend-lab`.
 
 The sleep-stats offset question is closed: Android and Armada both resolve the
 SM8550 records at `+0x48` and `+0xb8`. Android's successful deep path advances
@@ -80,6 +80,10 @@ the inspected `pci_dev`/`pci_bus` offsets used by the PCIe probe. The harness
 accepts only the stock and this exact candidate hash and records the active
 hash. See the
 [candidate BTF receipt](receipts/2026-09-20-candidate-pcie-btf.md).
+The 17:05 UTC preflight confirms all nine `pcie-d3cold` tracepoints and both
+required kprobe targets are available and unblacklisted. The candidate still
+needs to boot before its live BTF allowlist can be checked. See the
+[pre-boot preflight receipt](receipts/2026-09-20-pcie-opp-preboot-harness-preflight.md).
 The Nova is currently on Linux, not Android: fresh SSH reports Fedora 44,
 kernel `7.2.3`, boot ID `55fdad18-019d-4c92-8ebd-8a558574c1d3`, Wi-Fi
 connected, and systemd running. Empty ADB discovery is expected in this mode.

@@ -6757,3 +6757,18 @@ known BTF hashes and writes the observed hash into its trace metadata. The
 candidate offsets and harness check are recorded in the
 [BTF receipt](receipts/2026-09-20-candidate-pcie-btf.md); `host self-test`,
 `py_compile`, and `git diff --check` pass.
+
+### 2026-09-20 17:05 UTC — pre-boot PCIe/RPMh trace prerequisites pass
+
+Ran a fresh harness preflight after pushing the updated runner. Its SHA-256
+matches the local source at `b790120`, and it confirms the original Linux boot
+is still active with the candidate download-only staged, no rollback queued,
+Wi-Fi enabled, and `[s2idle] deep` selected. All nine `pcie-d3cold` profile
+tracepoints are present. Both `psci_system_suspend_enter` and
+`__pci_host_common_d3cold_possible` are available and unblacklisted. The full
+preflight is retained outside Git with its hash and exact gates in the
+[pre-boot receipt](receipts/2026-09-20-pcie-opp-preboot-harness-preflight.md).
+
+This closes the remaining instrumentation preflight. The next operation is to
+apply the already-staged candidate, confirm boot/SSH/Wi-Fi and candidate BTF,
+then run one short RTC-woken direct-deep A/B with the `pcie-d3cold` profile.
