@@ -6578,3 +6578,21 @@ current `.config`, restore the four live scheduler settings through Kconfig,
 verify the full diff, and rebuild only if the configuration gate passes. Do
 not install the currently linked image or stage a boot layer yet. No device
 state changed in this audit.
+
+### 2026-09-20 14:32 UTC — scheduler config restored exactly
+
+I backed up the scratch `.config`, enabled `CONFIG_SCHED_CLASS_EXT`, and ran
+`olddefconfig` in the already configured AArch64 build tree. Kconfig restored
+`CONFIG_GROUP_SCHED_BANDWIDTH`, `CONFIG_EXT_GROUP_SCHED`, and
+`CONFIG_EXT_SUB_SCHED`; the new config hash exactly matches the live Nova's
+saved `/proc/config.gz` copy (`2219546e268f72bb2bcbac96943202e9e50731b6e531e3193cc73b1976d2fbef`).
+The previous scratch config is backed up with hash
+`ffeef3364ee62e1e819c9a3f9c37406822483c61104a8a13785e652b917dd755`.
+
+This passes the scheduler config gate, but the linked Image/DTB are still from
+the old config and remain unusable. `CONFIG_PCIE_QCOM=y`, so the experiment is
+built into the kernel Image rather than packaged as a module. No rebuild or
+device deployment has happened yet; next is an incremental `Image dtbs`
+build, followed by artifact inspection and a reversible bootc-layer review.
+Hashes and exact commands are in the
+[config reconcile receipt](receipts/2026-09-20-pcie-opp-config-reconcile.md).

@@ -6,7 +6,7 @@ the chronological record, including failed runs and superseded interpretations.
 Update this page when a checklist item changes; put raw output in a dated
 receipt and explain the result in the notebook.
 
-Status as of 2026-09-20 14:24 UTC. Branch `feat/sm8550-suspend-lab`.
+Status as of 2026-09-20 14:32 UTC. Branch `feat/sm8550-suspend-lab`.
 
 The sleep-stats offset question is closed: Android and Armada both resolve the
 SM8550 records at `+0x48` and `+0xb8`. Android's successful deep path advances
@@ -42,12 +42,12 @@ that keeps the active Gen2 x1 `low_svs` RPMh corner while lowering only the
 PCIe-MEM peak request from 500000 to 1000 kB/s; the CPU path remains 1 kB/s.
 It uses the normal OPP path and does not bypass PCI eligibility or directly
 write an ICC vote. The candidate object, Nova DTB, linked `vmlinux`, and
-`Image` exist in the external scratch tree, but that `Image` is not deployable:
-its config disables `SCHED_CLASS_EXT` and omits three scheduler-extension
-symbols enabled on the device. The Armada build fragment explicitly requires
-`SCHED_CLASS_EXT=y`. Rebuild and verify config/image/DTB, then establish a
-reversible boot layer before any test. See the
-[artifact config gate](receipts/2026-09-20-pcie-opp-image-config-gate.md).
+`Image` exist in the external scratch tree. The original linked image was
+blocked because its config omitted scheduler-extension options enabled on the
+device. I restored the scratch `.config` through Kconfig; it now byte-matches
+the live config, but the Image/DTB have not been rebuilt with it. Rebuild and
+verify artifacts, then establish a reversible boot layer before any test. See
+the [config-reconcile receipt](receipts/2026-09-20-pcie-opp-config-reconcile.md).
 
 ## Latest Android suspend attempt (historical)
 
@@ -88,8 +88,10 @@ manually changing shared bandwidth/regulator requests.
 - [x] Prepare a device-scoped diagnostic OPP that retains the currently used
   `low_svs` corner and lowers only PCIe-MEM bandwidth; it does not bypass PCI
   D3cold eligibility or directly alter an ICC vote.
-- [ ] Restore the live scheduler config in the scratch build, rebuild and
-  inspect the candidate artifacts, then prove a reversible deployment path.
+- [x] Restore the live scheduler config through Kconfig; the result matches
+  the saved live config byte-for-byte.
+- [ ] Rebuild and inspect the candidate Image/DTB, then prove a reversible
+  deployment path.
 - [ ] Run one RTC-bounded deep A/B only if the artifact and rollback gates
   pass. Record the command set, residency counters, PSCI result, resume, and
   Wi-Fi state; do not use battery drain as the short-run verdict.
@@ -348,10 +350,11 @@ PCI D-state, manually change an ICC vote, or infer safe D3 support from
   bandwidth, PCI state, and shared regulators unchanged, but it did not
   restore the observed AOSD/CXSD/scalar DDR counters.
 - [x] Select the Nova-only 1,000 kB/s PCIe-MEM OPP reduction as the next
-  diagnostic A/B. Its target object, Nova DTB, linked `vmlinux`, and `Image`
-  exist in the scratch tree, but the image config dropped live scheduler
-  options. See the [target-build receipt](receipts/2026-09-20-nova-opp-target-build.md)
-  and [config-gate receipt](receipts/2026-09-20-pcie-opp-image-config-gate.md).
+  diagnostic A/B. Its source/object/DTB are prepared; the old linked image
+  was blocked by config mismatch. The scratch config now matches live, pending
+  relink. See the [target-build receipt](receipts/2026-09-20-nova-opp-target-build.md),
+  [config-gate receipt](receipts/2026-09-20-pcie-opp-image-config-gate.md),
+  and [config-reconcile receipt](receipts/2026-09-20-pcie-opp-config-reconcile.md).
 - [x] Reboot Android to the Nova's default Linux and verify bootc current and
   rollback deployments. Both use the same digest; no image layer was changed.
 - [x] Verify the live RSC parent and child relationship and both required RPMh
@@ -415,12 +418,11 @@ PCI D-state, manually change an ICC vote, or infer safe D3 support from
 
 ## Next action
 
-Back up the scratch tree's `.config`, restore `CONFIG_SCHED_CLASS_EXT=y`, run
-`olddefconfig`, and compare the four scheduler-extension symbols with the
-saved live config. Build `Image dtbs` incrementally only if the check passes;
-then verify the output hashes, kernel config, Nova OPP table, and the bootc
-rollback process. Do not install the current linked image. The Nova is awake
-on its normal Linux deployment with SSH up. The completed MC4/SH5 receipt is
+The original scratch `.config` is backed up and the active config now matches
+the saved live config byte-for-byte. Build `Image dtbs` incrementally, then
+verify output hashes, embedded config, the Nova OPP table, and the bootc
+rollback process. Do not install the old linked image. The Nova is awake on its
+normal Linux deployment with SSH up. The completed MC4/SH5 receipt is
 [`rpmh-dcvs-pair-ab.md`](receipts/2026-09-20-rpmh-dcvs-pair-ab.md).
 
 The archived Linux trace and host reanalysis remain under
