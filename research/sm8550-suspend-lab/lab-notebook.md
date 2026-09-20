@@ -5664,5 +5664,86 @@ boot-scoped and `persist.adb.tcp.port` as empty, so the service may simply not
 have been enabled for this boot. No runtime Android logs, module state, or
 merged DT were collected in this attempt. No device setting, service,
 security policy, boot mode, or partition was changed. Receipt:
-`../../receipts/2026-09-20-android-access-check.txt`. Resume live collection
-once an authorized USB ADB or Android wireless-debugging transport is exposed.
+`../../receipts/2026-09-20-android-access-check.txt`.
+
+### 2026-09-20 06:27 UTC — Wireless ADB restored; merged Android DT narrows the PCIe route
+
+After the user enabled Android Wireless debugging, ADB discovered the Nova at
+`192.168.0.163:42265` over TLS; `su` is root. The running image is the same
+Android fingerprint and 5.15.123 build previously inspected, slot `_a`.
+
+The live merged DT identifies `KalamaP HDK`, MSM ID `<0x25b 0x200>`, and
+board ID `<0x1001f 0>`, matching the public Nova DTBO candidate previously
+identified as entry 51. It confirms that the active WCN host is
+`soc/qcom,pcie@1c00000`, with `qcom,drv-name = "lpass"`; `qcom,drv-supported`
+is absent. The exact installed CNSS binary falls back from the absent
+`qcom,drv-supported` to `qcom,drv-name`, so DRV support is likely enabled on
+pcie0. The disable-DRV quirk and live connected flag are still unknown.
+
+The candidate `qcom,apss-based-l1ss-sleep` and
+`qcom,no-client-based-bw-voting` properties are present only under
+`pcie@1c08000`, which the runtime DT marks disabled. They are absent from
+active pcie0, where WCN sits. This closes the merged-DT/overlay uncertainty:
+the public L1SS overlay is not configuring the active WCN host.
+
+One early suspend attempt in this Android boot logged WLAN bus-suspend
+callback success, then aborted with `NETLINK` pending. `suspend_stats` shows
+success 0 / fail 1 (`failed_suspend=1`, late/noirq failures zero), and AOSD,
+CXSD, scalar DDR, and APSS stats remain zero. This boot therefore has no
+successful suspend sample yet. The log does not prove whether PCIe noirq ran;
+it contains no selected `msm_pcie_pm_control()` mode or DRV flag. The abort
+occurred seconds after `adbd`/`mdnsd` startup, a timing correlation only.
+
+Receipt: `../../receipts/2026-09-20-android-live-runtime.md`. No kernel,
+module, PCI state, regulator, interconnect, DT, or power policy was modified.
+
+### 2026-09-20 06:34 UTC — corrected Android suspend test path and cleaned RTC alarm
+
+I attempted one direct `rtcwake -u -m mem -s 15 -d /dev/rtc0`, which returned
+`xwrite: Device or resource busy`. The existing 2026-09-19 01:21 entry had
+already established that Android's `system_suspend` service owns the
+`wakeup_count`/`state` protocol and that direct `rtcwake -m mem` competes with
+it; I should not have repeated this test. The RTC command left the wake alarm
+at `153393`; I cleared it with the correctly quoted Magisk-root command and
+verified the alarm file empty, `alarm_IRQ=no`, and `alrm_pending=no`.
+
+The post-call kernel log contains another short s2idle entry/exit interval
+(~38 ms), and suspend counters changed from `success=0, fail=1` to
+`success=0, fail=2` (`failed_suspend=1`, late/noirq failures zero). AOSD,
+CXSD, scalar DDR, and APSS records remain zero. This interval occurred while
+the RTC alarm was armed, so I cannot attribute it to `rtcwake`; it is not a
+successful suspend sample. No alarm remains armed.
+
+The command form `adb shell su -c 'multi word command'` also did not preserve
+quoting across ADB for some prior reads: audit entries show some `cat`
+commands ran in `u:r:shell:s0`. Readable DT/debugfs values were obtained, but
+all privileged commands will use the verified form
+`adb shell "su -c '...'"` from here on.
+
+Do not use direct `rtcwake -m mem` again. The next controlled Android run
+should use the already-proven `service call suspend_control_internal 2`
+(`forceSuspend()`) path with a short RTC wake, temporarily select deep, and
+restore the original `mem_sleep`, debug flag, and alarm state after resume.
+The previous successful Android run and exact cleanup sequence are in
+`receipts/2026-09-19-android-deep-rpmh/` and
+`receipts/2026-09-19-deep-stats/`.
+
+### 2026-09-20 06:39 UTC — verified recovery after an unarmed force-suspend probe
+
+I inadvertently invoked `service call suspend_control_internal 2` while
+checking that the service was available, before arming a wake alarm. It
+returned `false`. Read-only post-checks show the same boot ID
+`d927cfaa-54f1-428d-9f3b-1298aa1982fc`, unchanged `[s2idle] deep` selection,
+empty RTC alarm, and all-zero APSS/AOSD/CXSD/DDR records. `suspend_stats` is
+success 0 / fail 3 (`failed_suspend=1`, `failed_suspend_noirq=0`). Dmesg has
+an 84 ms s2idle entry/exit at uptime 1520.553879–1520.638005; its cause is
+unknown. The service's read-only `--suspend_controls` snapshot shows one
+failed attempt / zero total suspend time, and `--wakeups` lists one NETLINK
+abort. I cannot attribute the short interval to the force call.
+
+No RTC alarm or temporary sleep selection remains. The next service call will
+only follow the notebook's already successful order: enable the downstream
+read-only `/sys/kernel/debug/interconnect/debug_suspend` hook, select deep,
+arm an 8-second PMIC RTC wake, then call `forceSuspend()`; restore the original
+sleep selection, hook `0`, and clear any remaining alarm after return. This is
+the smallest safe way to get the Android suspend-boundary ICC client snapshot.

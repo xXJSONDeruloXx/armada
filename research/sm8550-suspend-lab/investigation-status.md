@@ -6,18 +6,22 @@ the chronological record, including failed runs and superseded interpretations.
 Update this page when a checklist item changes; put raw output in a dated
 receipt and explain the result in the notebook.
 
-Status as of 2026-09-20 06:16 UTC. Repository branch
+Status as of 2026-09-20 06:39 UTC. Repository branch
 `feat/sm8550-suspend-lab`. The read-only ICC attribution profile and tests are
 committed on this branch; a live, lossless device trace now identifies the
 PCIe request in the final SLEEP bucket. Exact A-slot Android WCN/CNSS/PCIe
 modules have now been extracted and manually decompiled read-only from Linux.
 The exact CNSS branch is conditional: connected DRV suspend skips the explicit
 endpoint D3hot request, while the disconnected/non-DRV path requests it. The
-successful Android run's branch is still unknown. The user reports the device
-is now on Android, but the previously recorded Wi-Fi ADB endpoint refuses
-connections and no USB ADB device is present, so there is no new runtime
-capture. No device state was changed. The user supplied anchor `054766d5...`
-is an earlier commit; work continues from the newer tip.
+successful Android run's branch is still unknown. Wireless ADB is now
+available on Android and root works. Live merged DT confirms the L1SS/no-client
+properties are on disabled pcie1, not active WCN pcie0. Android has made no
+successful suspend in this boot. A repeated direct `rtcwake` test returned
+`EBUSY` and was cleaned up. One unarmed `forceSuspend()` probe returned
+false and no qcom sleep records advanced; do not call it again until the
+known 8-second RTC recovery alarm is armed. Use the already-proven
+`debug_suspend`/`forceSuspend()` diagnostic sequence. The user supplied anchor
+`054766d5...` is an earlier commit; work continues from the newer tip.
 
 ## Current objective
 
@@ -46,6 +50,8 @@ open until measured.
 
 | Status | Finding |
 |---|---|
+| Observed, live Android merged DT | Runtime model is KalamaP HDK with IDs matching the public Nova DTBO candidate. Active WCN is under `pcie@1c00000`, has `qcom,drv-name=lpass`, and lacks `qcom,apss-based-l1ss-sleep`, `qcom,no-client-based-bw-voting`, and `qcom,pcie-switch-type`. Those L1SS/no-client properties appear only on `pcie@1c08000`, which runtime DT marks disabled. Exact CNSS binary falls back from absent `qcom,drv-supported` to `qcom,drv-name`; DRV support is therefore likely on pcie0, but disable-DRV quirk and connected state remain unknown. Receipt: `../../receipts/2026-09-20-android-live-runtime.md`. |
+| Observed, live Android suspend attempts | Current Android boot has `success=0`, `fail=3`. First attempt logged WLAN bus-suspend callback success then a `NETLINK` abort. A direct `rtcwake -m mem` returned `EBUSY`, left an alarm that was cleared, and a ~38 ms s2idle interval occurred while it was armed (cause unknown). An unarmed `forceSuspend()` probe returned false; an ~84 ms s2idle interval appeared, also unattributed. Same boot, `[s2idle] deep`, no alarm, all AOSD/CXSD/DDR/APSS zero; no successful sample. Do not repeat direct `rtcwake -m mem` or call forceSuspend before a wake alarm. Use the validated `debug_suspend` + deep + 8-second RTC + `forceSuspend()` sequence. Receipt: `../../receipts/2026-09-20-android-live-runtime.md`. |
 | Observed, host-side transport check | At 06:16 UTC the previously documented Android peer at `192.168.0.163` answered ping, but TCP/5555 and tested alternate access ports refused, ADB device/mDNS discovery was empty, and USB enumeration showed only the SanDisk drive. Current peer identity was not authenticated. No Android runtime state was collected or changed. Receipt: `../../receipts/2026-09-20-android-access-check.txt`. |
 | Observed | Armada s2idle and direct PSCI SYSTEM_SUSPEND suspend/resume successfully. AOSD/CXSD/scalar DDR and recognized detailed DDR LPM rows remain zero; APSS/other subsystem evidence advances. |
 | Observed | Android's captured Apps-RSC SLEEP/WAKE set has 11 BCM plus 3 PMIC regulator commands. It includes SH1, QUP2, ACV, MC4, SH5; MC0/SH0 SLEEP requests are zero/off; LDOE1/LDOE3 have explicit sleep requests. See `receipts/2026-09-19-android-deep-rpmh/`. |
