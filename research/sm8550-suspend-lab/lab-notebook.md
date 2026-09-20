@@ -5649,3 +5649,20 @@ Next useful evidence is an Android log window from one successful suspend
 containing CNSS DRV-connected state and `msm_pcie_pm_control()` mode, plus
 root-fixup/noirq markers and merged-DT APSS/L1SS property state. No behavioral
 A/B is justified until those facts distinguish the actual host route.
+
+### 2026-09-20 06:16 UTC — Android boot reported, but current ADB transport is unavailable
+
+The user reported switching the Nova to Android. The host checked the last
+documented Wi-Fi ADB endpoint, `192.168.0.163:5555`: the peer answered ICMP,
+but repeated ADB and TCP connection attempts to port 5555 were refused. ADB
+mDNS advertised no services, and the Mac's USB registry showed only the
+SanDisk Ultra external drive, not the handheld. Ports 22, 8022, 5556, and
+37099 also refused. The peer's current identity is not authenticated by ADB.
+
+The prior rooted Android capture documents `service.adb.tcp.port=5555` as
+boot-scoped and `persist.adb.tcp.port` as empty, so the service may simply not
+have been enabled for this boot. No runtime Android logs, module state, or
+merged DT were collected in this attempt. No device setting, service,
+security policy, boot mode, or partition was changed. Receipt:
+`../../receipts/2026-09-20-android-access-check.txt`. Resume live collection
+once an authorized USB ADB or Android wireless-debugging transport is exposed.

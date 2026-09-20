@@ -1,0 +1,29 @@
+Android runtime access preflight
+Captured: 2026-09-20 06:16 UTC
+
+User reported that the Nova had been switched to Android.
+
+Host network:
+  Mac Wi-Fi address: 192.168.0.228/24
+  Gateway: 192.168.0.1
+
+The last documented rooted Android endpoint is 192.168.0.163:5555
+(`android-root-live-preflight.txt`). Read-only checks in this session:
+
+  adb devices -l                 no devices
+  adb mdns services              no services
+  adb connect 192.168.0.163:5555 connection refused (repeated)
+  ping 192.168.0.163             2/2 replies after the initial wait
+  TCP 22, 8022, 5555, 5556, 37099 refused
+  macOS IOUSB registry           SanDisk Ultra only; no Android handheld
+
+The peer at the historical address is reachable at IP level, but its current
+identity is not confirmed and it exposes no observed ADB/SSH endpoint. The
+previous Android capture had `service.adb.tcp.port=5555` set only for that
+boot, with `persist.adb.tcp.port` empty. Therefore this preflight does not
+provide a shell, root, logcat, kernel log, or merged runtime-DT capture for the
+current Android boot.
+
+No Android setting, service, security policy, boot mode, or partition was
+changed. Live Android collection can resume after an authorized ADB transport
+is exposed again (USB data/ADB or Android wireless debugging).

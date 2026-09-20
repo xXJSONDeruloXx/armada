@@ -6,16 +6,18 @@ the chronological record, including failed runs and superseded interpretations.
 Update this page when a checklist item changes; put raw output in a dated
 receipt and explain the result in the notebook.
 
-Status as of 2026-09-20 05:30 UTC. Repository branch
+Status as of 2026-09-20 06:16 UTC. Repository branch
 `feat/sm8550-suspend-lab`. The read-only ICC attribution profile and tests are
 committed on this branch; a live, lossless device trace now identifies the
 PCIe request in the final SLEEP bucket. Exact A-slot Android WCN/CNSS/PCIe
 modules have now been extracted and manually decompiled read-only from Linux.
 The exact CNSS branch is conditional: connected DRV suspend skips the explicit
 endpoint D3hot request, while the disconnected/non-DRV path requests it. The
-successful Android run's branch is still unknown. The device remains awake on
-the same Linux boot; no power state or vote was changed. The user supplied
-anchor `054766d5...` is an earlier commit; work continues from the newer tip.
+successful Android run's branch is still unknown. The user reports the device
+is now on Android, but the previously recorded Wi-Fi ADB endpoint refuses
+connections and no USB ADB device is present, so there is no new runtime
+capture. No device state was changed. The user supplied anchor `054766d5...`
+is an earlier commit; work continues from the newer tip.
 
 ## Current objective
 
@@ -44,6 +46,7 @@ open until measured.
 
 | Status | Finding |
 |---|---|
+| Observed, host-side transport check | At 06:16 UTC the previously documented Android peer at `192.168.0.163` answered ping, but TCP/5555 and tested alternate access ports refused, ADB device/mDNS discovery was empty, and USB enumeration showed only the SanDisk drive. Current peer identity was not authenticated. No Android runtime state was collected or changed. Receipt: `../../receipts/2026-09-20-android-access-check.txt`. |
 | Observed | Armada s2idle and direct PSCI SYSTEM_SUSPEND suspend/resume successfully. AOSD/CXSD/scalar DDR and recognized detailed DDR LPM rows remain zero; APSS/other subsystem evidence advances. |
 | Observed | Android's captured Apps-RSC SLEEP/WAKE set has 11 BCM plus 3 PMIC regulator commands. It includes SH1, QUP2, ACV, MC4, SH5; MC0/SH0 SLEEP requests are zero/off; LDOE1/LDOE3 have explicit sleep requests. See `receipts/2026-09-19-android-deep-rpmh/`. |
 | Observed | Armada stages six BCM sleep commands (MC0, SH0, SN0, CN0, QUP1, QUP0); MC0/SH0 are nonzero. The trace proves Linux staged these commands, not that AOP accepted/applied them. |
