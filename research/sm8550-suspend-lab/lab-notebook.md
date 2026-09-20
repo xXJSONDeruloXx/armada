@@ -7377,3 +7377,27 @@ At 22:00 UTC, checked the attached-USB path from the Mac. `adb devices` and
 no USB serial node appeared; only macOS `debug-console` and `wlan-debug`
 serial nodes were present. The visible USB product was `Ultra`. This adds no
 host-side recovery channel if the Nova fails before Linux userspace.
+
+### 2026-09-20 22:06 UTC — fresh stock direct-deep PCIe/RPMh control
+
+Ran a 15-second, RTC-woken direct `deep` control on the unchanged stock image
+with the `pcie-d3cold` trace profile. It entered and exited `deep`, returned
+success, showed 13.612693 seconds of suspend-clock separation, and woke on the
+expected PMIC RTC interrupt. The boot ID remained the same; Wi-Fi returned UP,
+and Steam/Gamescope stayed alive. The one-shot RTC alarm and private trace
+instance were cleaned. No driver, DT, request, or radio policy was changed.
+
+The root port again vetoed `pci_host_common_d3cold_possible()` in
+`PCI_UNKNOWN` (`17cb:0113`, `retval=-95`). Apps-RSC submitted the same six
+SLEEP/six WAKE commands, including MC0/SH0 SLEEP `0x600003b8`. AOSD, CXSD,
+and scalar DDR stayed zero; APSS SMEM advanced once, separate ADSP/CDSP
+records advanced, and detailed DDR ID `0xd0` advanced by 310695345 ticks.
+This run did not enable the PSCI system-suspend return probe, so its direct
+PSCI return is not newly established by this receipt. The earlier dedicated
+PSCI runs remain the evidence for that point. Raw run and hashes:
+[`stock deep PCIe/RPMh receipt`](receipts/2026-09-20-stock-deep-pcie-control.md).
+
+This strengthens the repeatability of the observed Linux baseline and keeps
+the staged-request versus firmware-acceptance distinction open. It does not
+make the PCIe floor causal evidence for zero AOSD/CXSD/DDR residency, so the
+candidate OPP remains unbooted until the early-boot recovery gap is covered.

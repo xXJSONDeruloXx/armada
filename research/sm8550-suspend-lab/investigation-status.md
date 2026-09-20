@@ -6,7 +6,7 @@ the chronological record, including failed runs and superseded interpretations.
 Update this page when a checklist item changes; put raw output in a dated
 receipt and explain the result in the notebook.
 
-Status as of 2026-09-20 22:00 UTC. Branch `feat/sm8550-suspend-lab`.
+Status as of 2026-09-20 22:13 UTC. Branch `feat/sm8550-suspend-lab`.
 
 ## Current goal checklist
 
@@ -47,6 +47,10 @@ Status as of 2026-09-20 22:00 UTC. Branch `feat/sm8550-suspend-lab`.
 - [x] Check persistent journal and pstore for the prior candidate boot. The
   clean apply/shutdown is recorded, but there is no candidate root journal or
   pstore kernel log to identify the failed phase.
+- [x] Repeat a stock RTC-woken direct-deep control with the PCIe/RPMh trace.
+  The root-port D3cold veto and MC0/SH0 SLEEP floor reproduced; AOSD/CXSD/
+  scalar-DDR deltas remained zero. The run did not include a PSCI kretprobe.
+  See the [stock control receipt](receipts/2026-09-20-stock-deep-pcie-control.md).
 - [ ] Locate the previous candidate boot's SSH loss and cover failures before
   the initrd timer starts. The prior journal proves a clean bootc apply and
   boot-image rewrite, but there is no persistent journal for the subsequent
@@ -161,6 +165,14 @@ At 22:00 UTC, the Mac also showed no Nova/Android USB device, ADB device,
 fastboot device, or USB serial node. The only serial nodes were macOS's own
 `debug-console` and `wlan-debug`; the visible USB product was `Ultra`. This
 does not provide a host-side recovery channel for an early boot failure.
+
+At 22:06 UTC, a fresh stock `deep` run succeeded for 13.612693 seconds of
+suspend-clock separation and woke through the RTC. The D3cold check again
+returned `-EOPNOTSUPP` for root port `17cb:0113`; MC0/SH0 again received
+`0x600003b8`; AOSD/CXSD/scalar DDR remained unchanged. Wi-Fi recovered and
+Steam/Gamescope stayed alive. No PSCI return probe was enabled for this run.
+The PCIe OPP candidate remains un-staged because the initrd timer still cannot
+cover kernel/initrd-systemd failures before timer activation.
 
 At 20:45 UTC both current ESP images again hash to the known stock image
 `0b0d7c03a88e77c480ad31d145a6718916638ba62287ff5a2b427c0f75475000`, and the
