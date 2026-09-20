@@ -6086,3 +6086,21 @@ connected-DRV path for that run. The current awake read still cannot expose
 the saved flag during sleep or physical PCI state. Receipt:
 `receipts/2026-09-20-android-live-dt-refresh.txt`. No suspend or device change
 was made.
+
+### 2026-09-20 09:36 UTC — candidate PCIe driver is built into the kernel
+
+Checked the exact Linux 7.2.3 scratch configuration used for the revised
+targeted candidate build. It has `CONFIG_MODULES=y` and `CONFIG_PCIE_QCOM=y`;
+the DWC Makefile maps the latter to `pcie-qcom.o`. The object exists, but
+`pcie-qcom.ko` does not. Therefore the candidate cannot be deployed as a
+module-only replacement: functional testing requires a linked kernel `Image`
+plus the Nova DTB. This is a direct finding about the scratch target config,
+not a new read of the installed Linux config. Exact values, hashes, and scope
+are in `receipts/2026-09-20-pcie-qcom-linkage-check.txt`.
+
+Wireless ADB is currently connected to rooted Android
+`5.15.123-android13-8-g697b78910a71-dirty`, with `wlan0` up. No suspend or
+device mutation was performed during this check. Next verify that the scratch
+config is reproduced by the package's actual kernel build path, then finish
+the Linux rollback audit before deciding whether a full linked-kernel A/B is
+worth building.

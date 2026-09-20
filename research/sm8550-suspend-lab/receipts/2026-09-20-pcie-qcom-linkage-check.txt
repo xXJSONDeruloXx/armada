@@ -1,0 +1,36 @@
+SM8550 suspend lab: PCIe candidate linkage check
+Captured: 2026-09-20 09:33 UTC
+Host source tree: /Volumes/NovaKernelBuild/work/linux-7.2.3
+Purpose: determine whether the prepared qcom PCIe diagnostic can be tested as
+a loadable module or requires a linked kernel image.
+
+Candidate target config:
+  CONFIG_MODULES=y
+  CONFIG_PCIE_QCOM=y
+  CONFIG_PCI_MSI=y
+  CONFIG_OF=y
+  .config SHA-256:
+    2219546e268f72bb2bcbac96943202e9e50731b6e531e3193cc73b1976d2fbef
+
+Kbuild rule:
+  drivers/pci/controller/dwc/Makefile:
+    obj-$(CONFIG_PCIE_QCOM) += pcie-qcom.o
+
+Built candidate output:
+  drivers/pci/controller/dwc/pcie-qcom.o  599296 bytes
+  SHA-256:
+    bca7e626ae96c0ed7003b42eadc969f358db54ce433436743b6077ea243239d0
+  drivers/pci/controller/dwc/pcie-qcom.ko: absent
+
+Interpretation:
+  With CONFIG_PCIE_QCOM=y, Kbuild links pcie-qcom.o into the kernel. The
+  candidate cannot be tested by replacing a module; a functional test requires
+  relinking the kernel Image and using the Nova DTB. CONFIG_MODULES=y only says
+  the kernel supports modules generally; it does not make this driver modular.
+
+Scope and device state:
+  This is the isolated Linux 7.2.3 candidate build tree used for the targeted
+  object/DTB compile. It is not a fresh read of the installed Linux config.
+  Wireless ADB currently reports Android kernel
+  5.15.123-android13-8-g697b78910a71-dirty on the Nova with wlan0 up. No
+  Android or Linux device state was modified.

@@ -6,7 +6,7 @@ the chronological record, including failed runs and superseded interpretations.
 Update this page when a checklist item changes; put raw output in a dated
 receipt and explain the result in the notebook.
 
-Status as of 2026-09-20 09:29 UTC. Repository branch
+Status as of 2026-09-20 09:35 UTC. Repository branch
 `feat/sm8550-suspend-lab`. Wireless ADB verified that the installed Android
 PCIe module matches the disassembled copy. Live split-BTF maps the connected-
 DRV `link_status` and the late-fixup/noirq gates; the successful Android
@@ -26,7 +26,13 @@ property. Android trace settings and sleep controls are restored; same boot
 and Wi-Fi/ADB are healthy, and no state was changed in the latest read-only
 check. Earlier direct `rtcwake -m mem` and unarmed-forceSuspend mistakes
 remain documented; do not repeat them. The user-supplied anchor
-`054766d5...` predates the current branch tip.
+`054766d5...` predates the current branch tip. The prepared Linux 7.2.3
+candidate config has `CONFIG_PCIE_QCOM=y` (even though `CONFIG_MODULES=y`),
+and Kbuild maps that setting to the built-in `pcie-qcom.o`; there is no
+`pcie-qcom.ko`. This is the candidate scratch config, not a fresh read of the
+currently installed Linux boot. A functional A/B therefore needs a newly
+linked kernel Image plus the Nova DTB, not a driver-module swap. Receipt:
+`receipts/2026-09-20-pcie-qcom-linkage-check.txt`.
 
 ## Current objective
 
@@ -281,6 +287,12 @@ generic D3cold check or infer safe D3 support from `d3cold_allowed=1` alone.
   The C proposal tracks successful test-OPP selection and restores a maximum
   OPP before the normal link-based update on resume. See the
   [build receipt](receipts/2026-09-20-nova-opp-target-build.md).
+- [x] Check linkage in the candidate target config. `CONFIG_PCIE_QCOM=y` means
+  the driver is built into the kernel despite general module support; a
+  `.ko` replacement is not an option. This was read from the candidate scratch
+  tree only; verify the production package config before a full build.
+- [ ] Reproduce/verify the exact packaged Nova kernel config and full-image
+  build path before spending time on a linked-kernel A/B.
 - [ ] Verify current Linux test-layer/rollback feasibility before deployment.
 - [ ] Run the A/B on Linux only after the test image and rollback are ready.
 - [ ] For any justified A/B, record all of the following at matched boundaries:
@@ -318,14 +330,14 @@ noirq teardown paths are now mapped. Physical sleep-time PCI state remains
 unknown. The Linux source audit explains why the current OPP-backed deep path
 keeps its active 500,000 kB/s request when the host is not suspended. The
 tag-only approach is not viable as a small consumer-side patch. The revised
-Nova-only OPP candidate now passes targeted ARM64 object and DTB builds. It
-tracks whether the test OPP was selected; resume restores a safe ceiling and
-then reselects the actual link OPP where available. The full kernel/module
-package and bootc layer are not built. Next audit the current Linux deployment
-and rollback path against this 7.2.3 artifact, and use the active Android
-Wireless ADB session for remaining read-only runtime/source checks. Do not
-deploy until the Linux test layer and rollback are verified. Android remains
-on the same boot with Wi-Fi/ADB healthy and has not been modified.
+Nova-only OPP candidate passes targeted ARM64 object and DTB builds and has a
+safe OPP restore path. The target config links the PCIe driver into the kernel,
+so an A/B requires a full `Image` relink and Nova DTB; the targeted object
+alone cannot be installed. First verify the exact packaged config/build path
+and current Linux rollback path, and finish the remaining source comparison.
+Do not build or deploy the functional candidate until those gates are met.
+Android remains on the same boot with Wi-Fi/ADB healthy and has not been
+modified.
 The archived Linux trace and host reanalysis remain under
 `.external-research/sm8550-suspend-lab-runs/`; do not edit their raw data.
 
