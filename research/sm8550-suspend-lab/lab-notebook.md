@@ -6338,3 +6338,86 @@ state evidence. No module, image, suspend setting, vote, regulator, or PCI
 state was changed. An SSH attempt to the Armada alias timed out while Android
 was active. The user confirms `adb reboot` returns to the default Linux boot;
 that transition is the next read-only baseline check.
+
+### 2026-09-20 12:35 UTC — Linux baseline restored; module-only A/B found
+
+After the user confirmed the Nova's default OS, I rebooted Android with
+Wireless ADB. Android went offline and Armada SSH at `192.168.0.20` returned.
+The live system is Fedora 44, kernel `7.2.3`, Armada image version
+`20260915.feca679`, boot ID `09a76af5-4e8f-454a-858e-dedb4ebb1d4d`, with
+`wlp1s0` up at `192.168.0.20`. PCI root `0000:00:00.0` is D0/unbound and WCN
+`0000:01:00.0` is D0/bound to `ath12k_wifi7_pci`. No systemd units have failed.
+
+`bootc status` and `ostree admin status` both show current and rollback
+Deployments on the same image digest/checksum; nothing is staged. The current
+image version is `20260915.feca679` (`sha256:5fe995d5...`), deploy serial 3;
+rollback is the same image at serial 2. `rpm-ostree status` currently aborts
+with a missing-`timestamp` assertion, so bootc/OSTree status are the usable
+read-only deployment receipts. No image or kernel layer was changed.
+
+I fetched `/proc/config.gz` read-only. It is byte-for-byte identical to the
+local Linux 7.2.3 Kbuild `.config` (SHA-256
+`2219546e268f72bb2bcbac96943202e9e50731b6e531e3193cc73b1976d2fbef`). The
+running config has `CONFIG_MODULES=y`, `CONFIG_MODULE_UNLOAD=y`,
+`CONFIG_OF_DYNAMIC=y`, `CONFIG_OF_OVERLAY=y`, `CONFIG_QCOM_COMMAND_DB=y`, and
+`CONFIG_QCOM_RPMH=y`; `Module.symvers` is absent and the device has no
+kernel-devel package or compiler. The local Kbuild tree has generated headers
+and `modpost`. This is enough to try an out-of-tree module build without a full
+kernel build; module-load ABI still must be checked.
+
+The live Apps RSC is `/sys/devices/platform/soc@0/17a00000.rsc`, driver `rpmh`,
+compatible `qcom,rpmh-rsc`, with `qcom,drv-id=<2>`. The bound child
+`17a00000.rsc:regulators-0` uses `qcom-rpmh-regulator` and has the RSC as its
+direct parent. `cmd_db_read_addr` and `rpmh_write_async` are present in live
+`/proc/kallsyms`. Configfs is mounted but has no OF-configfs overlay directory;
+none is needed if a test module reuses this existing RPMh child device as its
+client. That removes the proposed overlay and makes the diagnostic smaller.
+
+Fresh post-boot counters are APSS=1 and AOSD/CXSD/scalar DDR=0; suspend stats
+are success=0/fail=0. The awake interconnect summary still shows the PCIe
+client at a 1,000,000 kB/s peak, which is not a suspend request. No module was
+built or loaded, no overlay or vote was changed, and no suspend was attempted.
+The next action is to build a module-only MC4/SH5 SLEEP/WAKE probe in the local
+Kbuild tree, verify its vermagic and exports, then decide whether it is safe to
+load for one RTC-bounded A/B. A reboot to the unchanged current image will clear
+the RPMh request cache afterward.
+
+### 2026-09-20 13:01 UTC — MC4/SH5 probe builds; live ABI checks narrow the risk
+
+The module source now targets the already-bound Nova platform device
+`17a00000.rsc:regulators-0` by exact device name. On insertion it resolves
+`MC4` and `SH5` through CMD-DB and queues the Android-matched SLEEP=0 and
+WAKE_ONLY=1 pair using `rpmh_write_async()`. It does not alter ACTIVE votes,
+PCI state, regulators, or the boot deployment. The request cache persists until
+reboot; if the WAKE_ONLY queue fails after SLEEP was accepted, do not suspend
+and reboot before further testing.
+
+The out-of-tree module is an AArch64 ELF with vermagic
+`7.2.3 SMP preempt mod_unload aarch64`, matching both `uname -r` and a shipped
+device module. Its SHA-256 is
+`ec0194e7ae8a6dc91c74449718948c941095c3f55c0ff90c55a03aa02e11e330`.
+`KBUILD_EXTRA_SYMBOLS` pointed modpost at the local 7.2.3 `vmlinux.symvers`;
+all imported symbols are listed there as exported, and the same symbol names
+are present in live `/proc/kallsyms`. The local build tree has no top-level
+`Module.symvers`, and live `CONFIG_MODVERSIONS` is disabled, so there is no
+symbol-CRC comparison. The device's live BTF confirms `struct tcs_cmd` is three
+u32 fields at offsets 0/4/8 (12 bytes total) and that
+`RPMH_SLEEP_STATE=0` / `RPMH_WAKE_ONLY_STATE=1`, matching the module source.
+
+One build caveat: before build preparation,
+`/proc/config.gz` and the local `.config` matched at SHA-256
+`2219546e268f72bb2bcbac96943202e9e50731b6e531e3193cc73b1976d2fbef`.
+`make modules_prepare` normalized entries unknown to that source tree and
+disabled BTF plus several scheduler/tracing options; the module/RPMh/CMD-DB,
+ARM64, SMP, PREEMPT, stack-protector, and module-unload settings remain enabled
+in both. Thus the release, required API symbols, key structure layout, and
+relevant config gates are verified, while the exact full vendor patch/config
+identity is not. The exact live config and BTF were saved outside the repo at
+`/Volumes/NovaKernelBuild/armada-rpmh-dcvs-pair/` for comparison.
+
+The device is still on the same Linux boot ID, Wi-Fi and SSH are healthy, and
+the probe has not been copied to or loaded on it. No suspend test has run. The
+next gate is to insert the module, verify its one-line `SLEEP_AB` success log,
+and only then run the harness's 10-second minimum RTC-woken direct-deep test
+with the `rsc-success` trace profile. After the trial, reboot the unchanged
+deployment to clear the cached RPMh pair.

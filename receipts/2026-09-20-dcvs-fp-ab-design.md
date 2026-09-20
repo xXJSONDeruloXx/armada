@@ -1,8 +1,9 @@
 # Proposed Armada A/B: stage Android's DCVS-FP sleep/wake pair
 
-Status: source-audited design only. No Armada code, DT, module, or device
-behavior has been changed. Captured 2026-09-20 after the exact Android
-`dcvs_fp` module and live DT were inspected.
+Status as of 2026-09-20 13:01 UTC: the test-only module is built but has not
+been loaded. No module, DT, or behavior has been applied to the Nova. Captured
+after inspecting the exact Android `dcvs_fp` module and after the read-only
+Linux baseline and module ABI preflight.
 
 ## What is established
 
@@ -37,9 +38,10 @@ controller through its parent. Sources: [RPMh async writer](https://github.com/g
 
 **A:** current Armada Linux image and DT.
 
-**B:** add a temporary test-only platform module and runtime DT overlay below
-Apps-RSC `drv@2`. The module reads `qcom,ddr-bcm-name="MC4"` and
-`qcom,llcc-bcm-name="SH5"`, resolves both addresses with CMD-DB, and queues
+**B:** load the temporary test-only module from
+`research/sm8550-suspend-lab/probes/rpmh-dcvs-pair/` on the live Nova. It finds
+the existing, already-bound `17a00000.rsc:regulators-0` RPMh client by its
+verified platform device name, resolves both addresses with CMD-DB, and queues
 only these requests:
 
 | Resource | SLEEP | WAKE_ONLY |
@@ -55,10 +57,10 @@ active when the D3cold check is vetoed; lowering that OPP could also constrain
 live WCN traffic. The pair A/B directly tests one missing firmware-facing
 request group while leaving the known MC0/SH0 floor as-is.
 
-Expected implementation size is roughly 45–65 C lines, a small DT overlay,
-and build glue. This is a disposable diagnostic, not a production DCVS-FP
-port. A full port would also need the vendor active fast-path and DCVS
-integration, which mainline does not provide.
+The probe is 58 C lines plus a one-line Makefile. It needs no overlay, image
+rebuild, active fast path, or DT change. This is a disposable diagnostic, not a
+production DCVS-FP port. A full port would also need the vendor active fast-path
+and DCVS integration, which mainline does not provide.
 
 ## Test observations
 
@@ -91,15 +93,24 @@ rollback.
 
 ## Build and rollback gate
 
-The prepared Linux 7.2.3 config has `CONFIG_MODULES=y`, `CONFIG_MODULE_UNLOAD=y`,
-`CONFIG_QCOM_RPMH=y`, `CONFIG_QCOM_COMMAND_DB=y`, `CONFIG_OF_OVERLAY=y`,
-`CONFIG_CONFIGFS_FS=y`, and no `CONFIG_MODVERSIONS`. However, the build tree
-currently has no `Module.symvers`, and no test module has been compiled. First
-verify an incremental module build against the exact `Image`/DTB artifacts,
-then validate the live Linux overlay/configfs path before loading anything.
+The module now builds as an AArch64 ELF against the local 7.2.3 Kbuild tree;
+its vermagic exactly matches the Nova and a shipped module. The local tree has
+no top-level `Module.symvers`, but its `vmlinux.symvers` lists every imported
+symbol as exported. All import names are present in live `/proc/kallsyms`, and
+the live BTF confirms the `tcs_cmd` field offsets/size and RPMh state enum
+values. Live `CONFIG_MODVERSIONS` is disabled, so no symbol-CRC comparison is
+available. The exact build, ABI evidence, and caveat are recorded in the
+[module receipt](2026-09-20-rpmh-dcvs-pair-module-build.md).
+
+One caveat remains: `make modules_prepare` normalized options not recognized
+by the local Kconfig. Required module, RPMh, CMD-DB, architecture, SMP,
+PREEMPT, stack-protector, and module-unload settings match, but the complete
+source/config identity does not. The module has not yet been inserted, so
+runtime symbol resolution and the device log remain the final pre-suspend gate.
 
 The RPMh SLEEP/WAKE cache is owned by the RSC controller, not the temporary
-platform device. Removing the module/overlay alone does not clear the cached
-requests. Rollback requires a reboot into the unmodified bootc deployment;
-prove that deployment rollback works before staging the pair. Do not test this
-on the current Android boot.
+module. Unloading it does not clear the cached requests. If both requests queue,
+rollback is to reboot into the unchanged bootc deployment; the active and
+rollback deployments were verified to use the same image digest. Do not suspend
+if device lookup, CMD-DB, SLEEP, or WAKE_ONLY fails. If SLEEP queues but
+WAKE_ONLY fails, reboot before further testing.
