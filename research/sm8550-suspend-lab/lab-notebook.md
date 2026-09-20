@@ -6596,3 +6596,22 @@ device deployment has happened yet; next is an incremental `Image dtbs`
 build, followed by artifact inspection and a reversible bootc-layer review.
 Hashes and exact commands are in the
 [config reconcile receipt](receipts/2026-09-20-pcie-opp-config-reconcile.md).
+
+### 2026-09-20 14:47 UTC — current bootc base found; old layer recipe is stale
+
+The booted and rollback Armada deployments both use version
+`20260915.feca679` and OSTree checksum
+`ec096ad2fdb64e35dd9b2ac691690d80f6e62d80c2617704d2a5788c7b95294b`; neither
+is staged. Their image reference is
+`ghcr.io/armada-os/armada:beta`, pinned by manifest digest
+`sha256:5fe995d5fedf5034ee42a8f0e54dbd2d08e0c85adb9e3f88cfd52e55636eeb88`.
+The BLS entries use the installed kernel `7.2.3`. This lets the test layer
+preserve the exact current root image and kernel-module tree.
+
+The old local layer recipe is for `localhost/armada-rsc:20260901` and kernel
+7.2.0, so it cannot be reused. Rootful Podman has only its Fedora builder
+image; the Armada base is not cached. `/var` has 37 GB free, and the pinned
+base's compressed OCI layers total about 5.65 GiB before extraction or bootc
+staging. I have not pulled it; first budget the unpacked storage so the build
+does not crowd the live device. No deployment changed. Details are in the
+[bootc base/space receipt](receipts/2026-09-20-bootc-base-and-space.md).

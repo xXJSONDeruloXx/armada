@@ -6,7 +6,7 @@ the chronological record, including failed runs and superseded interpretations.
 Update this page when a checklist item changes; put raw output in a dated
 receipt and explain the result in the notebook.
 
-Status as of 2026-09-20 14:32 UTC. Branch `feat/sm8550-suspend-lab`.
+Status as of 2026-09-20 14:47 UTC. Branch `feat/sm8550-suspend-lab`.
 
 The sleep-stats offset question is closed: Android and Armada both resolve the
 SM8550 records at `+0x48` and `+0xb8`. Android's successful deep path advances
@@ -48,6 +48,13 @@ device. I restored the scratch `.config` through Kconfig; it now byte-matches
 the live config, but the Image/DTB have not been rebuilt with it. Rebuild and
 verify artifacts, then establish a reversible boot layer before any test. See
 the [config-reconcile receipt](receipts/2026-09-20-pcie-opp-config-reconcile.md).
+The currently installed base is `ghcr.io/armada-os/armada:beta` at digest
+`sha256:5fe995d5fedf5034ee42a8f0e54dbd2d08e0c85adb9e3f88cfd52e55636eeb88`;
+the old local-layer recipe points at a 2026-09-01 image and kernel 7.2.0, so it
+cannot be reused verbatim. The base layers total 6.07 GB compressed, while
+`/var` has 37 GB free and the rootful Podman store does not contain the base.
+Check unpacked space requirements before pulling or building a new layer. See
+the [bootc base receipt](receipts/2026-09-20-bootc-base-and-space.md).
 
 ## Latest Android suspend attempt (historical)
 
@@ -92,6 +99,9 @@ manually changing shared bandwidth/regulator requests.
   the saved live config byte-for-byte.
 - [ ] Rebuild and inspect the candidate Image/DTB, then prove a reversible
   deployment path.
+- [x] Identify the live bootc base digest and rollback deployment; confirm the
+  old 7.2.0 local-layer recipe is stale. Assess storage before pulling the
+  6.07 GB compressed base into the currently empty rootful image store.
 - [ ] Run one RTC-bounded deep A/B only if the artifact and rollback gates
   pass. Record the command set, residency counters, PSCI result, resume, and
   Wi-Fi state; do not use battery drain as the short-run verdict.
