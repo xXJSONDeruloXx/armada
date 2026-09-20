@@ -6,7 +6,7 @@ the chronological record, including failed runs and superseded interpretations.
 Update this page when a checklist item changes; put raw output in a dated
 receipt and explain the result in the notebook.
 
-Status as of 2026-09-20 21:58 UTC. Branch `feat/sm8550-suspend-lab`.
+Status as of 2026-09-20 22:00 UTC. Branch `feat/sm8550-suspend-lab`.
 
 ## Current goal checklist
 
@@ -25,8 +25,8 @@ Status as of 2026-09-20 21:58 UTC. Branch `feat/sm8550-suspend-lab`.
   The image has not been staged or applied.
 - [x] Verify the rollback command reboots into the previous deployment and
   that the automatic bootc update timer is masked on the device.
-- [x] Check Linux-visible USB, EFI, and watchdog surfaces for a remote
-  early-boot recovery route; none is currently exposed.
+- [x] Check Linux- and Mac-visible USB/ADB/fastboot/serial, EFI, and watchdog
+  surfaces for remote early-boot recovery; none is currently exposed.
 - [x] Trace the “Preparing Armada” splash label to its initramfs and real-root
   producers; the identical label cannot identify which boot phase stalled.
 - [x] Read the current boot's initrd/switch-root journal and inspect the ESP
@@ -156,6 +156,11 @@ At 21:58 UTC, root-readable `/sys/fs/pstore` was empty. The running kernel has
 `/dev/pmsg0` exists, and no reserved-memory compatible in the live DT names
 `ramoops` or `pstore`. There is no preserved panic/console trace from the
 missing boot, and no RAM region should be guessed for a ramoops backend.
+
+At 22:00 UTC, the Mac also showed no Nova/Android USB device, ADB device,
+fastboot device, or USB serial node. The only serial nodes were macOS's own
+`debug-console` and `wlan-debug`; the visible USB product was `Ultra`. This
+does not provide a host-side recovery channel for an early boot failure.
 
 At 20:45 UTC both current ESP images again hash to the known stock image
 `0b0d7c03a88e77c480ad31d145a6718916638ba62287ff5a2b427c0f75475000`, and the

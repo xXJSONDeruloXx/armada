@@ -7371,3 +7371,9 @@ empty, `/sys/module/ramoops` and `/dev/pmsg0` were absent, and no live
 reserved-memory compatible named `ramoops` or `pstore` was found. This leaves
 no captured panic/console trace for the candidate boot. Loading ramoops would
 require a valid firmware-reserved buffer; do not guess a RAM address.
+
+At 22:00 UTC, checked the attached-USB path from the Mac. `adb devices` and
+`fastboot devices` were empty, no Retroid/Android USB product was visible, and
+no USB serial node appeared; only macOS `debug-console` and `wlan-debug`
+serial nodes were present. The visible USB product was `Ultra`. This adds no
+host-side recovery channel if the Nova fails before Linux userspace.

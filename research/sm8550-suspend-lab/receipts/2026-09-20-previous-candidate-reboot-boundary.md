@@ -57,3 +57,11 @@ and `/dev/pmsg0` are absent. A read-only search of the live
 `/sys/firmware/devicetree/base/reserved-memory` compatible properties found no
 `ramoops` or `pstore` backend node. No prior panic/console record is available
 through pstore. Do not load ramoops against a guessed physical memory region.
+
+## Mac USB recovery check
+
+At 22:00 UTC, read-only Mac checks found no Nova/Android USB product, ADB
+device, fastboot device, or USB serial node. The only serial nodes were the
+Mac's `debug-console` and `wlan-debug`; the visible USB product was `Ultra`.
+This does not provide a host-side way to reach ABL or recover an early Linux
+boot failure.
