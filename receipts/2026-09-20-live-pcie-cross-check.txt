@@ -1,0 +1,31 @@
+Kernel: 7.2.3
+Boot ID: 45137c86-bb9a-4021-9973-4bc6200fc9e6
+WLAN operstate: up
+
+=== 0000:00:00.0 ===
+vendor=0x17cb
+device=0x0113
+power_state=D0
+current_link_speed=5.0 GT/s PCIe
+current_link_width=1
+d3cold_allowed=1
+power/control=on
+power/runtime_status=active
+power/wakeup=disabled
+driver=unbound
+
+=== 0000:01:00.0 ===
+vendor=0x17cb
+device=0x1107
+power_state=D0
+current_link_speed=5.0 GT/s PCIe
+current_link_width=1
+d3cold_allowed=1
+power/control=on
+power/runtime_status=active
+power/wakeup=disabled
+driver=/sys/bus/pci/drivers/ath12k_wifi7_pci
+
+Live PCIe FDT:
+pcie@1c00000 compatible=qcom,pcie-sm8550
+pcie@1c08000 status=disabled

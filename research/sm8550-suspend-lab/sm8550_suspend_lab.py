@@ -281,6 +281,18 @@ def write_kernel_control(destination: Path, text: str) -> None:
         handle.flush()
 
 
+def write_kprobe_control(destination: Path, text: str) -> None:
+    """Write one command without truncating or appending to the registry."""
+    data = text.encode("utf-8")
+    fd = os.open(destination, os.O_WRONLY)
+    try:
+        written = os.write(fd, data)
+        if written != len(data):
+            raise OSError("short write to tracefs kprobe registry")
+    finally:
+        os.close(fd)
+
+
 def numeric_or_text(value: Optional[str]) -> Any:
     if value is None:
         return None
@@ -681,8 +693,10 @@ def parse_trace_event_line(line: str) -> Optional[Dict[str, Any]]:
 
 def trace_event_fields(payload: str) -> Dict[str, str]:
     return {
-        key: quoted or plain
-        for key, quoted, plain in re.findall(r'([A-Za-z_][A-Za-z0-9_]*)=(?:"([^"]*)"|([^\s]+))', payload)
+        key: quoted or pointer_array or plain
+        for key, quoted, pointer_array, plain in re.findall(
+            r'([A-Za-z_][A-Za-z0-9_]*)=(?:"([^"]*)"|\{"([^"]*)"\}|([^\s]+))', payload
+        )
     }
 
 
@@ -743,6 +757,8 @@ def parse_icc_aggregate_attribution(
     active: Dict[int, List[Dict[str, Any]]] = {}
     batches: Dict[str, List[Dict[str, Any]]] = {node: [] for node in registered}
     mutations: List[Dict[str, Any]] = []
+    target_node_addresses: Dict[str, set] = {node: set() for node in registered}
+    missing_node_addresses = set()
     unmatched_points = 0
     sleep_messages: List[Dict[str, Any]] = []
 
@@ -751,11 +767,23 @@ def parse_icc_aggregate_attribution(
         if not event:
             continue
         fields = trace_event_fields(event["payload"])
-        if event["group"] == probe_group and event["event"] in ("icc_path_init", "icc_path_put", "icc_set_tag"):
+        if event["group"] in (None, probe_group) and event["event"] in ("icc_path_put", "icc_set_tag"):
             mutations.append({"event": event["event"], "timestamp": event["timestamp"]})
-        elif event["group"] == probe_group and event["event"] == "icc_aggregate":
+        elif event["group"] in (None, probe_group) and event["event"] == "icc_aggregate":
             node = fields.get("node_name")
             if node in batches:
+                raw_node_addr = fields.get("node_addr")
+                try:
+                    node_addr = int(raw_node_addr, 0)
+                except (TypeError, ValueError):
+                    try:
+                        node_addr = int(raw_node_addr, 16)
+                    except (TypeError, ValueError):
+                        node_addr = None
+                if node_addr is None:
+                    missing_node_addresses.add(node)
+                else:
+                    target_node_addresses[node].add(node_addr)
                 callbacks.setdefault((event["pid"], node), []).append(
                     {
                         "timestamp": event["timestamp"],
@@ -807,7 +835,9 @@ def parse_icc_aggregate_attribution(
     final_sleep = sleep_batches[-1] if sleep_batches else []
     sleep_boundary = max((message["timestamp"] for message in final_sleep), default=None)
 
-    mutations_before_sleep = [row for row in mutations if sleep_boundary is None or row["timestamp"] <= sleep_boundary]
+    mutations_before_sleep = [
+        row for row in mutations if sleep_boundary is None or row["timestamp"] <= sleep_boundary
+    ]
     orphan_callbacks = [
         row
         for rows in callbacks.values()
@@ -821,8 +851,12 @@ def parse_icc_aggregate_attribution(
         mapping_reasons.append("trace loss is nonzero or could not be ruled out")
     if sleep_boundary is None:
         mapping_reasons.append("no Apps-RSC SLEEP submission was captured")
+    if missing_node_addresses:
+        mapping_reasons.append("some target-node aggregation callbacks lacked node addresses")
+    if any(len(addresses) != 1 for addresses in target_node_addresses.values()):
+        mapping_reasons.append("target-node addresses were missing or inconsistent")
     if mutations_before_sleep:
-        mapping_reasons.append("an ICC request was added, removed, or retagged before the sleep commands")
+        mapping_reasons.append("an ICC request was removed or retagged before the sleep commands")
     if orphan_callbacks:
         mapping_reasons.append("some qcom aggregation callbacks had no matching icc_set_bw tracepoint")
     if unmatched_points:
@@ -866,7 +900,17 @@ def parse_icc_aggregate_attribution(
             {
                 "node": node,
                 "status": status,
-                "reason": mapping_reasons[0] if status == "unresolved" and mapping_reasons else None,
+                "reason": (
+                    mapping_reasons[0]
+                    if status == "unresolved" and mapping_reasons
+                    else "callback request count differs from the fresh interconnect summary"
+                    if status == "request-count-mismatch"
+                    else "callback tag order differs from the fresh interconnect summary"
+                    if status == "request-tag-order-mismatch"
+                    else "provider aggregate does not match the generic ICC tracepoint"
+                    if status == "aggregate-validation-mismatch"
+                    else None
+                ),
                 "timestamp": batch["timestamp"],
                 "path": batch.get("path"),
                 "dev": batch.get("dev"),
@@ -884,6 +928,10 @@ def parse_icc_aggregate_attribution(
             }
         )
 
+    if any(row.get("status") != "exact" for row in latest):
+        mapping_reasons.append("one or more target-node aggregation passes failed exact request-list validation")
+    mapping_stable = not mapping_reasons
+
     final_sequences: Dict[str, Any] = {}
     for message in final_sleep:
         key = "%s/tcs%d/msgid=%#x" % (message["controller"], message["tcs"], message["msgid"])
@@ -897,6 +945,10 @@ def parse_icc_aggregate_attribution(
         "probe_group": probe_group,
         "registered_nodes": registered,
         "baseline_target_nodes_match": baseline.get("target_nodes_match"),
+        "target_node_addresses": {
+            node: ["0x%x" % address for address in sorted(addresses)]
+            for node, addresses in target_node_addresses.items()
+        },
         "trace_loss": trace_loss,
         "request_list_mutations_before_sleep": mutations_before_sleep,
         "unmatched_set_bw_points": unmatched_points,
@@ -1414,7 +1466,7 @@ def trace_prepare_suspend_kretprobe(run: DeviceRun, info: Dict[str, Any]) -> Dic
         else None,
     }
     write_json(run.run_dir / "meta" / "trace.json", info)
-    write_kernel_control(registry, definition + "\n")
+    write_kprobe_control(registry, definition + "\n")
     registry_after = read_text(registry) or ""
     trace_capture_file(run, "kprobe_events.registered.txt", registry)
     registered_lines = [line for line in registry_after.splitlines() if re.match(identity, line)]
@@ -1505,7 +1557,7 @@ def trace_remove_suspend_kretprobe(run: DeviceRun, info: Dict[str, Any]) -> Dict
         write_json(run.run_dir / "meta" / "trace.json", info)
         return result
     try:
-        write_kernel_control(registry, "-:%s/%s\n" % (group, name))
+        write_kprobe_control(registry, "-:%s/%s\n" % (group, name))
     except OSError as exc:
         result = {"result": "remove-failed", "error": str(exc)}
         probe["state"] = result["result"]
@@ -1545,7 +1597,7 @@ def icc_attribution_node_names(parsed: Dict[str, Any]) -> List[str]:
 
 
 def icc_aggregate_probe_fields() -> str:
-    return "node_name=+0x%x($arg1):string tag=$arg2:u32 avg_bw=$arg3:u32 peak_bw=$arg4:u32" % ICC_NODE_NAME_OFFSET
+    return "node_addr=$arg1:x64 node_name=+0x%x($arg1):string[1] tag=$arg2:u32 avg_bw=$arg3:u32 peak_bw=$arg4:u32" % ICC_NODE_NAME_OFFSET
 
 
 def trace_prepare_icc_attribution_probes(run: DeviceRun, info: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -1556,10 +1608,8 @@ def trace_prepare_icc_attribution_probes(run: DeviceRun, info: Dict[str, Any]) -
     if release != ICC_ATTRIBUTION_KERNEL_RELEASE or digest != ICC_ATTRIBUTION_BTF_SHA256:
         raise LabError("refusing icc_node.name dereference: kernel release/BTF differs from the inspected build")
     nodes = icc_attribution_targets(run)
-    target_filter = " || ".join('node_name == "%s"' % node for node in nodes)
     probe_specs = (
-        ("icc_aggregate", "qcom_icc_aggregate", icc_aggregate_probe_fields(), target_filter),
-        ("icc_path_init", "path_init", "", None),
+        ("icc_aggregate", "qcom_icc_aggregate", icc_aggregate_probe_fields(), None),
         ("icc_path_put", "icc_put", "", None),
         ("icc_set_tag", "icc_set_tag", "", None),
     )
@@ -1602,7 +1652,7 @@ def trace_prepare_icc_attribution_probes(run: DeviceRun, info: Dict[str, Any]) -
         }
         info["dynamic_probes"].append(probe)
         write_json(run.run_dir / "meta" / "trace.json", info)
-        write_kernel_control(registry, definition + "\n")
+        write_kprobe_control(registry, definition + "\n")
         after = read_text(registry) or ""
         matching = [line for line in after.splitlines() if re.match(identity, line)]
         if len(matching) != 1 or not kprobe_definition_matches(matching[0], definition):
@@ -1613,14 +1663,13 @@ def trace_prepare_icc_attribution_probes(run: DeviceRun, info: Dict[str, Any]) -
         event_format = read_text(trace_event_file(Path(str(info["instance"])), event, "format"))
         if event_format is None:
             raise LabError("ICC probe event format is unreadable: %s" % name)
-        fields_to_check = ("node_name", "tag", "avg_bw", "peak_bw") if name == "icc_aggregate" else ()
+        fields_to_check = ("node_addr", "node_name", "tag", "avg_bw", "peak_bw") if name == "icc_aggregate" else ()
         for field in fields_to_check:
             if not re.search(r"\b%s\s*;" % re.escape(field), event_format):
                 raise LabError("ICC aggregate event format lacks %s" % field)
         configured = trace_configure_event(run, info, event, event_filter=event_filter)
         configured["purpose"] = {
             "icc_aggregate": "capture each enabled-state request passed to qcom_icc_aggregate",
-            "icc_path_init": "invalidate client-name mapping if ICC request-list entries are added",
             "icc_path_put": "invalidate client-name mapping if ICC request-list entries are removed",
             "icc_set_tag": "invalidate client-name mapping if request tags change",
         }[name]
@@ -1637,7 +1686,7 @@ def trace_remove_icc_attribution_probes(run: DeviceRun, info: Dict[str, Any]) ->
         return {"result": "not-owned"}
     functions = {
         "icc_aggregate": ("qcom_icc_aggregate", icc_aggregate_probe_fields()),
-        "icc_path_init": ("path_init", ""),
+        "icc_path_init": ("path_init", "dst_addr=$arg2:x64 num_nodes=$arg3:s64"),
         "icc_path_put": ("icc_put", ""),
         "icc_set_tag": ("icc_set_tag", ""),
     }
@@ -1676,7 +1725,7 @@ def trace_remove_icc_attribution_probes(run: DeviceRun, info: Dict[str, Any]) ->
             continue
         else:
             try:
-                write_kernel_control(registry, "-:%s/%s\n" % (group, name))
+                write_kprobe_control(registry, "-:%s/%s\n" % (group, name))
             except OSError as exc:
                 actions.append({"event": probe.get("event"), "result": "remove-failed", "error": str(exc)})
                 continue
@@ -5368,6 +5417,10 @@ def self_test() -> int:
     assert "silver-rail-power-collapse" in map_text
     events = parse_trace_events("irq:irq_handler_entry\npower:device_pm_callback_start\nnot-an-event\n")
     assert events == ["irq:irq_handler_entry", "power:device_pm_callback_start"]
+    assert trace_event_fields('node_name={"ebi@interconnect-1"} tag=7') == {
+        "node_name": "ebi@interconnect-1",
+        "tag": "7",
+    }
     rsc_snapshots = parse_rpmh_rsc_snapshots(
         "  suspend-1 [000] .... 1.0: rpmh_rsc_snapshot: apps_rsc: "
         "phase=pre-suspend group=sleep tcs=3 cmd=0 version=3.0 "
@@ -5379,8 +5432,8 @@ def self_test() -> int:
     assert rsc_snapshots["events"][0]["addr"] == 0x50000
     assert rsc_snapshots["events"][0]["resource"] == "MC0"
     assert kprobe_definition_matches(
-        "p123:s2lab_test/icc_aggregate qcom_icc_aggregate node_name=+0x8($arg1):string",
-        "p:s2lab_test/icc_aggregate qcom_icc_aggregate node_name=+0x8($arg1):string",
+        "p123:s2lab_test/icc_aggregate qcom_icc_aggregate node_addr=$arg1:x64 node_name=+0x8($arg1):string[1]",
+        "p:s2lab_test/icc_aggregate qcom_icc_aggregate node_addr=$arg1:x64 node_name=+0x8($arg1):string[1]",
     )
     icc_baseline = {
         "target_nodes_match": True,
@@ -5393,10 +5446,12 @@ def self_test() -> int:
         },
     }
     icc_trace = (
-        ' systemd-sleep-7 [000] ..... 10.000: s2lab_test:icc_aggregate: '
-        '(qcom_icc_aggregate+0x0/0x100) node_name="ebi@interconnect-1" tag=7 avg_bw=0 peak_bw=500000\n'
-        ' systemd-sleep-7 [000] ..... 10.001: s2lab_test:icc_aggregate: '
-        '(qcom_icc_aggregate+0x0/0x100) node_name="ebi@interconnect-1" tag=3 avg_bw=100 peak_bw=800000\n'
+        ' systemd-sleep-7 [000] ..... 9.999: icc_path_init: '
+        '(path_init+0x0/0x100) dst_addr=0x2000 num_nodes=3\n'
+        ' systemd-sleep-7 [000] ..... 10.000: icc_aggregate: '
+        '(qcom_icc_aggregate+0x0/0x100) node_addr=0x1000 node_name={"ebi@interconnect-1"} tag=7 avg_bw=0 peak_bw=500000\n'
+        ' systemd-sleep-7 [000] ..... 10.001: icc_aggregate: '
+        '(qcom_icc_aggregate+0x0/0x100) node_addr=0x1000 node_name={"ebi@interconnect-1"} tag=3 avg_bw=100 peak_bw=800000\n'
         ' systemd-sleep-7 [000] ..... 10.002: icc_set_bw: path=pcie-mem dev=1c00000.pcie '
         'node=ebi@interconnect-1 avg_bw=0 peak_bw=500000 agg_avg=100 agg_peak=800000\n'
         ' systemd-sleep-7 [000] ..... 10.003: icc_set_bw_end: path=pcie-mem dev=1c00000.pcie ret=0\n'
@@ -5415,6 +5470,8 @@ def self_test() -> int:
     assert ebi_attribution["requests"][0]["sleep_bucket"] is True
     assert ebi_attribution["requests"][1]["sleep_bucket"] is False
     assert ebi_attribution["sleep_peak_max"] == 500000
+    assert icc_attribution["request_list_mutations_before_sleep"] == []
+    assert icc_attribution["target_node_addresses"]["ebi@interconnect-1"] == ["0x1000"]
     assert icc_attribution["sleep_command_count"] == 2
     assert next(iter(icc_attribution["sleep_command_sequences"].values()))["contiguous_from_zero"]
     aggregate_mismatch = parse_icc_aggregate_attribution(
@@ -5426,7 +5483,7 @@ def self_test() -> int:
     assert aggregate_mismatch["status"] == "aggregate-validation-mismatch"
     assert aggregate_mismatch["requests"][0]["client"] is None
     missing_callbacks = parse_icc_aggregate_attribution(
-        "\n".join(line for line in icc_trace.splitlines() if ":icc_aggregate:" not in line),
+        "\n".join(line for line in icc_trace.splitlines() if "icc_aggregate:" not in line),
         icc_baseline,
         "s2lab_test",
         {"available": True, "lossless": True},
@@ -5435,7 +5492,7 @@ def self_test() -> int:
     assert any("no matching qcom aggregation callbacks" in reason for reason in missing_callbacks["client_mapping_reasons"])
     changed_tag_trace = icc_trace.replace(
         'systemd-sleep-7 [000] d..3. 10.100:',
-        'systemd-sleep-7 [000] ..... 10.050: s2lab_test:icc_set_tag: (icc_set_tag+0x0/0x50)\n'
+        'systemd-sleep-7 [000] ..... 10.050: icc_set_tag: (icc_set_tag+0x0/0x50)\n'
         ' systemd-sleep-7 [000] d..3. 10.100:',
     )
     changed_tag = parse_icc_aggregate_attribution(
@@ -5443,6 +5500,37 @@ def self_test() -> int:
     )
     assert changed_tag["client_mapping_stable"] is False
     assert changed_tag["latest_node_aggregations"][0]["requests"][0]["client"] is None
+    target_path_init = parse_icc_aggregate_attribution(
+        icc_trace.replace("dst_addr=0x2000", "dst_addr=0x1000"),
+        icc_baseline,
+        "s2lab_test",
+        {"available": True, "lossless": True},
+    )
+    assert target_path_init["latest_node_aggregations"][0]["status"] == "exact"
+    inconsistent_node_address = parse_icc_aggregate_attribution(
+        icc_trace.replace("node_addr=0x1000", "node_addr=0x2000", 1),
+        icc_baseline,
+        "s2lab_test",
+        {"available": True, "lossless": True},
+    )
+    assert inconsistent_node_address["client_mapping_stable"] is False
+    assert any(
+        "node addresses were missing or inconsistent" in reason
+        for reason in inconsistent_node_address["client_mapping_reasons"]
+    )
+    added_request_trace = icc_trace.replace(
+        ' systemd-sleep-7 [000] ..... 10.002: icc_set_bw:',
+        ' systemd-sleep-7 [000] ..... 10.0015: icc_aggregate: '
+        '(qcom_icc_aggregate+0x0/0x100) node_addr=0x1000 node_name={"ebi@interconnect-1"} '
+        'tag=7 avg_bw=1 peak_bw=1\n'
+        ' systemd-sleep-7 [000] ..... 10.002: icc_set_bw:',
+    ).replace("agg_avg=100 agg_peak=800000", "agg_avg=101 agg_peak=800000")
+    added_request = parse_icc_aggregate_attribution(
+        added_request_trace, icc_baseline, "s2lab_test", {"available": True, "lossless": True}
+    )
+    assert added_request["client_mapping_stable"] is False
+    assert added_request["latest_node_aggregations"][0]["status"] == "request-count-mismatch"
+    assert added_request["latest_node_aggregations"][0]["requests"][0]["client"] is None
     assert trace_pm_filter("field:__data_loc char[] device;\n") == 'device ~ ".*ufs.*"'
     assert trace_pm_filter("field:int event;\n") is None
     sources = parse_wakeup_sources("name active_count event_count wakeup_count expire_count\nrtc0 0 2 1 0\n")

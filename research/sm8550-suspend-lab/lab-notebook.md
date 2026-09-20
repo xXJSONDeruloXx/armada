@@ -5276,3 +5276,249 @@ reached the same residency. Updated the status row to preserve that distinction.
 
 Receipt: [Android run wrapper](../../receipts/2026-09-19-android-deep-rpmh/android-icc-suspend-run.log)
 and [kernel excerpt](../../receipts/2026-09-19-android-deep-rpmh/android-icc-suspend-excerpt.txt).
+
+
+### 2026-09-20 01:54 UTC — Live ICC trace completed but client attribution failed closed
+
+The corrected tracefs control writes allowed one 10-second direct-deep profile to
+complete on the Nova (`20260920T015417Z-a3b217e2e4c0`). Linux 7.2.3 entered
+`PM: suspend entry (deep)`, returned successfully in the same boot, and the
+boottime-minus-monotonic interval measured 8.568 seconds; resume latency was
+1.998 seconds. The observed wake was the armed RTC alarm (IRQ 199). Wi-Fi was
+connected again after resume and both rfkill entries remained unblocked. No
+radio or power policy was changed. AOSD, CXSD, scalar DDR, and the detailed DDR
+LPM IDs showed no residency increment in this short interval; that still does
+not prove whether the firmware accepted any particular staged request.
+
+The run captured six contiguous Apps-RSC SLEEP commands. CMD_DB maps `0x50000`
+to MC0 and `0x50004` to SH0; both final words were `0x600001dc` (476 in the
+encoded vote field). Trace stats showed zero overruns or dropped events on all
+eight CPUs. However, no client was attributed: the qcom callback's node names
+were rendered as replacement characters, and the parser correctly refused to
+assign clients. The full receipt is
+`../../sm8550-suspend-lab-runs/20260920T015417Z-a3b217e2e4c0/`.
+
+The trace exposed two instrumentation defects, not a device failure. First,
+`icc_node.name` is a `char *`; the kprobe fetch used `:string`, which read the
+member location as string storage and emitted garbage. Kernel kprobe docs say
+`string[1]` fetches a `char *` array and is equivalent to the required nested
+pointer dereference ([kprobetrace docs](https://cdn.kernel.org/doc/html/latest/trace/kprobetrace.html)).
+Second, `path_init` was counted globally: this trace contained 19,468 such
+initializations, most unrelated to the three EBI/LLCC targets, so treating any
+one as a target-node list mutation made the guard overly broad. The local
+harness now fetches the node pointer plus its `string[1]` name and captures the
+`path_init` destination pointer, so the parser can scope additions to actual
+target nodes. Its local py_compile, harness self-test, shell test, and
+`git diff --check` pass. This corrected instrumentation has not yet been
+validated on-device; rerun only if the next trace can either map all target
+clients cleanly or name a specific remaining guard failure.
+
+
+### 2026-09-20 02:03 UTC — PCIe is the only nonzero sleep-tagged EBI/LLCC client in Linux
+
+The second read-only `icc-attribution` run (`20260920T020326Z-96e366a5fe0a`)
+returned from direct deep suspend successfully: 8.783 seconds of observed sleep,
+1.918 seconds resume latency, same boot ID, and the armed RTC wake. Wi-Fi was
+connected after resume; both radios remained unblocked. The original run status
+is `failed` only because the harness cleanup validator rejected its own
+run-owned `icc_path_init` definition against a stale expected definition. The
+device resumed successfully. A later root-only check found that this one event
+was still in the global kprobe registry even though the trace instance was
+gone. I removed that exact unique run-owned event with a non-truncating
+tracefs write and verified the registry has zero entries and no matching
+trace instance. Future profile setup no longer installs the unnecessary global
+`path_init` probe, and cleanup metadata now matches that older definition.
+
+The raw 6.5 MB trace had zero lost events on every CPU. It recorded all 18
+requests at each of `qns_llcc@24100000.interconnect`,
+`llcc_mc@interconnect-1`, and `ebi@interconnect-1`; request count and tag order
+match the fresh interconnect summary, the `icc_set_bw` aggregate matches the
+provider callback sum/max, and no callback or target update was unmatched. The
+original host parser did not recognize tracefs's brace-wrapped `string[1]`
+node-name form. Reprocessing the unchanged trace with that rendering handled
+now passes all checks; the full corrected result is saved separately at
+`../../sm8550-suspend-lab-runs/20260920T020326Z-96e366a5fe0a/host-analysis/icc-aggregate-attribution-reparsed.json`.
+The original device-derived JSON and raw receipt remain untouched.
+
+For each of the three target nodes, the only nonzero request whose tag includes
+the SLEEP bucket is `1c00000.pcie`: `tag=7`, `avg_bw=0`, `peak_bw=500000`.
+Every other SLEEP-tagged request at those nodes is zero. Thus this capture
+attributes the retained Linux SLEEP-bucket floor to the PCIe client, rather
+than merely correlating an awake request with a later BCM value. The final
+Apps-RSC SLEEP words for MC0 (`0x50000`) and SH0 (`0x50004`) were both
+`0x600001dc` (encoded vote 476); six commands were captured with contiguous
+indexes. This establishes the source of the staged floor and its matching
+value in this run. It does not prove the 476 floor is what prevents firmware
+from recording AOSD/CXSD/DDR residency: all three sleep-stat deltas remained
+zero, and staged RPMh commands are not a readback of AOP acceptance or rail
+state.
+
+The small harness cleanup is local. Local py_compile/self-tests/shell test and
+`git diff --check` pass after adding brace-wrapped trace-field parsing and
+removing system-wide `path_init` as a false mutation signal. The existing
+receipt itself provides the live data to validate the parser; no third suspend
+run is needed for this attribution result.
+
+### 2026-09-20 02:15 UTC — Verify and remove the prior run's leftover kprobe
+
+The read-only root inspection showed one stale event owned by the 02:03
+profile: `s2lab_20260920T020326Z_96e366a5fe0a/icc_path_init`. The cleanup
+validator had refused it because its expected definition did not include the
+captured arguments. I removed only that exact event by writing its
+`-:group/event` command with `O_WRONLY` and no truncation. A privileged
+readback then showed zero entries in `/sys/kernel/tracing/kprobe_events` and
+no matching private trace instance. The boot ID and Wi-Fi connection remained
+unchanged. No suspend, PCI config, ICC vote, or power policy was touched during
+cleanup.
+
+### 2026-09-20 02:34 UTC — The candidate Android L1SS property targets a different PCIe host
+
+Read-only SSH confirms the Nova is awake on Armada Linux 7.2.3 with Wi-Fi up
+and boot ID `45137c86-bb9a-4021-9973-4bc6200fc9e6`. The active WLAN endpoint
+`0000:01:00.0` (`17cb:1107`) is below root port `0000:00:00.0` (`17cb:0113`)
+under `/sys/devices/platform/soc@0/1c00000.pcie`; the live FDT says
+`soc@0/pcie@1c00000` is `okay` and `soc@0/pcie@1c08000` is `disabled`.
+Both PCI devices currently report `power/wakeup=disabled`; this awake-state
+setting is not evidence of their suspend-time wake configuration.
+
+The public LineageOS QCS8550 devicetree at commit
+`a345661c01d7e18b7dfa04dd27690655ff36bd5d` maps `pcie0` to `0x1c00000`
+(domain 0) and `pcie1` to `0x1c08000` (domain 1). Its generic KalamaP HDK
+overlay adds `qcom,apss-based-l1ss-sleep` and
+`qcom,no-client-based-bw-voting` to `&pcie1`, not `&pcie0`. The public
+Retroid Pocket 6 device overlay includes the Moorechip common DTSI, which
+disables `&pcie1`. The Android DTBO partition's matching `KalamaP HDK` entry
+therefore proves only that a matching candidate overlay carrying the property
+exists; it does not prove the property applies to the active Wi-Fi host or
+that the bootloader selected/merged that candidate. The public tree is a
+nearby source match, not the exact source for the captured Android build.
+
+This narrows the likely Android comparison. The public Android PCIe driver
+also registers a separate root-device `SUSPEND_LATE` fixup, independent of
+`apss-based-l1ss-sleep`. For an enabled root-bus link it saves PCI state,
+disables config access, sends PME_TURNOFF, polls for L23, then calls
+`msm_pcie_disable()`, which asserts endpoint PERST and deinitializes the host;
+that deinit clears the PCIe ICC vote. If that fixup ran on pcie0, it could
+explain the staged request difference without the special L1SS property. It
+would also power down the WCN link rather than establish Wi-Fi wake from the
+deep state. Android's captured suspend log records WCN WoW/bus-suspend success
+before entry and an RTC alarm as the wake on the successful deep retry; it
+does not show whether the root fixup ran or prove WCN wake from the deep state.
+
+Sources: [public Kalama PCIe nodes](https://github.com/LineageOS/android_kernel_ayn_qcs8550-devicetrees/blob/a345661c01d7e18b7dfa04dd27690655ff36bd5d/qcom/kalama-pcie.dtsi#L5-L18),
+[pcie1 node](https://github.com/LineageOS/android_kernel_ayn_qcs8550-devicetrees/blob/a345661c01d7e18b7dfa04dd27690655ff36bd5d/qcom/kalama-pcie.dtsi#L299-L312),
+[HDK sleep properties](https://github.com/LineageOS/android_kernel_ayn_qcs8550-devicetrees/blob/a345661c01d7e18b7dfa04dd27690655ff36bd5d/qcom/kalamap-hdk.dtsi#L36-L40),
+[RP6 disables pcie1](https://github.com/LineageOS/android_kernel_ayn_qcs8550-devicetrees/blob/a345661c01d7e18b7dfa04dd27690655ff36bd5d/moorechip/kalamap-moorechip-common.dtsi#L44-L46),
+[RP6 overlay identity](https://github.com/LineageOS/android_kernel_ayn_qcs8550-devicetrees/blob/a345661c01d7e18b7dfa04dd27690655ff36bd5d/moorechip/kalamap-retroid-pocket-6-overlay.dts#L4-L11),
+[nearby Android root suspend fixup](https://github.com/Ayn8550Dev/android_kernel_ayn_qcs8550/blob/93c5cc6ad1d0b807510cfa0fb1d06f47407881f9/drivers/pci/controller/pci-msm.c#L9419-L9559).
+
+No device state, suspend policy, or PCI configuration was changed. Exact
+Android source/build, selected overlays, and runtime suspend branch remain
+unknown.
+
+### 2026-09-20 02:52 UTC — Linux host mapping cross-check and LDOE consumer map
+
+The Nova is still on the same Armada Linux boot and was checked read-only over
+SSH: kernel 7.2.3, boot ID `45137c86-bb9a-4021-9973-4bc6200fc9e6`, WLAN up.
+Root `0000:00:00.0` and WCN7850 `0000:01:00.0` are both awake in D0 at Gen2 x1;
+the root port is unbound and the endpoint is bound to `ath12k_wifi7_pci`; the
+endpoint's parent is `soc@0/1c00000.pcie`. The live FDT says
+`pcie@1c00000` is `qcom,pcie-sm8550` and `pcie@1c08000` is disabled. Both
+devices currently report `power/wakeup=disabled`; that is only an awake-state
+policy read, not evidence about the suspend wake path. `lspci` is absent, so
+no further config-space capability decoding was attempted. No suspend or
+power-control change was made. Raw snapshot:
+`../../receipts/2026-09-20-live-pcie-cross-check.txt`.
+
+The nearby public LineageOS Kalama/RP6 device-tree source maps `pcie0` to
+`0x1c00000` and `pcie1` to `0x1c08000`; the RP6 common DTSI disables `pcie1`.
+DTBO entry 51's `qcom,apss-based-l1ss-sleep` and
+`qcom,no-client-based-bw-voting` properties target `pcie1`. This means that
+candidate property is not evidence that Android used its APSS/L1SS host path
+for the active WLAN controller. The exact Android base DT, selected overlay,
+and runtime path are still unavailable; this public tree remains a nearby
+source match only. A separate public root-device `SUSPEND_LATE` fixup can
+shut down the host/link and clear its ICC request, but the existing Android
+receipt contains staged RPMh commands and an RTC wake, not proof that this
+fixup ran.
+
+The nearby Android RP6 DT wires LDOE1/LDOE3 across shared interfaces:
+LDOE1 supplies PCIe's 0.9-V PHY, UFS QREF, USB EUSB2, DSI PHY, and DP PHY
+analog; LDOE3 supplies PCIe 1.2-V PHY/PLL, UFS PLL, USB EUSB2, USB3/DP QMP
+core, and DSI 1.2-V PHY. RP6's display overlay selects its DSI0 panel, while
+the board common DTSI disables DSI1. Thermal I-sense reference inputs use
+separate active-only L1E/L3E proxy regulators. These are device-tree supply
+edges, not evidence those blocks remain active in sleep.
+
+The Android capture stages LDOE1 into LPM then disables it for SLEEP, disables
+LDOE3 for SLEEP, and restores both on WAKE. The successful deep retry woke by
+RTC. It demonstrates one suspend/resume with those staged requests; it does
+not validate Wi-Fi/PCIe or USB wake, or prove that the rail requests were the
+cause of AOSD/CXSD/DDR residency. This keeps the regulator A/B unsafe to infer
+from the trace alone.
+
+No device files, PCI state, votes, suspend policy, or kernel behavior were
+changed. The current source conclusion remains that Android host shutdown is
+the strongest explanation for why its PCIe ICC request disappears, while the
+retained PCIe request itself has not been shown to prevent residency.
+
+### 2026-09-20 02:54 UTC — Saved Android logs do not identify the PCIe suspend hook
+
+Searched the saved Android suspend wrapper, kernel excerpt, root preflight, and
+awake/hook receipt for the public driver's distinctive `RC0`/`RC1`, PME_TURNOFF,
+L23, L1SS, endpoint-reset, ICC-clear, and `suspend_noirq` messages. The only
+match was the generic kernel `pm_suspend` stack frame; the receipts contain no
+PCIe-driver trace that establishes whether the active pcie0 root-device
+`SUSPEND_LATE` fixup or the APSS/L1SS host path ran. This is absence from the
+preserved receipts, not evidence that either path did not run. Exact runtime
+branch identification needs a new Android log with suitable PCIe driver
+logging or a direct branch marker. No device state was changed.
+
+### 2026-09-20 03:08 UTC — Android's default ICC tag includes SLEEP; endpoint API adds another PCIe path
+
+Fetched the nearby public Android source at pinned commit
+`93c5cc6ad1d0b807510cfa0fb1d06f47407881f9` and checked its RPMh ICC
+aggregator against the exact Linux v7.2.3 source. In both, `qcom_icc_aggregate()`
+normalizes `tag=0` to `QCOM_ICC_TAG_ALWAYS`; the binding defines that as
+AMC, WAKE, and SLEEP. Therefore Android's saved PCIe request (`tag=0`,
+`avg=500`, `peak=800`) would be included in the SLEEP bucket if that request
+remained unchanged. Given the final Android MC0/SH0 SLEEP TCS words are zero,
+the request was likely cleared or changed before the final aggregation. This
+is a source-based inference conditional on the nearby public implementation
+matching the captured vendor build; it does not identify the code path. Sources:
+[Android aggregator](https://github.com/Ayn8550Dev/android_kernel_ayn_qcs8550/blob/93c5cc6ad1d0b807510cfa0fb1d06f47407881f9/drivers/interconnect/qcom/icc-rpmh.c#L66-L95),
+[Android tag definitions](https://github.com/Ayn8550Dev/android_kernel_ayn_qcs8550/blob/93c5cc6ad1d0b807510cfa0fb1d06f47407881f9/include/dt-bindings/interconnect/qcom,icc.h#L14-L24),
+[Linux aggregator](https://github.com/gregkh/linux/blob/v7.2.3/drivers/interconnect/qcom/icc-rpmh.c#L84-L105),
+[Linux tag definitions](https://github.com/gregkh/linux/blob/v7.2.3/include/dt-bindings/interconnect/qcom,icc.h#L14-L24).
+
+The Android PCIe driver exposes a third relevant route through its client
+control API. `MSM_PCIE_DRV_SUSPEND` sends an RPMsg to the client, changes
+`link_status` to `MSM_PCIE_LINK_DRV`, restricts config/MSI access, disables
+unsuppressible clocks, and clears the PCIe ICC vote with
+`qcom_pcie_icc_bw_update(..., 0, 0)`. It can then request L1SS sleep. The
+separate `MSM_PCIE_SUSPEND` mode coordinates a full link suspend. If a client
+driver calls `MSM_PCIE_DRV_SUSPEND` before the root-device `SUSPEND_LATE`
+fixup, the fixup's `link_status == ENABLED` guard will return early. This
+provides another plausible explanation for removal of the saved default-tag
+vote, and the Android log's successful WCN bus-suspend message makes it worth
+checking. The public kernel tree does not contain the proprietary WCN/CNSS
+call site, and preserved Android receipts do not show either API being called;
+this remains an unverified path, not a runtime finding. Sources:
+[driver suspend](https://github.com/Ayn8550Dev/android_kernel_ayn_qcs8550/blob/93c5cc6ad1d0b807510cfa0fb1d06f47407881f9/drivers/pci/controller/pci-msm.c#L9877-L9944),
+[PM control API](https://github.com/Ayn8550Dev/android_kernel_ayn_qcs8550/blob/93c5cc6ad1d0b807510cfa0fb1d06f47407881f9/drivers/pci/controller/pci-msm.c#L9951-L10073),
+[root fixup guard](https://github.com/Ayn8550Dev/android_kernel_ayn_qcs8550/blob/93c5cc6ad1d0b807510cfa0fb1d06f47407881f9/drivers/pci/controller/pci-msm.c#L9524-L9558).
+
+The user confirmed the Nova is currently on Armada Linux. A fresh read-only
+SSH check at 03:08 UTC used the same boot ID (`45137c86-bb9a-4021-9973-4bc6200fc9e6`):
+`wlp1s0` had carrier, and both the Qualcomm root port and WCN7850 were
+D0/runtime-active with `power/control=on`, `power/wakeup=disabled`, and
+`d3cold_allowed=1`. Unprivileged sysfs exposed only the first 64 bytes of each
+PCI config space; both capability lists start at `0x40`, so this did not reveal
+their PCI PM capability. The `d3cold_allowed` flag alone does not establish
+that D3 is supported or wake-safe. Full output: `../../receipts/2026-09-20-live-pcie-pm-readout.txt`.
+
+No device state changed. The source audit now establishes that an untagged
+Android request would ordinarily belong to SLEEP and that multiple source-
+visible PCIe paths can clear it. The exact Android path is still unknown, and
+the staged-request difference still does not prove the Linux 476 floor blocks
+firmware residency. No behavioral A/B is justified yet.

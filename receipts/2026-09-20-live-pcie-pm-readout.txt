@@ -1,0 +1,31 @@
+# Live Linux PCIe PM readout
+
+Captured 2026-09-20 03:08 UTC over the existing `armada` SSH alias. This was
+read-only; no suspend, PCI, ICC, wake, or power-control setting was changed.
+
+```text
+ssh_connection=192.168.0.184 <ephemeral-port> 192.168.0.20 22
+boot=45137c86-bb9a-4021-9973-4bc6200fc9e6
+kernel=7.2.3
+wlp1s0 UP, LOWER_UP; operstate=up; carrier=1
+
+                         0000:00:00.0       0000:01:00.0
+vendor/device           17cb:0113           17cb:1107
+PCI power_state         D0                  D0
+runtime_status          active              active
+power/control           on                  on
+power/wakeup            disabled            disabled
+d3cold_allowed          1                   1
+current link            5.0 GT/s x1          5.0 GT/s x1
+
+unprivileged config read: 64 bytes for each device
+PCI status              0x0010              0x0010
+header type             0x1                 0x0
+capability pointer      0x40                0x40
+```
+
+The unprivileged PCI config read stops exactly where the capability list
+starts, so it does not expose the PCI PM capability. `d3cold_allowed=1` is a
+policy flag, not proof of D3 support or wake safety. These are awake-state
+values only. The SSH connection itself and `wlp1s0` carrier remained up after
+the read.
