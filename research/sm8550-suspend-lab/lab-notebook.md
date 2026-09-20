@@ -6503,3 +6503,45 @@ Next I will copy the corrected hash, verify it on-device, and try one
 insertion. I will only start the RTC-bounded deep test if init confirms both
 CMD-DB lookups and the SLEEP/WAKE_ONLY requests succeeded. See the [BTF rebuild
 receipt](../../receipts/2026-09-20-rpmh-dcvs-pair-btf-rebuild.md).
+
+### 2026-09-20 13:51 UTC — MC4/SH5 sleep-pair A/B did not restore residency
+
+The corrected test module was copied to `/tmp` on Linux and loaded
+successfully. Its init log resolved MC4/SH5 to `0x50060`/`0x50064` and
+reported the SLEEP=0, WAKE_ONLY=1 pair queued. I ran one RTC-woken direct
+`deep` suspend using the harness's `rpmh-aoss` profile. The device returned
+on the same boot, with Wi-Fi/SSH healthy; kernel suspend success advanced by
+one and the clock bracket measured 9.319121 seconds of actual sleep.
+
+The Apps-RSC send trace contained the six normal Linux resources plus the
+injected MC4/SH5 commands in both SLEEP and WAKE contexts. MC0 and SH0 retained
+their nonzero `0x600003b8` SLEEP words. AOSD, CXSD, and scalar DDR count and
+duration deltas all remained zero; APSS advanced once. Detailed DDR LPM ID
+`0xd0` gained 227,760,477 ticks without a count change, and remains opaque.
+The run's ICC attribution was unavailable, and the trace profile has no RSC
+snapshot event, so do not claim the AOP accepted the complete staged set.
+
+This rules out the MC4/SH5 pair as a sufficient standalone fix in this run.
+It does not establish that the pair is irrelevant, nor prove the retained
+PCIe-correlated MC0/SH0 floor is causal. Harness cleanup restored the RTC,
+trace instance, debug settings, and suspend selection. The module's request
+cache persists until reboot; the next cleanup is a reboot to the unchanged
+Linux deployment, then verify Wi-Fi/SSH and that the temporary module is gone.
+Full request set, deltas, and hashes are recorded in the [A/B
+receipt](receipts/2026-09-20-rpmh-dcvs-pair-ab.md).
+
+### 2026-09-20 14:06 UTC — reboot cleared the test RPMh cache
+
+After recording the MC4/SH5 result, I rebooted the unchanged Linux deployment
+to clear the test module and its cached RPMh SLEEP/WAKE requests. SSH returned
+on new boot ID `cd02fc51-33c5-4b1a-96a7-75a17eb98b30`; the device reports
+kernel `7.2.3`, Armada version `20260915.feca679`, `mem_sleep=[s2idle] deep`,
+suspend success/fail `0/0`, Wi-Fi interface `wlp1s0` up,
+`systemctl is-system-running=running`, and no failed units. The test module
+is absent. No boot layer or persistent device file was installed.
+
+The harness receipt shows the private trace instance was removed before the
+reboot. Direct post-boot tracefs inventory is denied to the unprivileged SSH
+account, so I do not claim an independent post-boot tracefs listing. The
+device is back in its normal Linux state and is ready for further read-only
+source work.

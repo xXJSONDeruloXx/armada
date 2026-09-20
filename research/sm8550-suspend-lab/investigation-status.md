@@ -6,36 +6,34 @@ the chronological record, including failed runs and superseded interpretations.
 Update this page when a checklist item changes; put raw output in a dated
 receipt and explain the result in the notebook.
 
-Status as of 2026-09-20 13:45 UTC. Branch `feat/sm8550-suspend-lab`.
+Status as of 2026-09-20 14:06 UTC. Branch `feat/sm8550-suspend-lab`.
 
 The sleep-stats offset question is closed: Android and Armada both resolve the
 SM8550 records at `+0x48` and `+0xb8`. Android's successful deep path advances
 AOSD/CXSD/DDR; Armada's successful deep path does not. The exact Android
 `dcvs_fp` binary and live DT identify the producer of the additional MC4/SH5
-SLEEP=0 and WAKE_ONLY=1 requests. The PCIe request remains the strongest direct
-correlate: Linux leaves 500,000 or 1,000,000 kB/s requested when PCI D3cold
-eligibility vetoes host teardown. Correlation is not causation.
+SLEEP=0 and WAKE_ONLY=1 requests.
 
-The preferred first A/B is still a test-only module that stages only the
-Android MC4/SH5 request pair. The first artifact was safely rejected before
-module init because its `struct module` section was 1216 bytes instead of the
-running kernel's 1280. After restoring BTF-module config, the rebuilt module's
-section is `0x500` (1280 bytes), matching a shipped module, and its relevant
-struct layouts and API prototypes match live BTF. The corrected hash is
-`548d9244a327cc16ba04d2ad644a0b87b08660dfd37e8db5144e07a0065eda2f`; it has
-not yet been copied to the device. Exact source/image identity is not fully
-proven, and `CONFIG_MODVERSIONS` is disabled. The failure and rebuild receipts
-record the checks.
+The first Linux A/B is now complete. A BTF-compatible test module staged only
+the MC4/SH5 pair, and the Apps-RSC trace showed both commands alongside the
+usual six Linux SLEEP/WAKE commands. A 9.319-second RTC-woken `deep` entry
+still left AOSD/CXSD/scalar DDR deltas at zero. MC0/SH0 retained the
+`0x3b8` (952) SLEEP floor. This rejects the pair as a sufficient fix in this
+run; it does not prove the pair has no effect or that firmware accepted every
+command. The test left the stronger PCIe/floor correlation unresolved.
+See the [A/B receipt](receipts/2026-09-20-rpmh-dcvs-pair-ab.md).
 
-Only the rejected artifact is in `/tmp`; it is not loaded or installed. It
-staged no RPMh requests and no suspend was attempted. The corrected artifact
-exists only in the host build directory. Nova Linux remains awake on kernel
-`7.2.3`, image `20260915.feca679`, with Wi-Fi/SSH healthy and the same boot ID;
-no boot deployment or device configuration changed. The earlier source, API,
-CMD-DB, RPMh, and `tcs_cmd` checks remain useful but did not cover the module
-container layout. BTF validation is enabled and mismatch is not allowed, so the
-kernel can reject a base-type mismatch before module init; this complements but
-does not replace the missing symbol-version CRC checks.
+The module was loaded from a temporary file for the test only; it was not
+installed into an image or deployment. The device has since rebooted to Linux,
+clearing the module and its request cache. Post-reboot checks show kernel
+`7.2.3`, Armada version `20260915.feca679`, a new boot ID,
+`mem_sleep=[s2idle] deep`, suspend stats `0/0`, Wi-Fi/SSH up, zero failed
+units, and no loaded test module. Harness cleanup recorded removal of its
+private trace instance before reboot; direct post-boot tracefs inventory was
+permission-denied to the non-root SSH account. The corrected module hash is
+`548d9244a327cc16ba04d2ad644a0b87b08660dfd37e8db5144e07a0065eda2f`; live
+BTF layout/prototype checks passed, though exact source/image identity is not
+proven and `CONFIG_MODVERSIONS` is disabled.
 
 The exact Android source commit remains unidentified; runtime claims are
 anchored by hash-matched binaries, live DT, and traces, with nearby public
@@ -60,15 +58,28 @@ Repeated Android attempts are low-value until the freeze/preparation blocker
 is isolated. Details and trace hash are in
 `../../receipts/2026-09-20-android-boot-image-and-trace-failure.md`.
 
-## Current objective
+## Current objective and checklist
 
-Determine why Linux's successful deep path does not advance the same firmware
-residency counters as Android. The MC4/SH5 request-pair A/B remains the
-smallest selected variable. The first artifact failed the loader's struct-size
-gate; the corrected build now matches the runtime module size and relevant
-live BTF layouts/prototypes. The next step is one insertion attempt with that
-exact hash. Do not suspend unless init logs confirm both CMD-DB addresses and
-both RPMh contexts were queued.
+Find the smallest defensible cause for Linux's zero AOSD/CXSD/scalar DDR
+records, and choose one safe next experiment without forcing PCI state or
+manually changing shared bandwidth/regulator requests.
+
+- [x] Close the Android/Linux stats address and record-layout comparison.
+- [x] Attribute Android's extra MC4/SH5 SLEEP/WAKE_ONLY requests to its exact
+  installed `dcvs_fp` module and live DT.
+- [x] Build and load a one-variable Linux MC4/SH5 request-pair probe after
+  matching its relevant live BTF ABI.
+- [x] Run a short RTC-woken direct-`deep` test and capture the Apps-RSC request
+  set plus before/after firmware records.
+- [x] Reboot the unchanged Linux deployment and confirm SSH, kernel/image
+  version, suspend selection/stats, and absence of the test module. Harness
+  cleanup removed its trace instance before reboot; post-boot tracefs inventory
+  requires root and was not independently read.
+- [ ] Reassess the retained PCIe/MC0/SH0 floor using source and existing
+  receipts; identify a safe way to test it without bypassing PCI D3cold checks
+  or manually changing an ICC vote.
+- [ ] If no safe single-variable A/B follows from that audit, document the
+  missing fact instead of deploying a behavioral patch.
 
 ## Closed question: sleep-stat offsets
 
@@ -92,7 +103,8 @@ open until measured.
 |---|---|
 | Observed, exact Android binary + live DT | The exact A-slot `dcvs_fp.ko` (`vermagic` `5.15.123-g697b78910a71-dirty`, live `scmversion` matches) is bound to `/soc/apps_rsc@17a00000/drv@2/qcom,dcvs-fp`. Its live properties select `qcom,ddr-bcm-name=MC4` and `qcom,llcc-bcm-name=SH5`; the module disassembly reads the names through CMD-DB, then submits two RPMh commands in SLEEP and WAKE_ONLY contexts during probe. This identifies the software producer of the MC4/SH5 commands in Android's successful TCS capture. It does not show firmware acceptance by itself or establish that these two votes cause residency. Receipt: `../../receipts/2026-09-20-android-dcvs-fp-binary-and-dt.md`. |
 | Observed, live Linux module ABI gate | The probe's first `insmod` was rejected before init: `.gnu.linkonce.this_module` is 1216 bytes, while live BTF says `struct module` is 1280 bytes. The rejected object omits four fields gated by `CONFIG_DEBUG_INFO_BTF_MODULES`; this option is enabled live but was normalized off by local `make modules_prepare`. No RPMh requests were issued and no suspend was run. The module must be rebuilt and its relevant ABI checked before a retry. Receipt: `../../receipts/2026-09-20-rpmh-dcvs-pair-insertion-failure.md`. |
-| Observed, corrected module static gate | Re-enabling `CONFIG_DEBUG_INFO_BTF_MODULES` and cleaning before rebuild produced `.gnu.linkonce.this_module=0x500` (1280 bytes), equal to a shipped module. Live BTF and module DWARF layouts match for `module`, `device`, `bus_type`, and `tcs_cmd`; canonical function signatures match for the RPMh/CMD-DB and device-bus APIs used. The artifact remains host-only. Exact build identity is not proven and live `CONFIG_MODVERSIONS` is disabled. Receipt: `../../receipts/2026-09-20-rpmh-dcvs-pair-btf-rebuild.md`. |
+| Observed, corrected module static gate | Re-enabling `CONFIG_DEBUG_INFO_BTF_MODULES` and cleaning before rebuild produced `.gnu.linkonce.this_module=0x500` (1280 bytes), equal to a shipped module. Live BTF and module DWARF layouts match for `module`, `device`, `bus_type`, and `tcs_cmd`; canonical function signatures match for the RPMh/CMD-DB and device-bus APIs used. It was host-only at that checkpoint; it was later loaded for the bounded A/B below. Exact build identity is not proven and live `CONFIG_MODVERSIONS` is disabled. |
+| Observed, Linux MC4/SH5 A/B | The BTF-checked module queued the MC4/SH5 pair; both commands appeared in the Apps-RSC SLEEP/WAKE send trace. One RTC-woken `deep` run lasted 9.319 s, but AOSD/CXSD/scalar DDR deltas remained zero and MC0/SH0 retained `0x600003b8`. This rejects the pair as a sufficient standalone fix in that run; it does not prove AOP acceptance or that the pair is irrelevant. Receipt: `receipts/2026-09-20-rpmh-dcvs-pair-ab.md`. |
 | Source + live Linux, mainline v7.2.3 RPMh interface | Mainline lacks Android `dcvs_fp` and its active fast-path APIs, but exports `cmd_db_read_addr()` and `rpmh_write_async()`; SLEEP/WAKE requests are cached and flushed by `rpmh-rsc` before low-power entry. Live Nova Linux has `17a00000.rsc` (`qcom,rpmh-rsc`, `qcom,drv-id=<2>`) with bound child `17a00000.rsc:regulators-0` directly beneath it. A test module can reuse that existing child as the API client, so no DT overlay is needed. Live config has `CONFIG_DEBUG_INFO_BTF=y`, `CONFIG_DEBUG_INFO_BTF_MODULES=y`, and `CONFIG_MODVERSIONS` disabled. Matching vermagic and one API type were insufficient to load the first build. |
 | Observed, live Android merged DT | Runtime model is KalamaP HDK with IDs matching the public Nova DTBO candidate. Active WCN is under `pcie@1c00000`, has `qcom,drv-name=lpass`, and lacks `qcom,apss-based-l1ss-sleep`, `qcom,no-client-based-bw-voting`, and `qcom,pcie-switch-type`; pcie1 is disabled. The exact successful mode-0 trace, combined with the absent switch-type property/default 0, establishes the connected-DRV branch and connected flag for that run. The `qcom,drv-supported` fallback and exact runtime DT are in `../../receipts/2026-09-20-android-live-runtime.md`; callback and module identity evidence is in `../../receipts/2026-09-20-android-live-pcie-validation.md`. |
 | Observed, earlier Android suspend attempts | Before the successful capture below, this boot had `success=0`, `fail=3`. One natural attempt logged WLAN bus-suspend success then a `NETLINK` abort. Direct `rtcwake -m mem` returned `EBUSY`; its alarm was cleared. A later unarmed `forceSuspend()` returned false. The short s2idle intervals around those attempts remain unattributed. Do not repeat direct `rtcwake -m mem` or call forceSuspend before a verified RTC alarm. Receipt: `../../receipts/2026-09-20-android-live-runtime.md`. |
@@ -161,14 +173,13 @@ Detailed extraction, hashes, and ELF offsets: [module receipt](../../receipts/20
    teardown and the active request remains. Android's connected-DRV path
    clears its ICC request to 0/0 before final TCS staging, while the residency
    counters advance. This is strong correlation, not causal proof.
-2. **The missing Android DCVS-FP sleep/wake pair is the safest first A/B.**
-   The exact binary, live DT, and successful Android TCS capture establish
-   that Android queues SLEEP=0 and WAKE_ONLY=1 for MC4/SH5. Mainline can stage
-   those requests with `rpmh_write_async()` without importing the vendor active
-   fast path. Whether the pair enables residency is unknown. A temporary test
-   consumer changes only those sleep/wake requests and preserves the live
-   PCIe/WCN vote. Build and ABI evidence:
-   [module receipt](../../receipts/2026-09-20-rpmh-dcvs-pair-module-build.md).
+2. **MC4/SH5 SLEEP/WAKE_ONLY pair alone was insufficient in the tested run.**
+   The temporary consumer queued the Android-matched pair; the Apps-RSC trace
+   contained both commands. The existing MC0/SH0 floor remained
+   `0x600003b8`, and AOSD/CXSD/scalar DDR did not advance during the observed
+   9.319 seconds of direct deep suspend. This is one bounded run, not proof the
+   pair is irrelevant or firmware-accepted. Full receipt:
+   [MC4/SH5 A/B](receipts/2026-09-20-rpmh-dcvs-pair-ab.md).
 3. **LDOE1/LDOE3 sleep-context requests may affect shared PHY or wake paths.**
    Android stages them and mainline's RPMh regulator path does not. Several
    active consumers share these rails, so this remains the highest-risk
@@ -176,12 +187,11 @@ Detailed extraction, hashes, and ELF offsets: [module receipt](../../receipts/20
 
 The Wi-Fi-off A/B reduced the MC0/SH0 word from 952 to 476 without advancing
 AOSD/CXSD/DDR; binding `pcieport` also left the root veto and counters
-unchanged. A reviewed Nova-only low-bandwidth OPP proposal remains available
-as a later A/B, but is not first: if the host remains active it lowers the
-PCIe memory path used by WCN. It preserves `low_svs` and `cpu-pcie=1` while
-reducing `pcie-mem` from 500,000 to 1,000 kB/s; BCM quantization leaves a
-minimum nonzero vote, not zero. Do not bypass the generic D3cold check, force a
-PCI D-state, or infer safe D3 support from `d3cold_allowed=1` alone.
+unchanged. A reviewed Nova-only low-bandwidth OPP proposal remains a possible
+later experiment, but source review must first establish that it preserves the
+active WCN path and is deployable with a targeted build. Do not bypass the
+generic D3cold check, force a PCI D-state, manually change an ICC vote, or infer
+safe D3 support from `d3cold_allowed=1` alone.
 
 ## Work checklist
 
@@ -343,18 +353,23 @@ PCI D-state, or infer safe D3 support from `d3cold_allowed=1` alone.
   See the [failure receipt](../../receipts/2026-09-20-rpmh-dcvs-pair-insertion-failure.md).
 - [x] Rebuild with `CONFIG_DEBUG_INFO_BTF_MODULES=y`; verify `struct module`
   size/member offsets, the probe's relevant struct layouts, and its API
-  prototypes against live BTF. The corrected artifact remains host-only.
-- [ ] Load the module and verify both SLEEP and WAKE_ONLY requests succeeded.
-  Copy the corrected hash and verify it on-device first. If insertion, lookup,
-  or either request fails, do not suspend; reboot if SLEEP was accepted but
-  WAKE_ONLY failed.
-- [ ] If insertion succeeds, run one 10-second-minimum RTC-woken direct-deep
-  A/B with `rpmh-aoss` tracing and capture RPMh command payloads plus residency
-  counters. The kernel lacks `rpmh_rsc_snapshot`, so `rsc-success` is
-  unavailable. Reboot into the unchanged deployment afterward to clear the
-  RPMh cache.
-- [ ] If the pair is staged but AOSD/CXSD/DDR remain zero, keep the PCIe OPP
-  proposal as the next candidate rather than combining variables.
+  prototypes against live BTF. Exact source/image identity remains unproven.
+- [x] Load the module and verify its CMD-DB lookup and SLEEP/WAKE_ONLY success
+  log; the trace then showed both contexts in the Apps-RSC TCS send set.
+- [x] Run the RTC-bounded direct-`deep` test and compare the final SLEEP/WAKE
+  words and before/after AOP/RPM sleep records. The MC4/SH5 pair alone did not
+  advance AOSD/CXSD/scalar DDR.
+- [x] Reboot the unchanged deployment to clear the module's cached RPMh pair.
+  The new boot is healthy with the same kernel/image version and Wi-Fi/SSH up;
+  the module is absent and suspend stats reset to 0/0. Tracefs instance cleanup
+  was recorded by the harness before reboot.
+- [x] Run one 10-second-minimum RTC-woken direct-deep A/B with
+  `rpmh-aoss` tracing and capture the Apps-RSC command payloads plus residency
+  counters. The kernel lacks `rpmh_rsc_snapshot`, so this proves staged
+  messages, not a firmware acknowledgment. See the A/B receipt.
+- [x] The MC4/SH5 pair was staged but AOSD/CXSD/scalar DDR remained zero. Keep
+  the PCIe/MC0/SH0 floor as the next hypothesis; audit for a safe single-variable
+  experiment before using the prepared OPP proposal.
 - [ ] For any justified A/B, record all of the following at matched boundaries:
   1. PCIe host suspend result.
   2. PCIe ICC/OPP request before suspend.
@@ -370,9 +385,10 @@ PCI D-state, or infer safe D3 support from `d3cold_allowed=1` alone.
 ## Safety and continuity constraints
 
 - The Nova is currently on Armada Linux at `192.168.0.20`, boot ID
-  `09a76af5-4e8f-454a-858e-dedb4ebb1d4d`, with `wlp1s0` and SSH healthy.
-  `mem_sleep=[s2idle] deep`, suspend stats success/fail `0/0`, and clean systemd
-  failed-unit state were verified. The Android boot remains unmodified.
+  `cd02fc51-33c5-4b1a-96a7-75a17eb98b30`, kernel `7.2.3`, and Armada version
+  `20260915.feca679`. `wlp1s0`/SSH are up, `systemctl` reports running with no
+  failed units, `mem_sleep` is `[s2idle] deep`, suspend stats are `0/0`, and
+  the test module is absent. Android remains unmodified.
 - Do not force PCI D3hot, bypass `pci_host_common_d3cold_possible()`, change
   `pcie_ports` again, manually alter ICC votes, blindly disable shared rails,
   send AOSS/QMP commands, or access guessed MMIO/AOP memory.
