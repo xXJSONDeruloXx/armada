@@ -6805,3 +6805,33 @@ guide documents entering ABL with VOL- while powering on, then choosing
 is reachable; it does not repair or verify the Linux deployment. No physical
 action was taken. Details are in the
 [post-apply reachability receipt](receipts/2026-09-20-post-apply-device-reachability.md).
+
+### 2026-09-20 18:21 UTC — Android ADB recovered; stock boot image restored
+
+The user entered Android through ABL after reporting that the Linux boot had
+stalled at “Preparing Armada.” Rooted Android 13 is reachable through
+authenticated Wireless ADB. Read-only inspection identified the actual ESP as
+`/dev/block/sda18` (`ARMADA`, vfat); `/dev/block/sda19` is the ext4 boot
+partition and `/dev/block/sda20` is Btrfs, which this Android kernel cannot
+mount. No Btrfs or boot partition writes were attempted.
+
+The ESP contained the diagnostic `KERNEL` image from the candidate and the
+known-good stock image in `KERNEL.BAK`. Both were copied off-device and
+hash-verified. I restored `KERNEL` by copying the stock backup to a temporary
+ESP filename, syncing, and renaming it over `KERNEL`. A fresh read-only mount
+then verified both active `KERNEL` and `KERNEL.BAK` have stock SHA-256
+`0b0d7c03a88e77c480ad31d145a6718916638ba62287ff5a2b427c0f75475000`; the
+candidate is preserved externally. BLS files and image-ID stamps were not
+changed. See the [Android ESP rollback receipt](receipts/2026-09-20-android-esp-rollback.md).
+
+Android's global `adb_wifi_enabled` and persistent
+`persist.adb.tls_server.enable` values both read `1`; I reasserted them through
+the native settings/property interfaces. `persist.adb.tcp.port` remains empty.
+This confirms Wireless ADB is currently on over TLS, but its behavior after a
+future Android reboot is not yet tested; no boot script or insecure TCP mode
+was added.
+
+The Android restart to Linux has not yet been issued. The next check is a
+single reboot, then verify the booted Linux deployment, bootc rollback state,
+Wi-Fi/SSH, and whether the system gets past “Preparing Armada” before doing
+any suspend experiment.
