@@ -20,6 +20,14 @@ retag ICC paths, touch sleep-stat offsets, or change `opp-suspend-1`. It is
 not a production fix. If the test OPP is unavailable or cannot be applied, the
 suspend callback returns the error and the suspend attempt should fail closed.
 
+The 1,000 kB/s floor intentionally remains positive to preserve the minimum
+PCIe memory path. Linux `bcm_div()` rounds every positive request up to at
+least one vote unit, so this test should reduce MC0/SH0 from 476 to a minimum
+nonzero vote rather than zero. If firmware residency appears at that floor,
+the large request is implicated. If it does not, the result cannot rule out a
+blocker that requires an exactly zero vote or another Android/Linux request
+difference.
+
 The C test path tracks whether it selected the diagnostic OPP. On resume it
 restores the maximum safe OPP first, then the existing link-status updater
 reselects the negotiated link OPP when the link is up. If the link is down,

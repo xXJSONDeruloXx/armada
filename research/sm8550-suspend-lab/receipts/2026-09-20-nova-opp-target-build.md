@@ -47,3 +47,14 @@ The full kernel image, modules, package tarball, and bootc layer have not been
 built. The candidate has not been deployed or tested in a suspend cycle. The
 live device remains on its original rooted Android boot with Wireless ADB and
 Wi-Fi up.
+
+## Proposal diff review
+
+At 10:00 UTC the C proposal was regenerated with minimal diff alignment so it
+shows only the diagnostic state field, setter, suspend opt-in, and resume
+restore. The earlier hunk display made the unchanged patch-0513 OPP helper's
+similar body look duplicated; that code is already in the pre-candidate
+source. Applying the cleaned diff to a reconstructed pre-candidate copy
+reproduces the current scratch `pcie-qcom.c` byte-for-byte. There is no source
+or behavior change from the object build above, so its SHA-256 remains valid.
+No package source file or device was changed.

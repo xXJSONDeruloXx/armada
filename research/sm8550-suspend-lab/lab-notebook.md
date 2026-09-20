@@ -6145,3 +6145,34 @@ and the nearby public repository exposes four branch heads without the
 reported Android suffix. This strengthens “not in the available public
 checkout/refs” but still does not prove the OEM source does not exist. The
 installed-module disassembly remains the exact runtime evidence.
+
+### 2026-09-20 10:00 UTC — low-bandwidth A/B interpretation and diff cleanup
+
+The selected Nova test OPP keeps `rpmhpd_opp_low_svs` and the CPU path at
+1 kB/s while lowering only the PCIe memory request from 500,000 to
+1,000 kB/s. This matches the active 5 GT/s x1 OPP's power-domain requirement
+and CPU floor; the separate `opp-suspend-1` (`min_svs`) remains untouched.
+Linux v7.2.3 `bcm_div()` returns at least one for every positive input, so the
+low OPP is expected to leave a minimum nonzero MC0/SH0 SLEEP vote, not zero.
+If residency advances with that minimum vote, the larger 476 floor is
+strongly implicated. If it does not, the result is inconclusive about a
+requirement for an exactly zero vote or about the other Android/Linux request
+differences. Do not report a negative run as falsifying the PCIe hypothesis.
+Sources: [BCM minimum-positive division](https://github.com/gregkh/linux/blob/v7.2.3/drivers/interconnect/qcom/bcm-voter.c#L50-L59),
+[BCM aggregation](https://github.com/gregkh/linux/blob/v7.2.3/drivers/interconnect/qcom/bcm-voter.c#L91-L116),
+[SM8550 PCIe OPP table](https://github.com/gregkh/linux/blob/v7.2.3/arch/arm64/boot/dts/qcom/sm8550.dtsi#L2386-L2460),
+[existing Armada suspend OPP](../../../armada-packages/kernel/patches/0520-arm64-dts-qcom-sm8550-add-a-pcie-suspend-opp.patch).
+
+Cleaned the proposal's unified diff using minimal alignment so it shows only
+the added diagnostic helper, opt-in call, and resume restore. I first
+mistakenly read repeated-looking hunk lines as an unrelated OPP-reference
+fix; patch 0513 already contains that code. Exact forward application of the
+clean diff to the pre-candidate file reproduces the existing built scratch
+source byte-for-byte. No C behavior changed, so the previously built object
+hash remains applicable; the clearer proposal is still not in the package
+series.
+
+Android remains on its existing boot with Wi-Fi/ADB up. No suspend, kernel
+build, package change, or device write occurred in this analysis step. The
+next useful device check is Linux-only: preflight the live base deployment and
+rollback path before creating or staging any test image.

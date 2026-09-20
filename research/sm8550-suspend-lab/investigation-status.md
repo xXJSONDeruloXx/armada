@@ -6,7 +6,7 @@ the chronological record, including failed runs and superseded interpretations.
 Update this page when a checklist item changes; put raw output in a dated
 receipt and explain the result in the notebook.
 
-Status as of 2026-09-20 09:44 UTC. Repository branch
+Status as of 2026-09-20 10:00 UTC. Repository branch
 `feat/sm8550-suspend-lab`. Wireless ADB verified that the installed Android
 PCIe module matches the disassembled copy. Live split-BTF maps the connected-
 DRV `link_status` and the late-fixup/noirq gates; the successful Android
@@ -147,7 +147,12 @@ The selected candidate is one direct-deep-only diagnostic OPP that preserves
 the same `low_svs` power-domain requirement and `cpu-pcie=1` while reducing
 `pcie-mem` from 500,000 to 1,000 kB/s. This tests request magnitude without
 changing PCI state or regulator requests. It remains a hypothesis: Android
-also stages more BCM resources and LDOE1/LDOE3 requests. Do not bypass the
+also stages more BCM resources and LDOE1/LDOE3 requests. Because Linux's
+`bcm_div()` preserves positive requests as at least one vote unit, this OPP is
+expected to reduce the staged MC0/SH0 SLEEP value to a minimum nonzero vote,
+not zero. If AOSD/CXSD/DDR then advance, the larger floor is strongly
+implicated; if they stay zero, an any-nonzero floor and the other request-set
+differences remain unresolved. Do not bypass the
 generic D3cold check or infer safe D3 support from `d3cold_allowed=1` alone.
 
 ## Work checklist
@@ -288,6 +293,12 @@ generic D3cold check or infer safe D3 support from `d3cold_allowed=1` alone.
   and CPU path, but `pcie-mem=1000` instead of `500000` kB/s. The proposal is
   gated by a property only in the Nova DTS and leaves common SM8550 DTS and
   the existing `opp-suspend-1` unchanged.
+- [x] Check BCM quantization for this positive floor. `bcm_div()` returns at
+  least one vote unit for any positive input. A result at 1,000 kB/s therefore
+  tests the 476-to-minimum transition, not 476-to-zero. Improvement would
+  strongly implicate the larger floor; no improvement does not rule out a
+  blocker that requires exactly zero or one of the other Android/Linux request
+  differences.
 - [x] Prepare separate reviewable kernel and Nova-DTS proposal diffs. Confirm
   they apply after patches 0512/0513 and pass `git apply --check` for the
   board-file edit.
@@ -337,19 +348,20 @@ generic D3cold check or infer safe D3 support from `d3cold_allowed=1` alone.
 
 ## Next action
 
-The Android connected-DRV branch and the exact gates on its late-fixup and
-noirq teardown paths are now mapped. Physical sleep-time PCI state remains
-unknown. The Linux source audit explains why the current OPP-backed deep path
-keeps its active 500,000 kB/s request when the host is not suspended. The
-tag-only approach is not viable as a small consumer-side patch. The revised
-Nova-only OPP candidate passes targeted ARM64 object and DTB builds and has a
-safe OPP restore path. The target config links the PCIe driver into the kernel,
-so an A/B requires a full `Image` relink and Nova DTB; the targeted object
-alone cannot be installed. First verify the exact packaged config/build path
-and current Linux rollback path, and finish the remaining source comparison.
-Do not build or deploy the functional candidate until those gates are met.
-Android remains on the same boot with Wi-Fi/ADB healthy and has not been
-modified.
+The Android connected-DRV branch and exact gates on its late-fixup and noirq
+paths are mapped; physical sleep-time PCI state remains unknown. The package
+config/build path is verified, and the candidate's positive 1,000 kB/s floor
+should reduce the MC0/SH0 vote to its minimum nonzero value while preserving
+the active `low_svs` corner and CPU path. AOSD/CXSD/DDR improving would implicate
+the larger floor; no improvement would not rule out a requirement for zero or
+another Android/Linux request difference.
+
+Because `PCIE_QCOM=y`, prepare a linked kernel `Image` and Nova DTB on the
+external scratch tree; a module-only build cannot test it. Do not build a test
+layer, stage, or boot it until the device is back on Linux and a fresh preflight
+confirms the current bootc deployment, compatible existing module tree, boot
+image finalizer, and automatic rollback. Android is currently healthy and has
+not been modified.
 The archived Linux trace and host reanalysis remain under
 `.external-research/sm8550-suspend-lab-runs/`; do not edit their raw data.
 
