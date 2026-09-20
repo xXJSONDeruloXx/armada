@@ -6439,3 +6439,35 @@ separate RSC-snapshot event on this kernel. Tracefs has zero private instances
 and global `tracing_on=1` at baseline; the harness will use its own private
 instance and leave the global setting alone. This narrows the trace evidence
 but does not change the A/B variable.
+
+### 2026-09-20 13:27 UTC — first module insertion rejected by struct-size ABI gate
+
+I copied the prepared MC4/SH5 probe to `/tmp` on the awake Nova Linux system and
+attempted one `insmod`. The loader rejected it before init with:
+
+```text
+module armada_rpmh_dcvs_pair: .gnu.linkonce.this_module section size must match the kernel's built struct module size at run time
+```
+
+The module never loaded, its init routine never ran, and it queued no RPMh
+requests. No suspend was run. The device remained on the same Linux boot with
+Wi-Fi/SSH up; no reboot is needed to clear anything because no request was
+staged. The failed artifact must not be retried.
+
+The rejection is now explained by the build config: the rejected object has a
+1216-byte `struct module`/`this_module` section, while live
+`/sys/kernel/btf/vmlinux` reports 1280 bytes. Its DWARF lacks the four fields
+gated by `CONFIG_DEBUG_INFO_BTF_MODULES`; the live kernel has that option
+enabled, but `make modules_prepare` normalized it off before the module build.
+The 24-byte field shift rounds to a 64-byte total size difference. The existing
+local `vmlinux` has the same 1280-byte layout as live BTF, but its build ID
+differs, so it is not evidence of an identical running image. This accounts for
+the loader error and supersedes the earlier assumption that the vermagic and
+`tcs_cmd` match were enough. Exact values and safe rebuild gates are in the
+[insertion failure receipt](../../receipts/2026-09-20-rpmh-dcvs-pair-insertion-failure.md).
+
+Next: restore BTF-module configuration for an out-of-tree rebuild, then compare
+the compiled `struct module` size/member offsets and the probe's relevant
+kernel API type layouts against live BTF. Do not reload anything until those
+checks pass; `CONFIG_MODVERSIONS` is off, so vermagic cannot protect against
+remaining ABI mismatch.
