@@ -1,0 +1,46 @@
+# Live Android PCIe module re-pull
+
+Captured 2026-09-20 10:22 UTC over Wireless ADB from the running Nova. This
+was a read-only binary collection and static inspection; no suspend was run.
+
+Device identity:
+
+```text
+ADB serial: 192.168.0.163:42265
+root:       uid=0(root), Magisk context
+kernel:     5.15.123-android13-8-g697b78910a71-dirty
+fingerprint:qti/kalama/kalama:13/TKQ1.231222.001/eng.RPN.20260722.081626:user/release-keys
+wlan0:      up
+```
+
+Pulled from `/vendor_dlkm/lib/modules/` to the external scratch directory
+`/Volumes/NovaKernelBuild/android-binaries/`:
+
+| Module | Bytes | SHA-256 | `vermagic` |
+|---|---:|---|---|
+| `pci-msm-drv.ko` | 511,664 | `675761030ef72886097cabe87e6c2191e30a4e8d2b7a7d412abd564416ac3a2c` | `5.15.123-g697b78910a71-dirty` |
+| `cnss2.ko` | 1,169,264 | `7c23fc2fdf9a19b3ea2797eea377325c83cc5263df79c040b257908eb549c1b2` | `5.15.123-g697b78910a71-dirty` |
+| `ep_pcie_drv.ko` | 288,360 | `bfc21f89981ed0a2867fbab7afb70a689fda1dc6a307d04878647311d62d7728` | `5.15.123-g697b78910a71-dirty` |
+| `mhi_cntrl_qcom.ko` | 91,856 | `89c0b03ae84ac2911725782fb81c189159c6299d0b3eed5b12355689270db390` | `5.15.123-g697b78910a71-dirty` |
+
+The host and CNSS hashes match the earlier disassembly receipts and the
+running kernel vermagic. `pci-msm-drv.ko` is an AArch64 relocatable with its
+symbol table and `.BTF` section intact; it has no DWARF `.debug_info`. This
+allows symbol- and relocation-aware disassembly, not source recovery. The
+reported Android git suffix is still absent from the nearby public checkout.
+
+The fresh host disassembly reconfirms `msm_pcie_drv_suspend()` at `.text+0x34d0`
+passes `(pcie, 0, 0)` to `qcom_pcie_icc_bw_update()` at `.text+0x1684`; that
+helper calls `icc_set_bw()` with the zero request. The CNSS disassembly
+reconfirms the branch distinction recorded in
+[`2026-09-20-android-pcie-binary-decomp.md`](2026-09-20-android-pcie-binary-decomp.md):
+`cnss_pci_suspend_bus()` uses the byte at its data offset `+0xe8`. Zero takes
+the ordinary path through `pci_disable_device()` and
+`pci_set_power_state(pdev, 3)`; nonzero skips those calls and goes straight to
+`cnss_set_pci_link()`. The successful connected-DRV trace shows mode 0 and is
+consistent with the nonzero branch. Thus an explicit D3hot setter exists in
+the binary but is not part of that observed connected-DRV path. Physical PCI
+state during sleep remains unknown.
+
+No module was loaded/unloaded or changed. Android boot, PCI state, regulators,
+interconnect requests, sleep settings, and persistent files were not changed.

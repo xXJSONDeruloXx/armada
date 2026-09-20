@@ -6176,3 +6176,26 @@ Android remains on its existing boot with Wi-Fi/ADB up. No suspend, kernel
 build, package change, or device write occurred in this analysis step. The
 next useful device check is Linux-only: preflight the live base deployment and
 rollback path before creating or staging any test image.
+
+### 2026-09-20 10:22 UTC — live Android PCIe binaries rechecked
+
+Wireless ADB is connected to the rooted Android boot. I pulled the currently
+installed host, CNSS, endpoint, and MHI modules read-only. All four report
+`vermagic=5.15.123-g697b78910a71-dirty`; the host and CNSS SHA-256 values
+match the earlier exact disassembly. The host module retains its ELF symbols
+and BTF but has no DWARF source lines. Exact hashes and sizes are in
+`receipts/2026-09-20-android-live-pcie-binary-repull.txt`.
+
+The fresh binary review confirms an important boundary: `cnss_pci_suspend_bus()`
+contains an ordinary endpoint path that calls `pci_disable_device()` and
+`pci_set_power_state(pdev, 3)`, but the connected-DRV branch uses its saved
+nonzero flag to jump around those calls and continue to `cnss_set_pci_link()`.
+The prior successful trace's mode-0 host call and the host's `0/0` ICC update
+match that connected branch. Android therefore does not need to issue an
+explicit endpoint D3hot transition on the observed DRV path. This still does
+not reveal the PCI function's physical state during sleep or prove a wake
+path. The separate callback run with no `pci_set_power_state()` kprobe hits is
+consistent, but is not the same capture as the final-TCS run.
+
+No Android suspend, module operation, setting change, or kernel write was
+performed. The device remains awake on Android with Wireless ADB available.
