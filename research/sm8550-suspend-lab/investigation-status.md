@@ -6,7 +6,7 @@ the chronological record, including failed runs and superseded interpretations.
 Update this page when a checklist item changes; put raw output in a dated
 receipt and explain the result in the notebook.
 
-Status as of 2026-09-20 21:29 UTC. Branch `feat/sm8550-suspend-lab`.
+Status as of 2026-09-20 21:55 UTC. Branch `feat/sm8550-suspend-lab`.
 
 ## Current goal checklist
 
@@ -41,10 +41,14 @@ Status as of 2026-09-20 21:29 UTC. Branch `feat/sm8550-suspend-lab`.
   `KERNEL.BAK` hash before restoring it, and exercise fail-closed cases.
 - [x] Build an un-staged candidate with the guard in its generated initramfs;
   verify required files/tools, systemd units, and the existing root rollback.
-- [ ] Explain the previous candidate boot's missing SSH observation and
-  establish recovery for failures before the initrd timer starts. The timer
-  cannot recover a kernel/initrd-systemd hang; do not stage the candidate
-  until manual ABL recovery is available for that remaining case.
+- [x] Exercise the exact generated initrd helper on a scratch loop-backed
+  VFAT image, with reboot stubbed; success and wrong-hash fail-closed checks
+  pass. The real ESP and bootc deployment were not touched.
+- [ ] Locate the previous candidate boot's SSH loss and cover failures before
+  the initrd timer starts. The prior journal proves a clean bootc apply and
+  boot-image rewrite, but there is no persistent journal for the subsequent
+  candidate boot. The timer cannot recover a kernel/initrd-systemd hang; do
+  not stage again until manual ABL recovery is available for that gap.
 
 ## Latest device recovery state
 
@@ -123,6 +127,26 @@ initramfs contents, and systemd units pass. It has not been booted. The timer
 is wanted by `dracut-pre-mount.service` but ordered before that service, so it
 starts when pre-mount is queued. It still cannot recover kernel or initrd
 systemd failures before that activation point; those need manual ABL recovery.
+
+At 21:48 UTC, the helper extracted from this candidate's generated initramfs
+was exercised on a 256 MiB loop-backed scratch VFAT filesystem inside the
+candidate OCI image. The success path restored a fixture `KERNEL`, repaired
+the active image stamp, preserved the previous-image stamp, and called a
+stubbed `systemctl reboot`. A bad backup hash failed closed without changing
+the fixture kernel/stamp or requesting reboot. The exact scratch directory
+was removed and loop2 detached afterward. The real ESP was not mounted into
+the container; this validates helper/VFAT behavior only, not initrd timer
+activation or recovery before initrd systemd.
+
+At 21:55 UTC, the previous persistent boot journal was found to contain the
+apply/reboot boundary: bootc initiated shutdown at 13:07:41 EDT, OSTree
+finalized the staged deployment and updated the boot config, and Armada's
+finalizer wrote `/boot/efi/KERNEL` for `vmlinuz-7.2.3` by 13:08:02. The log
+does not identify the written bytes beyond the shared kernel version string.
+`journalctl --list-boots` has no separate persistent Linux root journal for
+the candidate before the current stock boot. This narrows the sequence but
+does not locate the failure within kernel/initrd or distinguish a bootloader
+selection issue. See the [reboot-boundary receipt](receipts/2026-09-20-previous-candidate-reboot-boundary.md).
 
 At 20:45 UTC both current ESP images again hash to the known stock image
 `0b0d7c03a88e77c480ad31d145a6718916638ba62287ff5a2b427c0f75475000`, and the

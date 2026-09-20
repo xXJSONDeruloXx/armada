@@ -7317,3 +7317,50 @@ pre-mount `Wants=` drop-in. The image remains un-staged and un-booted. A fresh
 SSH check still reports stock kernel `7.2.3` and boot ID
 `aa40c55e-d558-46a9-a710-3a7d926b9e9e`. The corrected guard narrows but does
 not close the remaining kernel/initrd-systemd recovery gap.
+
+### 2026-09-20 21:48 UTC — run the generated recovery helper on scratch VFAT
+
+To check the real file operations before considering a candidate boot, ran
+the helper extracted from `20260920-04`'s generated initramfs against a
+256 MiB loop-backed FAT32 image on the Nova. The extracted script SHA-256
+matched the tracked helper. A success case restored a fixture `KERNEL` from
+`KERNEL.BAK`, wrote the configured active image ID, preserved the previous
+image ID, and reached `systemctl reboot --force`; `systemctl` was a stub, so
+the device did not reboot. A second run with an intentionally wrong expected
+backup hash returned failure and left the candidate kernel, active ID, and
+reboot count unchanged. The backup fixture SHA-256 was
+`93140f66a789cdabf4cba3bc6b7dbdd4b162e8b23dbf5af38e74c30ba998e497`.
+
+The Podman container saw only the temporary directory and `/dev/loop-control`
+plus `/dev/loop2`; it did not receive `/boot/efi`. The loop was detached and
+the scratch directory removed. `bootc status` afterward still showed the
+stock beta digest, with no candidate staged. Receipt:
+[`2026-09-20-pcie-opp-vfat-helper-test.md`](receipts/2026-09-20-pcie-opp-vfat-helper-test.md).
+
+This closes the helper's scratch-VFAT integration gap, not the boot-recovery
+gap. It does not prove the initrd timer starts on the previously failing
+candidate path, and it cannot recover a kernel hang or failure before initrd
+systemd activates the timer. The OPP candidate remains un-staged; early ABL
+recovery is still needed before a test that can fail before this guard starts.
+
+### 2026-09-20 21:55 UTC — persistent journal narrows the previous apply boundary
+
+Read-only inspection of `journalctl -b -1` found the shutdown sequence from the
+candidate apply. At 13:07:41 EDT sudo ran
+`bootc switch --from-downloaded --apply`; systemd-logind recorded a reboot
+initiated by bootc, then OSTree finalized the staged deployment and reported a
+bootconfig swap. At 13:08:02 EDT `armada-bootimg-finalize` wrote
+`/boot/efi/KERNEL` for `vmlinuz-7.2.3`, and the shutdown sync immediately
+reported the kernel as current. The old boot journal ends at 13:08:02.703.
+
+The current persistent boot list contains the old Linux boot ID
+`55fdad18019d4c928ebd8a558574c1d3` and current stock boot ID
+`aa40c55ed55846a9a7103a7d926b9e9e`; there is no separate candidate Linux
+root journal between them. This proves the staged deployment was finalized
+and the boot image was rewritten before restart. It does not hash-identify the
+rewritten bytes (both images report `vmlinuz-7.2.3`) or establish whether the
+candidate reached initrd systemd. The on-screen “Preparing Armada” label still
+cannot distinguish initrd from real root. The missing SSH phase remains
+unresolved; the previous clean shutdown is not evidence of a successful
+candidate boot. See the
+[`previous-candidate-reboot-boundary` receipt](receipts/2026-09-20-previous-candidate-reboot-boundary.md).
