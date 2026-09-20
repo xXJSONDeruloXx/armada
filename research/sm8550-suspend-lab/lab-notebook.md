@@ -6666,3 +6666,24 @@ vmlinux link and BTF generation completed; Kbuild is on the second/final link
 pass. No build error has appeared, but the final vmlinux, boot Image, and DTB
 are not yet verified, so the older artifacts remain unusable. The Nova remains
 on its unchanged Linux deployment and no test image is staged.
+
+### 2026-09-20 15:59 UTC — matching-config build verified; Android source remains unavailable
+
+`make -j8 ARCH=arm64 Image dtbs` completed with exit status 0 from the external
+Linux 7.2.3 build tree. The generated Image embeds the exact captured Nova
+config hash. The Nova DTB contains the opt-in diagnostic property and the
+synthetic 2 Hz OPP at 1000/1 kB/s with the existing `low_svs` required OPP. The
+artifact hashes and validation are recorded in
+[`2026-09-20-matching-config-pcie-opp-build.md`](../../receipts/2026-09-20-matching-config-pcie-opp-build.md).
+No OCI image was built or staged, and the device has not booted this candidate.
+
+The installed Android kernel suffix `g697b78910a71-dirty` does not resolve
+through the public GitHub commit API. The available `lineage-23.2` checkout is
+grafted at `93c5cc6`; the checked public `lineage-24.0` head is `dc79bb3`. This
+does not change the binary-grounded PCIe/RPMh findings, but it means the exact
+vendor source is not available through those public refs.
+
+The user reports Android is awake with Wireless debugging enabled, but this
+Mac still sees no ADB device or mDNS endpoint. The prior address
+`192.168.0.163:42265` does not respond. I requested the current pairing or
+connect endpoint; no ADB command, reboot, or Android modification was made.

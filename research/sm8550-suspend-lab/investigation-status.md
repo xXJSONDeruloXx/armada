@@ -6,7 +6,7 @@ the chronological record, including failed runs and superseded interpretations.
 Update this page when a checklist item changes; put raw output in a dated
 receipt and explain the result in the notebook.
 
-Status as of 2026-09-20 15:28 UTC. Branch `feat/sm8550-suspend-lab`.
+Status as of 2026-09-20 15:58 UTC. Branch `feat/sm8550-suspend-lab`.
 
 The sleep-stats offset question is closed: Android and Armada both resolve the
 SM8550 records at `+0x48` and `+0xb8`. Android's successful deep path advances
@@ -35,23 +35,30 @@ permission-denied to the non-root SSH account. The corrected module hash is
 BTF layout/prototype checks passed, though exact source/image identity is not
 proven and `CONFIG_MODVERSIONS` is disabled.
 
-The exact Android source commit remains unidentified; runtime claims are
-anchored by hash-matched binaries, live DT, and traces, with nearby public
-source labeled as a match only. The current candidate A/B is a Nova-only OPP
+The exact Android source commit remains unavailable. The running build suffix
+`g697b78910a71-dirty` does not resolve through the public GitHub commit API;
+the nearby public `lineage-23.2` tree is grafted at `93c5cc6`, and the advertised
+`lineage-24.0` head is `dc79bb3`. Runtime claims are therefore anchored by
+hash-matched binaries, live DT, and traces, with public source labeled only as
+a match. The current candidate A/B is a Nova-only OPP
 that keeps the active Gen2 x1 `low_svs` RPMh corner while lowering only the
 PCIe-MEM peak request from 500000 to 1000 kB/s; the CPU path remains 1 kB/s.
 It uses the normal OPP path and does not bypass PCI eligibility or directly
-write an ICC vote. The candidate object, Nova DTB, linked `vmlinux`, and
-`Image` exist in the external scratch tree. The original linked image was
-blocked because its config omitted scheduler-extension options enabled on the
-device. I restored the scratch `.config` through Kconfig; it now byte-matches
-the live config, but the Image/DTB have not yet been rebuilt with it. The
-matching-config rebuild has compiled and archived the kernel objects and
-completed its first `vmlinux` link/BTF pass. The final `vmlinux` link is
-running; the Image and Nova DTB timestamps are still from the prior build.
-Verify all artifacts after make exits, then stage the reversible boot layer
-before any test. See
-the [config-reconcile receipt](receipts/2026-09-20-pcie-opp-config-reconcile.md).
+write an ICC vote. The matching-config `make -j8 ARCH=arm64 Image dtbs`
+completed with exit 0. The embedded Image config hash matches the live config
+at `2219546e268f72bb2bcbac96943202e9e50731b6e531e3193cc73b1976d2fbef`. Image
+SHA-256 is `15b46efc40d15200523b5c7ec623f54d4ac03bddfe798f1d8842ebf1fa2824d9`;
+Nova DTB SHA-256 is
+`72da8e0e5151d346fe48d5b46738fe74cac74981ffd9709a81d7df79df44d422`. The
+DTB contains the opt-in property and 2 Hz diagnostic OPP with a 1000/1 kB/s
+peak and `required-opps` pointing to phandle `0x26` (`opp-64`, level `0x40`,
+the existing `low_svs` corner). No test OCI image has been built or staged.
+The artifact hashes and checks are in the
+[matching-config build receipt](../../receipts/2026-09-20-matching-config-pcie-opp-build.md).
+The original linked image was blocked because its config omitted scheduler-
+extension options enabled on the device; the scratch `.config` was reconciled
+through Kconfig before the successful build. See the
+[config-reconcile receipt](receipts/2026-09-20-pcie-opp-config-reconcile.md).
 The currently installed base is `ghcr.io/armada-os/armada:beta` at digest
 `sha256:5fe995d5fedf5034ee42a8f0e54dbd2d08e0c85adb9e3f88cfd52e55636eeb88`;
 the old local-layer recipe points at a 2026-09-01 image and kernel 7.2.0, so it
@@ -59,9 +66,12 @@ cannot be reused verbatim. The base layers total 6.07 GB compressed, while
 `/var` has 37 GB free and the rootful Podman store does not contain the base.
 Check unpacked space requirements before pulling or building a new layer. See
 the [bootc base receipt](receipts/2026-09-20-bootc-base-and-space.md).
-The device is currently on Armada Linux and reachable over SSH; ADB has no
-attached target. The user confirmed Linux is Nova's default boot, so an ADB
-reboot from Android returns to Linux when Android ADB is available.
+The user reports the Nova is currently on Android with Wireless debugging
+enabled. This Mac's ADB device list and mDNS discovery are empty; the prior
+endpoint `192.168.0.163:42265` is unreachable. The current pairing/connect
+endpoint is needed before I can read Android again or reboot it to Linux. The
+user confirmed Linux is Nova's default boot, so `adb reboot` returns to Linux
+once the transport is available.
 The [boot-image recovery receipt](receipts/2026-09-20-bootimg-recovery-path.md)
 confirms the existing KERNEL.BAK matches the current boot image and documents
 a test-layer drop-in needed to keep that backup from being replaced at the
@@ -110,8 +120,8 @@ manually changing shared bandwidth/regulator requests.
   D3cold eligibility or directly alter an ICC vote.
 - [x] Restore the live scheduler config through Kconfig; the result matches
   the saved live config byte-for-byte.
-- [ ] Rebuild and inspect the candidate Image/DTB, then prove a reversible
-  deployment path.
+- [x] Rebuild the matching-config candidate and inspect the Image/DTB; verify
+  bootc rollback and the preserved `KERNEL.BAK` manual recovery path.
 - [x] Identify the live bootc base digest and rollback deployment; confirm the
   old 7.2.0 local-layer recipe is stale. Assess storage before pulling the
   6.07 GB compressed base into the currently empty rootful image store.
