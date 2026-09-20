@@ -7364,3 +7364,10 @@ cannot distinguish initrd from real root. The missing SSH phase remains
 unresolved; the previous clean shutdown is not evidence of a successful
 candidate boot. See the
 [`previous-candidate-reboot-boundary` receipt](receipts/2026-09-20-previous-candidate-reboot-boundary.md).
+
+At 21:58 UTC, checked for a retained kernel trace. `CONFIG_PSTORE=y` and
+`CONFIG_PSTORE_RAM=m`, but the root-readable `/sys/fs/pstore` directory was
+empty, `/sys/module/ramoops` and `/dev/pmsg0` were absent, and no live
+reserved-memory compatible named `ramoops` or `pstore` was found. This leaves
+no captured panic/console trace for the candidate boot. Loading ramoops would
+require a valid firmware-reserved buffer; do not guess a RAM address.

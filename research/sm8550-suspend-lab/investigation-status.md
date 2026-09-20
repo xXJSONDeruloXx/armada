@@ -6,7 +6,7 @@ the chronological record, including failed runs and superseded interpretations.
 Update this page when a checklist item changes; put raw output in a dated
 receipt and explain the result in the notebook.
 
-Status as of 2026-09-20 21:55 UTC. Branch `feat/sm8550-suspend-lab`.
+Status as of 2026-09-20 21:58 UTC. Branch `feat/sm8550-suspend-lab`.
 
 ## Current goal checklist
 
@@ -44,6 +44,9 @@ Status as of 2026-09-20 21:55 UTC. Branch `feat/sm8550-suspend-lab`.
 - [x] Exercise the exact generated initrd helper on a scratch loop-backed
   VFAT image, with reboot stubbed; success and wrong-hash fail-closed checks
   pass. The real ESP and bootc deployment were not touched.
+- [x] Check persistent journal and pstore for the prior candidate boot. The
+  clean apply/shutdown is recorded, but there is no candidate root journal or
+  pstore kernel log to identify the failed phase.
 - [ ] Locate the previous candidate boot's SSH loss and cover failures before
   the initrd timer starts. The prior journal proves a clean bootc apply and
   boot-image rewrite, but there is no persistent journal for the subsequent
@@ -147,6 +150,12 @@ does not identify the written bytes beyond the shared kernel version string.
 the candidate before the current stock boot. This narrows the sequence but
 does not locate the failure within kernel/initrd or distinguish a bootloader
 selection issue. See the [reboot-boundary receipt](receipts/2026-09-20-previous-candidate-reboot-boundary.md).
+
+At 21:58 UTC, root-readable `/sys/fs/pstore` was empty. The running kernel has
+`CONFIG_PSTORE=y` and `CONFIG_PSTORE_RAM=m`, but `ramoops` is not loaded, no
+`/dev/pmsg0` exists, and no reserved-memory compatible in the live DT names
+`ramoops` or `pstore`. There is no preserved panic/console trace from the
+missing boot, and no RAM region should be guessed for a ramoops backend.
 
 At 20:45 UTC both current ESP images again hash to the known stock image
 `0b0d7c03a88e77c480ad31d145a6718916638ba62287ff5a2b427c0f75475000`, and the

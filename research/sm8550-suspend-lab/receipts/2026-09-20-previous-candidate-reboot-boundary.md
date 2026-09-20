@@ -48,3 +48,12 @@ necessary before repeating a candidate boot that could fail before the timer.
 The current device remains on the stock beta digest
 `sha256:5fe995d5fedf5034ee42a8f0e54dbd2d08e0c85adb9e3f88cfd52e55636eeb88`,
 with no staged deployment.
+
+## Pstore check
+
+At 21:58 UTC, root-readable `/sys/fs/pstore` was empty. The running kernel
+reports `CONFIG_PSTORE=y` and `CONFIG_PSTORE_RAM=m`, but `/sys/module/ramoops`
+and `/dev/pmsg0` are absent. A read-only search of the live
+`/sys/firmware/devicetree/base/reserved-memory` compatible properties found no
+`ramoops` or `pstore` backend node. No prior panic/console record is available
+through pstore. Do not load ramoops against a guessed physical memory region.
