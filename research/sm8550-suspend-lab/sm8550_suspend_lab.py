@@ -122,8 +122,9 @@ TRACEFS_DIRS = (
     "/sys/kernel/tracing",
     "/sys/kernel/debug/tracing",
 )
-TRACE_PROFILE_CHOICES = ("none", "ufs-irq", "rpmh-aoss", "rsc-success", "psci-kretprobe", "pcie-d3cold")
+TRACE_PROFILE_CHOICES = ("none", "ufs-irq", "rpmh-aoss", "rsc-success", "psci-kretprobe", "pcie-d3cold", "icc-attribution")
 TRACE_KRETPROBE_PROFILES = ("psci-kretprobe", "pcie-d3cold")
+TRACE_DYNAMIC_PROBE_PROFILES = TRACE_KRETPROBE_PROFILES + ("icc-attribution",)
 TRACE_REQUIRED_EVENTS = (
     "irq:irq_handler_entry",
     "irq:irq_handler_exit",
@@ -148,6 +149,15 @@ TRACE_PCIE_D3COLD_REQUIRED_EVENTS = TRACE_RPMH_REQUIRED_EVENTS + (
     "power:device_pm_callback_end",
     "power:suspend_resume",
 )
+TRACE_ICC_ATTRIBUTION_REQUIRED_EVENTS = (
+    "interconnect:icc_set_bw",
+    "interconnect:icc_set_bw_end",
+    "rpmh:rpmh_send_msg",
+)
+ICC_ATTRIBUTION_NODE_BASES = ("ebi", "llcc_mc", "qns_llcc")
+ICC_NODE_NAME_OFFSET = 0x8
+ICC_ATTRIBUTION_KERNEL_RELEASE = "7.2.3"
+ICC_ATTRIBUTION_BTF_SHA256 = "fb193ea5c32178ae22d52e30a62986e4bbc2c3db01bfa530f34b257fe94b45a1"
 TRACE_UFS_PM_EVENTS = (
     "ufs:ufshcd_system_suspend",
     "ufs:ufshcd_system_resume",
@@ -653,6 +663,255 @@ def parse_rpmh_rsc_snapshots(text: str) -> Dict[str, Any]:
     }
 
 
+def parse_trace_event_line(line: str) -> Optional[Dict[str, Any]]:
+    header = re.match(r"^\s*\S+-(\d+)\s+\[\d+\]\s+\S+\s+(\d+(?:\.\d+)?):\s+(.*)$", line)
+    if not header:
+        return None
+    event = re.match(r"(?:(?P<group>[^:\s]+):)?(?P<name>[^:\s]+):\s*(?P<payload>.*)$", header.group(3))
+    if not event:
+        return None
+    return {
+        "pid": int(header.group(1)),
+        "timestamp": float(header.group(2)),
+        "group": event.group("group"),
+        "event": event.group("name"),
+        "payload": event.group("payload"),
+    }
+
+
+def trace_event_fields(payload: str) -> Dict[str, str]:
+    return {
+        key: quoted or plain
+        for key, quoted, plain in re.findall(r'([A-Za-z_][A-Za-z0-9_]*)=(?:"([^"]*)"|([^\s]+))', payload)
+    }
+
+
+def trace_loss_status(run: DeviceRun) -> Dict[str, Any]:
+    stats_files = sorted((run.run_dir / "raw" / "trace" / "per_cpu").glob("cpu*.stats"))
+    counters = ("overrun", "commit overrun", "dropped events")
+    per_cpu: Dict[str, Any] = {}
+    complete = bool(stats_files)
+    for source in stats_files:
+        raw = read_text(source) or ""
+        values = {}
+        for counter in counters:
+            match = re.search(r"^%s:\s*(\d+)\s*$" % re.escape(counter), raw, re.MULTILINE)
+            if match:
+                values[counter] = int(match.group(1))
+        complete = complete and len(values) == len(counters)
+        per_cpu[source.stem] = values
+    lossless = complete and all(value == 0 for values in per_cpu.values() for value in values.values())
+    return {"available": complete, "lossless": lossless, "per_cpu": per_cpu}
+
+
+def parse_rpmh_send_message(event: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    match = re.match(
+        r"^(\S+):\s+tcs\(m\):\s*(\d+)\s+\[([^]]+)\]\s+cmd\(n\):\s*(\d+)\s+"
+        r"msgid:\s*(\S+)\s+addr:\s*(\S+)\s+data:\s*(\S+)\s+complete:\s*(\S+)",
+        event["payload"],
+    )
+    if not match:
+        return None
+    controller, tcs, mode, command, msgid, address, data, complete = match.groups()
+    return {
+        "pid": event["pid"],
+        "timestamp": event["timestamp"],
+        "controller": controller,
+        "tcs": int(tcs),
+        "mode": mode.lower(),
+        "command": int(command),
+        "msgid": int(msgid, 0),
+        "address": int(address, 0),
+        "data": int(data, 0),
+        "complete": int(complete, 0),
+    }
+
+
+def parse_icc_aggregate_attribution(
+    text: str,
+    baseline: Dict[str, Any],
+    probe_group: Optional[str],
+    trace_loss: Dict[str, Any],
+) -> Dict[str, Any]:
+    registered = baseline.get("registered_target_nodes") or []
+    clients: Dict[str, List[Dict[str, Any]]] = {}
+    for row in (baseline.get("parsed") or {}).get("consumers", []):
+        if row.get("parent") in registered:
+            clients.setdefault(row["parent"], []).append(row)
+
+    callbacks: Dict[Tuple[int, str], List[Dict[str, Any]]] = {}
+    active: Dict[int, List[Dict[str, Any]]] = {}
+    batches: Dict[str, List[Dict[str, Any]]] = {node: [] for node in registered}
+    mutations: List[Dict[str, Any]] = []
+    unmatched_points = 0
+    sleep_messages: List[Dict[str, Any]] = []
+
+    for line in text.splitlines():
+        event = parse_trace_event_line(line)
+        if not event:
+            continue
+        fields = trace_event_fields(event["payload"])
+        if event["group"] == probe_group and event["event"] in ("icc_path_init", "icc_path_put", "icc_set_tag"):
+            mutations.append({"event": event["event"], "timestamp": event["timestamp"]})
+        elif event["group"] == probe_group and event["event"] == "icc_aggregate":
+            node = fields.get("node_name")
+            if node in batches:
+                callbacks.setdefault((event["pid"], node), []).append(
+                    {
+                        "timestamp": event["timestamp"],
+                        "tag": int(fields["tag"], 0),
+                        "avg_bw": int(fields["avg_bw"], 0),
+                        "peak_bw": int(fields["peak_bw"], 0),
+                    }
+                )
+        elif event["event"] == "icc_set_bw":
+            node = fields.get("node")
+            if node not in batches:
+                continue
+            rows = callbacks.pop((event["pid"], node), [])
+            if not rows:
+                unmatched_points += 1
+            batch = {
+                "node": node,
+                "pid": event["pid"],
+                "timestamp": event["timestamp"],
+                "path": fields.get("path"),
+                "dev": fields.get("dev"),
+                "tracepoint_aggregate": {
+                    "avg_bw": int(fields["agg_avg"], 0),
+                    "peak_bw": int(fields["agg_peak"], 0),
+                }
+                if "agg_avg" in fields and "agg_peak" in fields
+                else None,
+                "callback_rows": rows,
+            }
+            active.setdefault(event["pid"], []).append(batch)
+            batches[node].append(batch)
+        elif event["event"] == "icc_set_bw_end":
+            for batch in active.pop(event["pid"], []):
+                batch["ret"] = int(fields.get("ret", "-1"), 0)
+        elif event["event"] == "rpmh_send_msg":
+            message = parse_rpmh_send_message(event)
+            if message and message["controller"] == "apps_rsc" and message["mode"] == "sleep":
+                sleep_messages.append(message)
+
+    sleep_batches: List[List[Dict[str, Any]]] = []
+    for message in sleep_messages:
+        if (
+            not sleep_batches
+            or sleep_batches[-1][-1]["pid"] != message["pid"]
+            or message["timestamp"] - sleep_batches[-1][-1]["timestamp"] > 0.05
+        ):
+            sleep_batches.append([])
+        sleep_batches[-1].append(message)
+    final_sleep = sleep_batches[-1] if sleep_batches else []
+    sleep_boundary = max((message["timestamp"] for message in final_sleep), default=None)
+
+    mutations_before_sleep = [row for row in mutations if sleep_boundary is None or row["timestamp"] <= sleep_boundary]
+    orphan_callbacks = [
+        row
+        for rows in callbacks.values()
+        for row in rows
+        if sleep_boundary is None or row.get("timestamp", sleep_boundary) <= sleep_boundary
+    ]
+    mapping_reasons = []
+    if baseline.get("target_nodes_match") is not True:
+        mapping_reasons.append("fresh interconnect summary did not match the registered node set")
+    if trace_loss.get("lossless") is not True:
+        mapping_reasons.append("trace loss is nonzero or could not be ruled out")
+    if sleep_boundary is None:
+        mapping_reasons.append("no Apps-RSC SLEEP submission was captured")
+    if mutations_before_sleep:
+        mapping_reasons.append("an ICC request was added, removed, or retagged before the sleep commands")
+    if orphan_callbacks:
+        mapping_reasons.append("some qcom aggregation callbacks had no matching icc_set_bw tracepoint")
+    if unmatched_points:
+        mapping_reasons.append("some target-node icc_set_bw tracepoints had no matching qcom aggregation callbacks")
+    mapping_stable = not mapping_reasons
+
+    latest: List[Dict[str, Any]] = []
+    for node in registered:
+        candidates = [row for row in batches[node] if sleep_boundary is not None and row["timestamp"] <= sleep_boundary]
+        if not candidates:
+            latest.append({"node": node, "status": "no-complete-aggregation-pass-before-sleep"})
+            continue
+        batch = max(candidates, key=lambda row: row["timestamp"])
+        expected = clients.get(node, [])
+        rows = batch["callback_rows"]
+        status = "exact" if mapping_stable else "unresolved"
+        if batch.get("ret") != 0:
+            status = "aggregation-call-did-not-complete-cleanly"
+        elif len(rows) != len(expected):
+            status = "request-count-mismatch"
+        elif [row["tag"] for row in rows] != [row["tag"] for row in expected]:
+            status = "request-tag-order-mismatch"
+
+        sum_avg = sum(row["avg_bw"] for row in rows)
+        max_peak = max((row["peak_bw"] for row in rows), default=0)
+        trace_aggregate = batch.get("tracepoint_aggregate")
+        generic_aggregate_matches = trace_aggregate == {"avg_bw": sum_avg, "peak_bw": max_peak}
+        if status == "exact" and trace_aggregate is None:
+            status = "aggregate-validation-unavailable"
+        elif status == "exact" and not generic_aggregate_matches:
+            status = "aggregate-validation-mismatch"
+
+        requests = []
+        for index, row in enumerate(rows):
+            request = dict(row)
+            request.pop("timestamp", None)
+            request["client"] = expected[index]["node"] if status == "exact" else None
+            request["sleep_bucket"] = row["tag"] == 0 or bool(row["tag"] & 4)
+            requests.append(request)
+        latest.append(
+            {
+                "node": node,
+                "status": status,
+                "reason": mapping_reasons[0] if status == "unresolved" and mapping_reasons else None,
+                "timestamp": batch["timestamp"],
+                "path": batch.get("path"),
+                "dev": batch.get("dev"),
+                "icc_set_bw_return": batch.get("ret"),
+                "sleep_avg_sum": sum(row["avg_bw"] for row in rows if row["tag"] == 0 or row["tag"] & 4),
+                "sleep_peak_max": max(
+                    (row["peak_bw"] for row in rows if row["tag"] == 0 or row["tag"] & 4),
+                    default=0,
+                ),
+                "all_request_avg_sum": sum_avg,
+                "all_request_peak_max": max_peak,
+                "tracepoint_aggregate": trace_aggregate,
+                "generic_aggregate_matches_tracepoint": generic_aggregate_matches if trace_aggregate is not None else None,
+                "requests": requests,
+            }
+        )
+
+    final_sequences: Dict[str, Any] = {}
+    for message in final_sleep:
+        key = "%s/tcs%d/msgid=%#x" % (message["controller"], message["tcs"], message["msgid"])
+        final_sequences.setdefault(key, []).append(message["command"])
+    command_sequences = {
+        key: {"commands": sorted(indices), "contiguous_from_zero": sorted(indices) == list(range(len(indices)))}
+        for key, indices in final_sequences.items()
+    }
+    return {
+        "available": any(batches.values()),
+        "probe_group": probe_group,
+        "registered_nodes": registered,
+        "baseline_target_nodes_match": baseline.get("target_nodes_match"),
+        "trace_loss": trace_loss,
+        "request_list_mutations_before_sleep": mutations_before_sleep,
+        "unmatched_set_bw_points": unmatched_points,
+        "unmatched_aggregate_callbacks": len(orphan_callbacks),
+        "client_mapping_stable": mapping_stable,
+        "client_mapping_reasons": mapping_reasons,
+        "all_target_nodes_mapped_exact": bool(latest) and all(row.get("status") == "exact" for row in latest),
+        "sleep_command_count": len(final_sleep),
+        "sleep_command_sequences": command_sequences,
+        "final_sleep_commands": final_sleep,
+        "latest_node_aggregations": latest,
+        "semantics": "Per-client requests passed through Linux aggregation before the final staged SLEEP messages; this does not show AOP acceptance or physical residency. complete=0 is the RPMh wait flag, not a rejection result.",
+    }
+
+
 def parse_psci_idle_trace(text: str) -> Dict[str, Any]:
     domain_events: Dict[Tuple[str, str, str], Dict[str, Any]] = {}
     suspend_returns: Dict[Tuple[str, int], Dict[str, Any]] = {}
@@ -1065,7 +1324,7 @@ def trace_configure_event(
 
 
 def kprobe_definition_matches(line: str, definition: str) -> bool:
-    return re.sub(r"^r[0-9]*:", "r:", line, count=1) == definition
+    return re.sub(r"^([pr])[0-9]*:", r"\1:", line, count=1) == definition
 
 
 def pcie_d3cold_probe_fields() -> str:
@@ -1262,6 +1521,176 @@ def trace_remove_suspend_kretprobe(run: DeviceRun, info: Dict[str, Any]) -> Dict
     return result
 
 
+def icc_attribution_targets(run: DeviceRun) -> List[str]:
+    snapshot = read_phase_json(run, "pre", "regulator-clock-summaries.json", {})
+    parsed = (snapshot.get("interconnect_summary") or {}).get("parsed") or {}
+    return icc_attribution_node_names(parsed)
+
+
+def icc_attribution_node_names(parsed: Dict[str, Any]) -> List[str]:
+    nodes = sorted(
+        {
+            row["node"]
+            for row in parsed.get("aggregates", [])
+            if isinstance(row.get("node"), str)
+            and row["node"].split("@", 1)[0] in ICC_ATTRIBUTION_NODE_BASES
+        }
+    )
+    bases = {node.split("@", 1)[0] for node in nodes}
+    if "ebi" not in bases or not bases.intersection(("llcc_mc", "qns_llcc")):
+        raise LabError("interconnect summary lacks the EBI/LLCC nodes needed for MC0/SH0 attribution")
+    if any(not re.fullmatch(r"[A-Za-z0-9_.@-]+", node) for node in nodes):
+        raise LabError("interconnect target name cannot be safely used in a trace filter")
+    return nodes
+
+
+def icc_aggregate_probe_fields() -> str:
+    return "node_name=+0x%x($arg1):string tag=$arg2:u32 avg_bw=$arg3:u32 peak_bw=$arg4:u32" % ICC_NODE_NAME_OFFSET
+
+
+def trace_prepare_icc_attribution_probes(run: DeviceRun, info: Dict[str, Any]) -> List[Dict[str, Any]]:
+    root = Path(str(info.get("root", "")))
+    release = read_text(Path("/proc/sys/kernel/osrelease"))
+    btf = read_bytes(Path("/sys/kernel/btf/vmlinux"))
+    digest = hashlib.sha256(btf).hexdigest() if btf is not None else None
+    if release != ICC_ATTRIBUTION_KERNEL_RELEASE or digest != ICC_ATTRIBUTION_BTF_SHA256:
+        raise LabError("refusing icc_node.name dereference: kernel release/BTF differs from the inspected build")
+    nodes = icc_attribution_targets(run)
+    target_filter = " || ".join('node_name == "%s"' % node for node in nodes)
+    probe_specs = (
+        ("icc_aggregate", "qcom_icc_aggregate", icc_aggregate_probe_fields(), target_filter),
+        ("icc_path_init", "path_init", "", None),
+        ("icc_path_put", "icc_put", "", None),
+        ("icc_set_tag", "icc_set_tag", "", None),
+    )
+    available = read_text(root / "available_filter_functions") or ""
+    blacklist = read_text(Path("/sys/kernel/debug/kprobes/blacklist"))
+    if blacklist is None or (read_text(Path("/sys/kernel/debug/kprobes/enabled")) or "").strip() != "1":
+        raise LabError("kprobes are unavailable or their blacklist cannot be read")
+    registry = root / "kprobe_events"
+    if read_text(registry) is None:
+        raise LabError("tracefs kprobe_events is unreadable")
+    group = "s2lab_%s" % safe_name(run.run_id).replace("-", "_")
+    info["icc_attribution_target_nodes"] = nodes
+    info["icc_node_name_offset"] = ICC_NODE_NAME_OFFSET
+    info["icc_attribution_btf_sha256"] = digest
+    info["dynamic_probes"] = []
+    configured_events: List[Dict[str, Any]] = []
+
+    for name, function, fields, event_filter in probe_specs:
+        if not re.search(r"(^|\s)%s(\s|$)" % re.escape(function), available, re.MULTILINE):
+            raise LabError("ICC attribution probe function is unavailable: %s" % function)
+        if any(line.split() and line.split()[0] == function for line in blacklist.splitlines()):
+            raise LabError("ICC attribution probe function is blacklisted: %s" % function)
+        event = "%s:%s" % (group, name)
+        definition = "p:%s/%s %s%s" % (group, name, function, (" " + fields) if fields else "")
+        identity = r"^p[0-9]*:%s/%s\s" % (re.escape(group), re.escape(name))
+        before = read_text(registry) or ""
+        if any(re.match(identity, line) for line in before.splitlines()):
+            raise LabError("run-unique ICC probe name is already registered: %s" % name)
+        probe: Dict[str, Any] = {
+            "group": group,
+            "name": name,
+            "event": event,
+            "function": function,
+            "definition": definition,
+            "filter": event_filter,
+            "registry": str(registry),
+            "owned": True,
+            "registered": False,
+            "state": "registration-requested",
+        }
+        info["dynamic_probes"].append(probe)
+        write_json(run.run_dir / "meta" / "trace.json", info)
+        write_kernel_control(registry, definition + "\n")
+        after = read_text(registry) or ""
+        matching = [line for line in after.splitlines() if re.match(identity, line)]
+        if len(matching) != 1 or not kprobe_definition_matches(matching[0], definition):
+            raise LabError("kernel did not retain ICC probe definition: %s" % name)
+        probe["registered"] = True
+        probe["registered_line"] = matching[0]
+
+        event_format = read_text(trace_event_file(Path(str(info["instance"])), event, "format"))
+        if event_format is None:
+            raise LabError("ICC probe event format is unreadable: %s" % name)
+        fields_to_check = ("node_name", "tag", "avg_bw", "peak_bw") if name == "icc_aggregate" else ()
+        for field in fields_to_check:
+            if not re.search(r"\b%s\s*;" % re.escape(field), event_format):
+                raise LabError("ICC aggregate event format lacks %s" % field)
+        configured = trace_configure_event(run, info, event, event_filter=event_filter)
+        configured["purpose"] = {
+            "icc_aggregate": "capture each enabled-state request passed to qcom_icc_aggregate",
+            "icc_path_init": "invalidate client-name mapping if ICC request-list entries are added",
+            "icc_path_put": "invalidate client-name mapping if ICC request-list entries are removed",
+            "icc_set_tag": "invalidate client-name mapping if request tags change",
+        }[name]
+        info["selected_events"].append(configured)
+        probe["state"] = "enabled-in-private-instance"
+        configured_events.append(configured)
+        write_json(run.run_dir / "meta" / "trace.json", info)
+    return configured_events
+
+
+def trace_remove_icc_attribution_probes(run: DeviceRun, info: Dict[str, Any]) -> Dict[str, Any]:
+    probes = info.get("dynamic_probes", [])
+    if not isinstance(probes, list) or not probes:
+        return {"result": "not-owned"}
+    functions = {
+        "icc_aggregate": ("qcom_icc_aggregate", icc_aggregate_probe_fields()),
+        "icc_path_init": ("path_init", ""),
+        "icc_path_put": ("icc_put", ""),
+        "icc_set_tag": ("icc_set_tag", ""),
+    }
+    owned = [probe for probe in probes if isinstance(probe, dict) and probe.get("owned")]
+    if not owned:
+        return {"result": "not-owned"}
+    actions: List[Dict[str, Any]] = []
+    for probe in probes:
+        if not isinstance(probe, dict) or not probe.get("owned"):
+            continue
+        group, name = probe.get("group"), probe.get("name")
+        if not isinstance(group, str) or not re.fullmatch(r"s2lab_[A-Za-z0-9_]+", group) or name not in functions:
+            actions.append({"event": probe.get("event"), "result": "refused-invalid-metadata"})
+            continue
+        function, fields = functions[name]
+        expected = "p:%s/%s %s%s" % (group, name, function, (" " + fields) if fields else "")
+        registry_value = probe.get("registry")
+        if probe.get("function") != function or probe.get("definition") != expected or not isinstance(registry_value, str):
+            actions.append({"event": probe.get("event"), "result": "refused-definition-changed"})
+            continue
+        registry = Path(registry_value)
+        if registry not in (Path("/sys/kernel/tracing/kprobe_events"), Path("/sys/kernel/debug/tracing/kprobe_events")):
+            actions.append({"event": probe.get("event"), "result": "refused-unexpected-registry"})
+            continue
+        current = read_text(registry)
+        if current is None:
+            actions.append({"event": probe.get("event"), "result": "unreadable-registry"})
+            continue
+        identity = r"^p[0-9]*:%s/%s\s" % (re.escape(group), re.escape(name))
+        matching = [line for line in current.splitlines() if re.match(identity, line)]
+        registered_line = probe.get("registered_line")
+        if not matching:
+            result = "already-absent"
+        elif len(matching) != 1 or not kprobe_definition_matches(matching[0], expected) or (registered_line and matching[0] != registered_line):
+            actions.append({"event": probe.get("event"), "result": "refused-definition-changed", "matching": matching})
+            continue
+        else:
+            try:
+                write_kernel_control(registry, "-:%s/%s\n" % (group, name))
+            except OSError as exc:
+                actions.append({"event": probe.get("event"), "result": "remove-failed", "error": str(exc)})
+                continue
+            result = "removed" if not any(re.match(identity, line) for line in (read_text(registry) or "").splitlines()) else "remove-failed"
+        probe["state"] = result
+        probe["registered"] = result not in ("removed", "already-absent")
+        actions.append({"event": probe.get("event"), "result": result})
+    complete = len(actions) == len(owned) and all(
+        action["result"] in ("removed", "already-absent") for action in actions
+    )
+    write_json(run.run_dir / "meta" / "trace.json", info)
+    return {"result": "removed" if complete else "partial", "probes": actions}
+
+
 def trace_irq_number_for(name: str) -> Optional[int]:
     """Resolve a named live IRQ instead of assuming a board IRQ number."""
     interrupts = read_text(Path("/proc/interrupts"))
@@ -1312,6 +1741,8 @@ def trace_prepare(run: DeviceRun, profile: str) -> Dict[str, Any]:
         if profile == "rsc-success"
         else TRACE_PCIE_D3COLD_REQUIRED_EVENTS
         if profile == "pcie-d3cold"
+        else TRACE_ICC_ATTRIBUTION_REQUIRED_EVENTS
+        if profile == "icc-attribution"
         else TRACE_PSCI_KRETPROBE_REQUIRED_EVENTS
         if profile in TRACE_KRETPROBE_PROFILES
         else TRACE_RPMH_REQUIRED_EVENTS
@@ -1451,6 +1882,10 @@ def trace_prepare(run: DeviceRun, profile: str) -> Dict[str, Any]:
                     trace_configure_event(run, info, event, event_filter=event_filter)
                 )
             trace_prepare_suspend_kretprobe(run, info)
+        elif profile == "icc-attribution":
+            for event in required_events:
+                info["selected_events"].append(trace_configure_event(run, info, event))
+            trace_prepare_icc_attribution_probes(run, info)
         else:
             profile_events = list(required_events) + list(TRACE_RPMH_OPTIONAL_EVENTS)
             info["candidate_rpmh_events"] = profile_events
@@ -1476,11 +1911,38 @@ def trace_prepare(run: DeviceRun, profile: str) -> Dict[str, Any]:
         write_json(run.run_dir / "meta" / "trace.json", info)
         remove_actions = trace_remove_instance(run, info)
         if any(action.get("result") in ("instance-removed", "already-absent") for action in remove_actions):
-            info["prepare_kprobe_cleanup"] = trace_remove_suspend_kretprobe(run, info)
-        elif info.get("dynamic_kprobe"):
+            if info.get("profile") == "icc-attribution":
+                info["prepare_kprobe_cleanup"] = trace_remove_icc_attribution_probes(run, info)
+            else:
+                info["prepare_kprobe_cleanup"] = trace_remove_suspend_kretprobe(run, info)
+        elif info.get("dynamic_kprobe") or info.get("dynamic_probes"):
             info["prepare_kprobe_cleanup"] = {"result": "refused-instance-not-removed", "actions": remove_actions}
         write_json(run.run_dir / "meta" / "trace.json", info)
         raise
+
+
+def capture_icc_attribution_baseline(run: DeviceRun, info: Dict[str, Any]) -> Dict[str, Any]:
+    raw = read_text(Path("/sys/kernel/debug/interconnect/interconnect_summary"))
+    if raw is None:
+        return {"available": False, "reason": "interconnect_summary is unreadable"}
+    parsed = parse_interconnect_summary(raw)
+    baseline_nodes: List[str] = []
+    error = None
+    try:
+        baseline_nodes = icc_attribution_node_names(parsed)
+    except LabError as exc:
+        error = str(exc)
+    expected = info.get("icc_attribution_target_nodes", [])
+    atomic_write_text(run.run_dir / "meta" / "interconnect-summary-before-dispatch.txt", raw)
+    return {
+        "available": parsed.get("available", False),
+        "path": "meta/interconnect-summary-before-dispatch.txt",
+        "parsed": parsed,
+        "target_nodes": baseline_nodes,
+        "registered_target_nodes": expected,
+        "target_nodes_match": baseline_nodes == expected,
+        "error": error,
+    }
 
 
 def trace_start(run: DeviceRun) -> Dict[str, Any]:
@@ -1507,6 +1969,8 @@ def trace_start(run: DeviceRun) -> Dict[str, Any]:
     info["state"] = "running"
     info["started_at"] = utc_now()
     info["marker"] = marker_result
+    if info.get("profile") == "icc-attribution":
+        info["icc_attribution_baseline"] = capture_icc_attribution_baseline(run, info)
     trace_control_snapshot(run, info, "started")
     write_json(run.run_dir / "meta" / "trace.json", info)
     return info
@@ -1544,7 +2008,7 @@ def trace_stop(run: DeviceRun) -> Dict[str, Any]:
                 "per_cpu/%s.stats" % cpu.name,
                 cpu / "stats",
             )
-    if info.get("dynamic_kprobe"):
+    if info.get("dynamic_kprobe") or info.get("dynamic_probes"):
         trace_files["kprobe_profile"] = trace_capture_file(
             run,
             "kprobe_profile.txt",
@@ -1572,9 +2036,14 @@ def trace_remove_instance(run: DeviceRun, info: Dict[str, Any]) -> List[Dict[str
         return actions
     with contextlib.suppress(OSError):
         write_kernel_control(instance / "tracing_on", "0\n")
-    probe = info.get("dynamic_kprobe")
-    dynamic_event = probe.get("event") if isinstance(probe, dict) else None
-    if isinstance(dynamic_event, str):
+    dynamic_events = set()
+    legacy_probe = info.get("dynamic_kprobe")
+    if isinstance(legacy_probe, dict) and isinstance(legacy_probe.get("event"), str):
+        dynamic_events.add(legacy_probe["event"])
+    for probe in info.get("dynamic_probes", []):
+        if isinstance(probe, dict) and isinstance(probe.get("event"), str):
+            dynamic_events.add(probe["event"])
+    for dynamic_event in sorted(dynamic_events):
         enable_path = trace_event_file(instance, dynamic_event, "enable")
         if enable_path.exists():
             try:
@@ -1586,7 +2055,7 @@ def trace_remove_instance(run: DeviceRun, info: Dict[str, Any]) -> List[Dict[str
         event = selected.get("event") if isinstance(selected, dict) else None
         if not event:
             continue
-        if event == dynamic_event:
+        if event in dynamic_events:
             continue
         try:
             write_kernel_control(trace_event_file(instance, event, "enable"), "0\n")
@@ -1608,9 +2077,17 @@ def trace_cleanup(run: DeviceRun) -> Dict[str, Any]:
         write_json(run.run_dir / "cleanup" / "trace.json", result)
         return result
     probe = info.get("dynamic_kprobe")
+    new_probes = info.get("dynamic_probes")
     if isinstance(probe, dict) and probe.get("state") == "removed":
         previous = read_phase_json(run, "cleanup", "trace.json", {})
         if previous.get("kprobe_cleanup", {}).get("result") == "removed":
+            return previous
+    if info.get("profile") == "icc-attribution" and isinstance(new_probes, list) and new_probes and all(
+        isinstance(item, dict) and item.get("owned") and item.get("state") in ("removed", "already-absent")
+        for item in new_probes
+    ):
+        previous = read_phase_json(run, "cleanup", "trace.json", {})
+        if previous.get("kprobe_cleanup", {}).get("result") in ("removed", "already-absent"):
             return previous
     if info.get("state") not in ("stopped", "cleaned", "instance-missing"):
         info = trace_stop(run)
@@ -1624,7 +2101,12 @@ def trace_cleanup(run: DeviceRun) -> Dict[str, Any]:
         "state": info.get("state"),
         "actions": actions,
     }
-    if info.get("dynamic_kprobe"):
+    if info.get("profile") == "icc-attribution" and info.get("dynamic_probes"):
+        if any(action.get("result") in ("instance-removed", "already-absent") for action in actions):
+            result["kprobe_cleanup"] = trace_remove_icc_attribution_probes(run, info)
+        else:
+            result["kprobe_cleanup"] = {"result": "refused-instance-not-removed"}
+    elif info.get("dynamic_kprobe"):
         if any(action.get("result") in ("instance-removed", "already-absent") for action in actions):
             result["kprobe_cleanup"] = trace_remove_suspend_kretprobe(run, info)
         else:
@@ -3290,6 +3772,16 @@ def derive_summary(run: DeviceRun, *, command_returncode: Optional[int]) -> Dict
     rsc_snapshots = parse_rpmh_rsc_snapshots(trace_text)
     psci_idle_trace = parse_psci_idle_trace(trace_text)
     write_json(run.run_dir / "derived" / "rpmh-rsc-snapshots.json", rsc_snapshots)
+    if trace_info.get("profile") == "icc-attribution":
+        probes = trace_info.get("dynamic_probes") or []
+        probe_group = probes[0].get("group") if probes and isinstance(probes[0], dict) else None
+        icc_attribution = parse_icc_aggregate_attribution(
+            trace_text,
+            trace_info.get("icc_attribution_baseline") or {},
+            probe_group,
+            trace_loss_status(run),
+        )
+        write_json(run.run_dir / "derived" / "icc-aggregate-attribution.json", icc_attribution)
     status = run.load_status()
     config = run.load_config()
     sleep_command = command_json(run, "suspend-command")
@@ -3440,6 +3932,9 @@ def derive_summary(run: DeviceRun, *, command_returncode: Optional[int]) -> Dict
         "trace_selected_event_count": len(trace_info.get("selected_events", [])),
         "trace_bytes": ((trace_info.get("trace_files") or {}).get("trace") or {}).get("bytes"),
         "rpmh_rsc_snapshots": rsc_snapshots,
+        "icc_aggregate_attribution": "derived/icc-aggregate-attribution.json"
+        if trace_info.get("profile") == "icc-attribution"
+        else None,
         "psci_idle_trace": psci_idle_trace,
         "psci_state_map": psci_state_map,
         "suspend_attempted": suspend_attempted,
@@ -3490,6 +3985,9 @@ def derive_summary(run: DeviceRun, *, command_returncode: Optional[int]) -> Dict
             "trace_metadata": "meta/trace.json",
             "trace_raw": "raw/trace/",
             "rpmh_rsc_snapshots": "derived/rpmh-rsc-snapshots.json",
+            "icc_aggregate_attribution": "derived/icc-aggregate-attribution.json"
+            if trace_info.get("profile") == "icc-attribution"
+            else None,
             "result_document": "result.md",
             "checksums": "checksums.sha256",
         },
@@ -3601,7 +4099,9 @@ def write_device_result(run: DeviceRun, summary: Dict[str, Any]) -> None:
         "",
     ]
     if "kprobe_cleanup_success" in metrics:
-        lines.insert(-2, "- Run-specific kretprobe cleanup succeeded: `%s`." % metrics["kprobe_cleanup_success"])
+        lines.insert(-2, "- Run-specific kprobe cleanup succeeded: `%s`." % metrics["kprobe_cleanup_success"])
+    if metrics.get("icc_aggregate_attribution"):
+        lines.insert(-2, "- ICC attribution report: `%s`; client mapping and SLEEP submissions are diagnostic inputs, not proof of firmware residency." % metrics["icc_aggregate_attribution"])
     atomic_write_text(run.run_dir / "result.md", "\n".join(lines))
 
 
@@ -3727,7 +4227,7 @@ def device_execute(args: argparse.Namespace) -> int:
             )
         finally:
             trace_stop(run)
-            if config.get("trace_profile") in TRACE_KRETPROBE_PROFILES:
+            if config.get("trace_profile") in TRACE_DYNAMIC_PROBE_PROFILES:
                 trace_cleanup(run)
         command_returncode = suspend_result.returncode
         capture_clock(run, "resume-return")
@@ -3739,7 +4239,7 @@ def device_execute(args: argparse.Namespace) -> int:
         write_json(run.run_dir / "derived/post-resume-health.json", health)
         cleanup = cleanup_run(run)
         summary = derive_summary(run, command_returncode=command_returncode)
-        if config.get("trace_profile") in TRACE_KRETPROBE_PROFILES:
+        if config.get("trace_profile") in TRACE_DYNAMIC_PROBE_PROFILES:
             cleanup_result = cleanup.get("trace", {}).get("kprobe_cleanup", {})
             cleanup_ok = cleanup_result.get("result") in ("removed", "already-absent")
             summary["metrics"]["kprobe_cleanup_success"] = cleanup_ok
@@ -4878,6 +5378,71 @@ def self_test() -> int:
     assert rsc_snapshots["event_count"] == 1
     assert rsc_snapshots["events"][0]["addr"] == 0x50000
     assert rsc_snapshots["events"][0]["resource"] == "MC0"
+    assert kprobe_definition_matches(
+        "p123:s2lab_test/icc_aggregate qcom_icc_aggregate node_name=+0x8($arg1):string",
+        "p:s2lab_test/icc_aggregate qcom_icc_aggregate node_name=+0x8($arg1):string",
+    )
+    icc_baseline = {
+        "target_nodes_match": True,
+        "registered_target_nodes": ["ebi@interconnect-1"],
+        "parsed": {
+            "consumers": [
+                {"parent": "ebi@interconnect-1", "node": "1c00000.pcie", "tag": 7},
+                {"parent": "ebi@interconnect-1", "node": "3d00000.gpu", "tag": 3},
+            ]
+        },
+    }
+    icc_trace = (
+        ' systemd-sleep-7 [000] ..... 10.000: s2lab_test:icc_aggregate: '
+        '(qcom_icc_aggregate+0x0/0x100) node_name="ebi@interconnect-1" tag=7 avg_bw=0 peak_bw=500000\n'
+        ' systemd-sleep-7 [000] ..... 10.001: s2lab_test:icc_aggregate: '
+        '(qcom_icc_aggregate+0x0/0x100) node_name="ebi@interconnect-1" tag=3 avg_bw=100 peak_bw=800000\n'
+        ' systemd-sleep-7 [000] ..... 10.002: icc_set_bw: path=pcie-mem dev=1c00000.pcie '
+        'node=ebi@interconnect-1 avg_bw=0 peak_bw=500000 agg_avg=100 agg_peak=800000\n'
+        ' systemd-sleep-7 [000] ..... 10.003: icc_set_bw_end: path=pcie-mem dev=1c00000.pcie ret=0\n'
+        ' systemd-sleep-7 [000] d..3. 10.100: rpmh_send_msg: apps_rsc: tcs(m): 3 [sleep] '
+        'cmd(n): 0 msgid: 0x10008 addr: 0x50000 data: 0x600001dc complete: 0\n'
+        ' systemd-sleep-7 [000] d..3. 10.101: rpmh_send_msg: apps_rsc: tcs(m): 3 [sleep] '
+        'cmd(n): 1 msgid: 0x10008 addr: 0x50004 data: 0x600001dc complete: 0\n'
+    )
+    icc_attribution = parse_icc_aggregate_attribution(
+        icc_trace, icc_baseline, "s2lab_test", {"available": True, "lossless": True}
+    )
+    ebi_attribution = icc_attribution["latest_node_aggregations"][0]
+    assert ebi_attribution["status"] == "exact"
+    assert ebi_attribution["generic_aggregate_matches_tracepoint"] is True
+    assert ebi_attribution["requests"][0]["client"] == "1c00000.pcie"
+    assert ebi_attribution["requests"][0]["sleep_bucket"] is True
+    assert ebi_attribution["requests"][1]["sleep_bucket"] is False
+    assert ebi_attribution["sleep_peak_max"] == 500000
+    assert icc_attribution["sleep_command_count"] == 2
+    assert next(iter(icc_attribution["sleep_command_sequences"].values()))["contiguous_from_zero"]
+    aggregate_mismatch = parse_icc_aggregate_attribution(
+        icc_trace.replace("agg_avg=100 agg_peak=800000", "agg_avg=101 agg_peak=800000"),
+        icc_baseline,
+        "s2lab_test",
+        {"available": True, "lossless": True},
+    )["latest_node_aggregations"][0]
+    assert aggregate_mismatch["status"] == "aggregate-validation-mismatch"
+    assert aggregate_mismatch["requests"][0]["client"] is None
+    missing_callbacks = parse_icc_aggregate_attribution(
+        "\n".join(line for line in icc_trace.splitlines() if ":icc_aggregate:" not in line),
+        icc_baseline,
+        "s2lab_test",
+        {"available": True, "lossless": True},
+    )
+    assert missing_callbacks["client_mapping_stable"] is False
+    assert any("no matching qcom aggregation callbacks" in reason for reason in missing_callbacks["client_mapping_reasons"])
+    changed_tag_trace = icc_trace.replace(
+        'systemd-sleep-7 [000] d..3. 10.100:',
+        'systemd-sleep-7 [000] ..... 10.050: s2lab_test:icc_set_tag: (icc_set_tag+0x0/0x50)\n'
+        ' systemd-sleep-7 [000] d..3. 10.100:',
+    )
+    changed_tag = parse_icc_aggregate_attribution(
+        changed_tag_trace, icc_baseline, "s2lab_test", {"available": True, "lossless": True}
+    )
+    assert changed_tag["client_mapping_stable"] is False
+    assert changed_tag["latest_node_aggregations"][0]["requests"][0]["client"] is None
     assert trace_pm_filter("field:__data_loc char[] device;\n") == 'device ~ ".*ufs.*"'
     assert trace_pm_filter("field:int event;\n") is None
     sources = parse_wakeup_sources("name active_count event_count wakeup_count expire_count\nrtc0 0 2 1 0\n")
@@ -4928,6 +5493,11 @@ def self_test() -> int:
         root = Path(temporary)
         run = DeviceRun(root, valid)
         run.create({"run_id": valid, "unit": "test", "mode": "s2idle"})
+        trace_stats = run.run_dir / "raw/trace/per_cpu/cpu0.stats"
+        atomic_write_text(trace_stats, "overrun: 0\ncommit overrun: 0\ndropped events: 0\n")
+        assert trace_loss_status(run)["lossless"]
+        atomic_write_text(trace_stats, "overrun: 1\ncommit overrun: 0\ndropped events: 0\n")
+        assert trace_loss_status(run)["lossless"] is False
         run.update_status(state="testing")
         assert run.load_status()["state"] == "testing"
         fake_pm_debug = root / "pm_debug_messages"

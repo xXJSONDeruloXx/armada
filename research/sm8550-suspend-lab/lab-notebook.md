@@ -5155,3 +5155,50 @@ Relevant public-source line ranges (nearby source only; image kernel
 - [Android host noirq route](https://github.com/Ayn8550Dev/android_kernel_ayn_qcs8550/blob/93c5cc6ad1d0b807510cfa0fb1d06f47407881f9/drivers/pci/controller/pci-msm.c#L8574-L8728), [resume route](https://github.com/Ayn8550Dev/android_kernel_ayn_qcs8550/blob/93c5cc6ad1d0b807510cfa0fb1d06f47407881f9/drivers/pci/controller/pci-msm.c#L8730-L8876)
 - [Controller platform driver and host bridge allocation](https://github.com/Ayn8550Dev/android_kernel_ayn_qcs8550/blob/93c5cc6ad1d0b807510cfa0fb1d06f47407881f9/drivers/pci/controller/pci-msm.c#L8920-L8933), [root-bus fixup](https://github.com/Ayn8550Dev/android_kernel_ayn_qcs8550/blob/93c5cc6ad1d0b807510cfa0fb1d06f47407881f9/drivers/pci/controller/pci-msm.c#L9420-L9558), [clock teardown removes ICC](https://github.com/Ayn8550Dev/android_kernel_ayn_qcs8550/blob/93c5cc6ad1d0b807510cfa0fb1d06f47407881f9/drivers/pci/controller/pci-msm.c#L4031-L4054)
 - [PCI noirq runs the late fixup](https://github.com/Ayn8550Dev/android_kernel_ayn_qcs8550/blob/93c5cc6ad1d0b807510cfa0fb1d06f47407881f9/drivers/pci/pci-driver.c#L812-L897), [DPM parent waits for child callbacks](https://github.com/Ayn8550Dev/android_kernel_ayn_qcs8550/blob/93c5cc6ad1d0b807510cfa0fb1d06f47407881f9/drivers/base/power/main.c#L1203-L1253), [host bridge parent and root bus hierarchy](https://github.com/Ayn8550Dev/android_kernel_ayn_qcs8550/blob/93c5cc6ad1d0b807510cfa0fb1d06f47407881f9/drivers/pci/probe.c#L623-L635)
+
+### 2026-09-20 00:18 UTC — read-only ICC attribution profile prepared; device remains unreachable
+
+The v7.2.3 interconnect source supports a direct read-only attribution method.
+`icc_summary_show()` and `aggregate_requests()` traverse each node's `req_list`
+in the same hlist order. While `aggregate_requests()` visits those rows, the
+Qualcomm RPMh provider callback receives each request's `tag`, `avg_bw`, and
+`peak_bw`; the ordinary `icc_set_bw` tracepoint then reports the node's generic
+sum/max. This makes a live callback trace mappable to a fresh
+`interconnect_summary`, provided the request list and tags do not change and
+the callback rows reproduce the generic aggregate. Sources: [summary list
+traversal](https://github.com/gregkh/linux/blob/v7.2.3/drivers/interconnect/core.c#L48-L69),
+[aggregation traversal](https://github.com/gregkh/linux/blob/v7.2.3/drivers/interconnect/core.c#L255-L283),
+[ICC update and tracepoint](https://github.com/gregkh/linux/blob/v7.2.3/drivers/interconnect/core.c#L673-L720),
+[Qualcomm RPMh aggregation](https://github.com/gregkh/linux/blob/v7.2.3/drivers/interconnect/qcom/icc-rpmh.c#L69-L104),
+[SLEEP tag bits](https://github.com/gregkh/linux/blob/v7.2.3/include/dt-bindings/interconnect/qcom,icc.h#L7-L21).
+
+I added the local-only `icc-attribution` harness profile. It probes the
+Qualcomm aggregation callback for EBI/LLCC nodes, plus ICC path creation,
+release, and tag changes; it uses the pinned Linux 7.2.3 release and BTF hash
+before dereferencing `icc_node.name` at offset `0x8`. The report labels client
+rows only when the fresh summary matches, no list/tag mutation occurs before
+the last observed Apps-RSC SLEEP group, trace buffers are lossless, callback
+count/tag order matches the summary, and callback sum/max matches
+`icc_set_bw`. A mismatch now explicitly fails closed and leaves client names
+unassigned. It captures the observed SLEEP messages and checks per-TCS command
+indexes for continuity; it does not establish AOP acceptance or physical
+residency.
+
+Local verification passed: `py_compile`, `tests/sm8550-suspend-lab-test.sh`,
+and `git diff --check`. A synthetic negative case confirms mismatched generic
+aggregates do not receive client labels. This profile has not yet run on the
+Nova. A fresh read-only access check at 00:18 UTC timed out on SSH to
+`192.168.0.20:22`; `adb devices -l` showed no device. No device state or
+behavior was changed, and no behavioral A/B is selected. The exact Android
+kernel source/build and merged runtime DT remain unverified; a web search for
+the reported build suffix did not identify an exact matching vendor tree, so
+the nearby public `Ayn8550Dev` source remains explicitly provisional.
+
+The working tree is on `feat/sm8550-suspend-lab`, still at pushed tip
+`7ccf2b52bdcebe32f5bc145f937238f5b4449a99`; the harness and status-page edits
+are local and not yet committed or pushed. When Linux SSH returns, the next
+test is one 10-second direct-deep run with Wi-Fi/Bluetooth preserved and
+`--trace-profile icc-attribution`. The full command is in
+[investigation-status.md](investigation-status.md). If the profile fails any
+guard, keep the floor attribution unresolved; do not infer a client from the
+awake snapshot or change a vote.

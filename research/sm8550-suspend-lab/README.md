@@ -233,8 +233,9 @@ On the device, one detached systemd unit performs this sequence:
    `systemd-suspend.service` start is needed. This is not `rtcwake -m freeze`.
 8. For short diagnostic reproductions, `--trace-profile ufs-irq`,
    `--trace-profile rpmh-aoss`, `--trace-profile rsc-success`,
-   `--trace-profile psci-kretprobe`, or `--trace-profile pcie-d3cold` creates a
-   private tracefs instance, records its exact event inventory/configuration,
+   `--trace-profile psci-kretprobe`, `--trace-profile pcie-d3cold`, or
+   `--trace-profile icc-attribution` creates a private tracefs instance,
+   records its exact event inventory/configuration,
    selects the suspend-inclusive `boot` clock, enables only the requested
    existing tracepoints, archives the bounded buffer after the dispatcher
    returns, and removes the instance. `rsc-success` also
@@ -253,6 +254,14 @@ On the device, one detached systemd unit performs this sequence:
    suspend. It also records RPMh and system-suspend events.
    Its before/after runtime-PM snapshot also captures PCI power state, D3cold
    allowance, and negotiated link speed/width when the kernel exposes them.
+   `icc-attribution` records Qualcomm aggregation callbacks for the EBI/LLCC
+   nodes alongside `icc_set_bw` and RPMh SLEEP submissions. It maps callbacks
+   to the fresh `interconnect_summary` client order only if the trace is
+   lossless, node/request/tag order still matches, and no request was added,
+   removed, or retagged before the SLEEP commands. A pinned kernel release and
+   BTF hash guard the `icc_node.name` read; a mismatch aborts before suspend.
+   The report shows Linux's per-client SLEEP-bucket inputs and the TCS words
+   Linux staged. It does not prove firmware acceptance or physical residency.
    The profiles never send firmware commands or change runtime-PM, regulator,
    interconnect, or device power controls.
 9. After resume, captures the matching post snapshot, Armada's exact

@@ -6,10 +6,11 @@ the chronological record, including failed runs and superseded interpretations.
 Update this page when a checklist item changes; put raw output in a dated
 receipt and explain the result in the notebook.
 
-Status as of 2026-09-19 22:08 UTC. Repository branch
-`feat/sm8550-suspend-lab`; see Git history for the current pushed tip.
-The user supplied anchor `054766d5...` is an earlier commit; work continues from
-the newer pushed tip.
+Status as of 2026-09-20 00:18 UTC. Repository branch
+`feat/sm8550-suspend-lab`, pushed tip `7ccf2b52bdcebe32f5bc145f937238f5b4449a99`.
+The current local work adds a read-only ICC attribution profile and is not yet
+committed or pushed. The user supplied anchor `054766d5...` is an earlier
+commit; work continues from the newer pushed tip.
 
 ## Current objective
 
@@ -51,9 +52,33 @@ open until measured.
 | Source, 0513/0520 nuance | Patch 0513 does call its OPP helper when the host really suspended; for `PM_SUSPEND_MEM` that helper passes `NULL`, which drops associated OPP bandwidth. But when D3cold is vetoed, the helper call is nested inside the non-`PM_SUSPEND_MEM` fallback, so deep suspend skips it. The patch therefore does not bypass the PCI safety check; it preserves the active request when the host remains running. |
 | Observed, source mapping | Mainline SM8550 maps BCM MC0 to EBI and SH0 to LLCC. Replaying the exact v7.2.3 aggregation formula against the 19:03 awake snapshot predicts MC0/SH0 `vote_x=525, vote_y=2034`; the captured SLEEP TCS instead has `vote_x=0, vote_y=952` (`0x600003b8`). GPU, UFS, and display requests change before that TCS; PCIe has no corresponding update. The awake summary is therefore not the final SLEEP-bucket input and cannot prove the exact client contribution. |
 | Observed/source | `interconnect_summary` includes each request's current tag and bandwidth, while `icc_set_bw` tracepoints omit request tags and enabled state. The suspend trace records several client bandwidth changes before SLEEP staging. Exact final per-request SLEEP membership is still unknown; a pre-suspend-only attribution calculator would be misleading. |
+| Source, Linux v7.2.3 | `icc_summary_show()` and `aggregate_requests()` both traverse the node's `req_list` using the same hlist iteration order. The qcom RPMh provider callback receives each request's tag/avg/peak before the core `icc_set_bw` tracepoint reports the node aggregate. This provides a source-grounded way to attach callback inputs to the fresh request list, with the generic aggregate tracepoint as a cross-check. Sources: [summary traversal](https://github.com/gregkh/linux/blob/v7.2.3/drivers/interconnect/core.c#L48-L69), [aggregate traversal](https://github.com/gregkh/linux/blob/v7.2.3/drivers/interconnect/core.c#L255-L283), [ICC update tracepoints](https://github.com/gregkh/linux/blob/v7.2.3/drivers/interconnect/core.c#L673-L720), [qcom RPMh aggregate](https://github.com/gregkh/linux/blob/v7.2.3/drivers/interconnect/qcom/icc-rpmh.c#L69-L104). |
+| Harness work, local only | A new `icc-attribution` trace profile captures per-request qcom aggregation inputs for EBI/LLCC, checks the request-list/tag order and trace loss, verifies sums/maxima against `icc_set_bw`, and records the observed Apps-RSC SLEEP command group. It checks command-index continuity but cannot prove firmware acceptance. It is guarded by the inspected 7.2.3 release/BTF hash and reports unresolved instead of assigning clients when checks fail. Unit/smoke tests pass; it has not run on the device. No votes, kernel behavior, or power policy changed. |
 | Observed/source | Android SLEEP TCS contains LDOE1/LDOE3 sleep-context commands. Mainline qcom-rpmh-regulator currently submits ACTIVE_ONLY requests and does not provide an equivalent sleep-context API. The awake regulator summary does not show what firmware applies in suspend. |
 | Source, Armada DT | For Nova, LDOE1 (`vreg_l1e_0p88`) supplies PCIe PHY, DSI0 PHY, and USB HS PHY. LDOE3 (`vreg_l3e_1p2`) supplies DSI0, PCIe PHY PLL, UFS PHY PLL, USB HS PHY, and USB/DP QMP PHY. RP6 disables DSI1. These consumers make a blanket rail-off change unsafe to infer from the TCS alone. |
 | Unknown | Which of the seven Android DTBO candidate overlays were selected and whether the observed run used the APSS/L1SS branch; ordering of the host noirq callback versus the PCI suspend-late fixup; which root-port/endpoint power states and wake path it reached; exact matching Android source/build and merged runtime DT; final sleep-bucket per-client contributions to each BCM value; which LDOE consumers may be changed safely at sleep; whether any one request difference causes the counter difference. |
+
+## Current hypothesis ranking and decision
+
+1. **PCIe/other ICC sleep requests remain active.** This has the strongest
+   direct support: Armada's Qualcomm root port fails D3cold eligibility, the
+   controller does not reach its normal noirq teardown, and its bandwidth
+   request correlates with the MC0/SH0 floors. The exact final SLEEP-bucket
+   clients are still unmeasured, so this is not yet causal proof.
+2. **Android's broader BCM request set changes shared fabric sleep state.** The
+   captured Android and Armada TCS command sets differ substantially, but a
+   staged request is not proof the AOP accepted it, and multiple resources
+   change together.
+3. **LDOE1/LDOE3 sleep-context requests alter a required PHY or wake path.**
+   These are directly observed in Android and absent from the mainline
+   regulator path; their safe per-consumer semantics and causal relation to
+   residency remain unknown.
+
+No behavioral A/B is justified yet. The next low-risk step is the read-only
+`icc-attribution` profile below. If it shows the PCIe request is retained in
+the final SLEEP input, that strengthens the PCIe hypothesis but still does not
+justify bypassing PCI safety checks. If it does not, investigate the remaining
+BCM/regulator request differences before choosing one variable.
 
 ## Work checklist
 
@@ -85,18 +110,21 @@ open until measured.
 
 ### 2. Attribute the MC0/SH0 floor
 
-- [ ] Inspect `interconnect_summary` parser/receipts, BCM voter aggregation,
-  SM8550 BCM/interconnect definitions, PCIe ICC/OPP calls, and the Android
-  Kalama definitions/TCS capture.
-- [ ] Determine whether the PCIe request accounts for the full value or only
-  the observed variable component; identify other client contributions. The
-  harness already captures named client rows and ICC changes, but these do not
-  currently expose final per-client SLEEP-bucket values. The awake-snapshot
-  calculation has been compared with the staged TCS and is not a valid final
-  attribution because suspend callbacks change requests before staging.
-- [ ] Add a harness read-only attribution view only if existing debugfs/source
-  data provides exact client aggregation. Do not invent an approximation or
-  modify votes to identify them.
+- [x] Inspect the Linux v7.2.3 summary and aggregation paths, qcom RPMh
+  aggregation, and tag-bit definitions. Both summary and aggregation traverse
+  `req_list` in the same order; the core aggregate tracepoint can validate
+  callback input sums/maxima.
+- [x] Add a read-only `icc-attribution` harness profile. It captures each
+  request passed to the EBI/LLCC qcom aggregate callback, maps by fresh
+  `interconnect_summary` order, invalidates the mapping on path/tag changes,
+  checks trace loss and generic aggregate totals, and records final staged
+  Apps-RSC SLEEP commands. It does not modify votes.
+- [x] Run local syntax, parser, and harness smoke tests. They pass.
+- [ ] Run the profile on the Nova. The device did not answer SSH and was absent
+  from ADB at the latest access check, so no live attribution is available yet.
+- [ ] Determine from live callback rows whether PCIe accounts for all or only
+  part of MC0/SH0's SLEEP input. The awake-snapshot calculation is not a valid
+  final attribution because suspend callbacks change requests before staging.
 
 ### 3. Compare regulator sleep contexts
 
@@ -128,8 +156,9 @@ open until measured.
 
 ## Safety and continuity constraints
 
-- Device control is currently SSH over Wi-Fi only; the Mac saw no USB/ADB data
-  device in the latest check. Preserve Wi-Fi and the current Linux boot while
+- Device control is currently SSH over Wi-Fi only; at 2026-09-20 00:18 UTC the
+  SSH connection to `192.168.0.20:22` timed out and `adb devices -l` was empty.
+  Preserve Wi-Fi and the current Linux boot while
   source work is possible. Do not test a Wi-Fi/PCIe change remotely without a
   verified independent recovery route.
 - Do not force PCI D3hot, bypass `pci_host_common_d3cold_possible()`, change
@@ -140,11 +169,29 @@ open until measured.
   path with a verified rollback. Record preflight, exact diff, run receipt,
   rollback, and post-resume function checks.
 
+## Next device run
+
+When the Nova is reachable over SSH, run one 10-second deep suspend with Wi-Fi
+and Bluetooth preserved. The `icc-attribution` profile is read-only and
+fail-closed; its kernel release/BTF guard aborts before suspend if this is not
+the inspected 7.2.3 build. Command:
+
+```sh
+python3 research/sm8550-suspend-lab/sm8550_suspend_lab.py host run \
+  --target armada --mode deep --sleep-seconds 10 \
+  --wifi-state preserve --bluetooth-state preserve \
+  --trace-profile icc-attribution \
+  --hypothesis "Identify EBI/LLCC clients contributing to the final Apps-RSC SLEEP request" \
+  --changed-variable "Read-only ICC/RPMh tracing; no votes or power policy changed" \
+  --recommendation "Accept client attribution only if loss, list/tag stability, callback order, and aggregate cross-checks pass" \
+  --confidence "Linux staged TCS only; does not prove firmware acceptance or physical residency"
+```
+
 ## Working files
 
 - Chronology, corrections, and test receipts: [lab-notebook.md](lab-notebook.md)
-- Latest read-only Linux PM snapshot: [live PM receipt](receipts/2026-09-19-live-pm-readout.txt)
-- Android SLEEP/WAKE TCS and ICC excerpts: `receipts/2026-09-19-android-deep-rpmh/`
+- Latest read-only Linux PM snapshot: [live PM receipt](../../receipts/2026-09-19-live-pm-readout.txt)
+- Android SLEEP/WAKE TCS and ICC excerpts: `../../receipts/2026-09-19-android-deep-rpmh/`
 - Existing harness: [sm8550_suspend_lab.py](sm8550_suspend_lab.py)
 - Kernel/package patch stack: sibling checkout
   `../../../armada-packages/kernel/patches/`
