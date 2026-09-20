@@ -1,0 +1,11 @@
+[Unit]
+Description=Restore the known-good Nova kernel if the PCIe test stalls in initrd
+DefaultDependencies=no
+Before=initrd-switch-root.target
+Conflicts=initrd-switch-root.target
+ConditionPathExists=/usr/lib/armada/suspend-lab/pcie-opp-test-rollback
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/armada/sm8550-pcie-opp-initrd-recover
+TimeoutStartSec=90s

@@ -6,7 +6,7 @@ the chronological record, including failed runs and superseded interpretations.
 Update this page when a checklist item changes; put raw output in a dated
 receipt and explain the result in the notebook.
 
-Status as of 2026-09-20 20:22 UTC. Branch `feat/sm8550-suspend-lab`.
+Status as of 2026-09-20 21:29 UTC. Branch `feat/sm8550-suspend-lab`.
 
 ## Current goal checklist
 
@@ -27,9 +27,24 @@ Status as of 2026-09-20 20:22 UTC. Branch `feat/sm8550-suspend-lab`.
   that the automatic bootc update timer is masked on the device.
 - [x] Check Linux-visible USB, EFI, and watchdog surfaces for a remote
   early-boot recovery route; none is currently exposed.
+- [x] Trace the “Preparing Armada” splash label to its initramfs and real-root
+  producers; the identical label cannot identify which boot phase stalled.
+- [x] Read the current boot's initrd/switch-root journal and inspect the ESP
+  read-only; confirm normal phase timings and no EFI BootNext control.
+- [x] Confirm Armada's image build regenerates initramfs with dracut, so
+  candidate-only phase instrumentation can be added without a kernel rebuild.
+- [x] Verify the candidate image's existing boot-sync drop-in preserves the
+  known-good `KERNEL.BAK` instead of snapshotting the test kernel over it.
+- [x] Recheck the current ESP hashes and the actual FAT/VFAT kernel config;
+  reject the stale `.armada-bootimg.prev.id` as a source of truth.
+- [x] Add a candidate-only initrd recovery timer that checks the exact stock
+  `KERNEL.BAK` hash before restoring it, and exercise fail-closed cases.
+- [x] Build an un-staged candidate with the guard in its generated initramfs;
+  verify required files/tools, systemd units, and the existing root rollback.
 - [ ] Explain the previous candidate boot's missing SSH observation and
-  establish recovery for failures before systemd. Do not boot the candidate
-  or run another suspend A/B until this gate is met.
+  establish recovery for failures before the initrd timer starts. The timer
+  cannot recover a kernel/initrd-systemd hang; do not stage the candidate
+  until manual ABL recovery is available for that remaining case.
 
 ## Latest device recovery state
 
@@ -76,6 +91,47 @@ reports “Not booted with EFI,” and both `/dev/watchdog*` and
 as the SSH user lacks permission and passwordless sudo is unavailable; no
 bootloader fallback control was changed or assumed. This does not establish a
 pre-systemd rescue path.
+
+The previously reported splash text is not a phase marker: both Armada's
+initramfs service and its real-root early-boot service write “Preparing
+Armada.” The initramfs splash launcher is deliberately left running across
+switch-root. Thus the old observation does not show whether the candidate
+reached the real-root timer; the pre-systemd recovery gap remains unresolved.
+
+The current boot's journal shows initrd systemd starting at 0.898 s, the
+initrd splash at 3.545 s, `initrd-switch-root.service` at 4.109 s, the
+real-root splash at 6.134 s, and “Starting Steam” at 16.162 s. The ESP contains
+only Armada's `KERNEL`, `KERNEL.BAK`, and boot-image ID stamps; no EFI loader
+or EFI variables are present. This confirms ordinary Linux has no visible
+EFI BootNext route; ABL/manual recovery remains the only known fallback.
+
+Armada's build recipe regenerates `/usr/lib/modules/<kver>/initramfs.img`
+with dracut modules `ostree`, `armada-splash`, and
+`armada-ostree-fallback`, then verifies key files with `lsinitrd`. A
+candidate-only dracut module can therefore add persistent boot-phase
+checkpoints without rebuilding the kernel. That would improve failure
+localization, but would not itself recover a hung boot.
+
+The test image also contains `preserve-kernel-backup.conf`, which removes only
+the startup `--snapshot-prev` argument and leaves the updater and shutdown
+sync in place. This keeps the hash-verified stock `KERNEL.BAK` available
+during a candidate boot. A candidate-only initrd timer is now built into a
+separate OCI image; it verifies the stock backup hash, restores `KERNEL`
+through a temporary file, repairs the active image ID from the known stock
+value, and requests reboot. Its mocked success/failure cases, generated
+initramfs contents, and systemd units pass. It has not been booted. The timer
+is wanted by `dracut-pre-mount.service` but ordered before that service, so it
+starts when pre-mount is queued. It still cannot recover kernel or initrd
+systemd failures before that activation point; those need manual ABL recovery.
+
+At 20:45 UTC both current ESP images again hash to the known stock image
+`0b0d7c03a88e77c480ad31d145a6718916638ba62287ff5a2b427c0f75475000`, and the
+active ID is stock `d7755f13…`. The previous-ID stamp still names the old
+candidate `2fde9022…`; do not use that stamp to identify `KERNEL.BAK`. VFAT/FAT
+are built into this kernel, and the existing initramfs already includes
+mount/umount/systemctl/blkid. A fail-closed initrd recovery can instead verify
+the exact backup hash and write the known stock ID directly. No device state
+changed.
 
 Before rebooting from Android to Linux, I reasserted `adb_wifi_enabled=1` and
 `persist.adb.tls_server.enable=1`; legacy TCP ADB remained unset. This booted
@@ -584,19 +640,21 @@ PCI D-state, manually change an ICC vote, or infer safe D3 support from
 
 ## Next action
 
-The stock Linux boot is healthy and boot selection is normalized. The exact
-candidate boot failure stage is still unknown: there is no separate candidate
-boot ID or pstore record. A candidate-only rollback timer is now built into a
-guarded OCI image and verified, but that image is not staged. It can recover a
-boot that reaches systemd, not a kernel or initramfs hang before systemd. Do
-not stage or reboot the candidate, or run another suspend A/B, until an
-observation and recovery path covers that early-boot gap. The PCIe-MEM OPP
-A/B remains the best single-variable test once this gate is met. Do not
-directly load Android
-modules; port behavior against Linux 7.2.3. For persistent Android Wireless
-debugging, wait until Android is reachable and add a Magisk late-start helper
-rather than editing its unmounted userdata from Linux. Do not select
-**UNINSTALL CFW** in ABL if recovery is needed. See the
+The stock Linux boot remains the only deployed boot; the candidate is not
+staged. Its exact prior failure stage is unknown because no candidate boot ID
+or pstore record survived. The `20260920-04` candidate adds an initrd timer
+that starts before `dracut-pre-mount.service` and restores the known stock ESP
+image after 120 seconds if switch-root has not begun. The existing
+five-minute root-systemd timer covers later failures. Neither timer can help
+if the kernel, initrd systemd, or pre-mount hook fails before the timer starts.
+No remote ABL/BootNext route is exposed, so that residual case still needs
+manual ABL recovery. Do not stage or reboot the candidate until that manual
+recovery is available. The PCIe-MEM OPP A/B remains the best single-variable
+test once this gate is met. Do not directly load Android modules; port
+behavior against Linux 7.2.3. For persistent Android Wireless debugging, wait
+until Android is reachable and add a Magisk late-start helper rather than
+editing its unmounted userdata from Linux. Do not select **UNINSTALL CFW** in
+ABL if recovery is needed. See the
 [Android rollback receipt](receipts/2026-09-20-android-esp-rollback.md),
 [ABL access notes](receipts/2026-09-20-post-apply-device-reachability.md), and
 completed MC4/SH5 receipt:

@@ -7132,3 +7132,188 @@ check did not inspect ABL/ESP boot policy. No attempt was made to change
 bootloader settings. Current boot ID, kernel, deployment, and boot order remain
 stock and unchanged; the diagnostic image remains unstaged. The rollback
 timer only closes the post-systemd/network failure case.
+
+### 2026-09-20 20:26 UTC — “Preparing Armada” does not locate the boot stall
+
+Found the exact label in the adjacent `armada-packages/armada-splash` source.
+The initramfs unit is
+`system/usr/lib/dracut/modules.d/91armada-splash/armada-splash-initrd.service`:
+it is ordered after `dracut-pre-mount.service`, writes
+`/run/armada/splash/status` as “Preparing Armada,” and starts the splash
+launcher from `initrd.target`. Its `KillMode=none` comment says the launcher
+intentionally survives switch-root. The installed real-root
+`armada-splash-early.service` also writes the same “Preparing Armada” status
+from `sysinit.target`.
+
+Therefore the user's unchanged splash screen proves neither that the
+candidate remained in initramfs nor that it reached the real-root systemd
+timer: the status string is identical across both phases, and the initramfs
+display process persists across root switch. This explains why the earlier
+screen observation could not localize the failed boot. The guarded image's
+five-minute rollback is only effective after real-root systemd starts; do not
+count the splash screen as evidence that it will fire. No device state or
+boot files changed during this source trace.
+
+### 2026-09-20 20:29 UTC — current boot timing and ABL layout verified read-only
+
+Used one-off sudo authentication for read-only inspection only; no sudoers,
+SSH, boot, or device configuration was changed. The current stock boot's
+persistent journal shows: systemd running in initrd at 0.898 s;
+`armada-splash-initrd.service` starting at 3.545 s; `initrd-switch-root.service`
+starting at 4.109 s; real-root `armada-splash-early` logging the same
+“Preparing Armada” label at 6.134 s; and the splash advancing to “Starting
+Steam” at 16.162 s. This confirms the normal stage order and proves that the
+same visible text can persist on both sides of switch-root. It does not show
+which stage the prior candidate reached, because that boot has no retained
+candidate journal/boot ID.
+
+The mounted ESP contains only `KERNEL`, `KERNEL.BAK`, and Armada's
+`.armada-bootimg.id` / `.armada-bootimg.prev.id`. `/sys/firmware/efi/efivars`
+is absent, and no EFI loader configuration is present there. Thus no standard
+EFI BootNext entry is available from Linux; the known recovery still requires
+the device's ABL boot-mode selection. This resolves the read-permission gap
+from the prior check but does not provide unattended recovery for a failed
+candidate.
+
+The next candidate can gain better phase evidence by adding tiny initrd and
+real-root checkpoint records to the mounted external SD, which persists
+across boots. That would identify whether switch-root and root-systemd were
+reached, but it would not itself recover a failure; do not treat observability
+as a substitute for recovery. No candidate was staged and no reboot/suspend
+was run.
+
+### 2026-09-20 20:33 UTC — initramfs checkpointing is image-only work
+
+The exact Armada build step is `build_files/55-generate-initramfs.sh`: it
+regenerates `/usr/lib/modules/<kver>/initramfs.img` using dracut with the
+`ostree`, `armada-splash`, and `armada-ostree-fallback` modules and verifies
+the resulting archive with `lsinitrd`. This makes candidate-only initrd phase
+instrumentation feasible without compiling the kernel. The current guarded
+OPP Containerfile does not regenerate the initramfs, so adding a dracut module
+requires an explicit generation/verification step before rebuilding that
+candidate.
+
+The package source also shows `KERNEL.BAK` is maintained as a spare for manual
+replacement from another system; `armada-bootimg-update` does not configure
+an ABL attempt counter or automatic fallback. The `armada-splash-stall`
+service is pulled in only with `graphical.target`, so its visible “Waiting
+for …” diagnostics cannot help distinguish a failure before graphical boot.
+No boot chain or initramfs files were changed.
+
+### 2026-09-20 20:40 UTC — the candidate preserves the stock ESP backup
+
+The guarded PCIe OPP Containerfile includes
+`preserve-kernel-backup.conf`. Its systemd drop-in clears only the startup
+`--snapshot-prev` option and leaves the boot-image updater command active;
+the existing shutdown updater remains. This means the candidate's normal
+root-systemd startup will not replace `KERNEL.BAK` with the candidate image.
+The stock KERNEL hash previously verified for this base is
+`0b0d7c03a88e77c480ad31d145a6718916638ba62287ff5a2b427c0f75475000`.
+
+The stock initramfs is 49 MB and was generated with `ostree`,
+`armada-splash`, and `armada-ostree-fallback`; it contains no suspend-lab
+recovery service. The ESP is `/dev/sda18`, vfat label `ARMADA`, UUID
+`81DC-CB41`. The existing `armada-ostree-fallback` only remaps a missing
+OSTree boot path to a surviving deployment with the same boot checksum; it
+does not choose `KERNEL.BAK` or roll back a boot that hangs.
+
+This gives a concrete but unimplemented guard design: a candidate-only initrd
+timer can, if it is still running after a generous startup timeout, mount the
+ESP, require `KERNEL.BAK` to match the known-good hash, atomically restore it
+to `KERNEL`, set the active image stamp to the known stock ID, and reboot.
+The real-root five-minute timer remains responsible after switch-root. The
+initrd guard must fail closed on any missing/mismatched file and be validated
+inside a rebuilt initramfs before it can justify a device test. It is not yet
+implemented, built, or deployed; no device state changed in this inspection.
+
+### 2026-09-20 20:45 UTC — backup stamp is stale; verify by bytes instead
+
+Fresh read-only inspection confirms the Nova is still on stock kernel 7.2.3,
+boot ID `aa40c55e-d558-46a9-a710-3a7d926b9e9e`, with no bootc staged or
+rollback deployment. Both `/boot/efi/KERNEL` and `KERNEL.BAK` hash to
+`0b0d7c03a88e77c480ad31d145a6718916638ba62287ff5a2b427c0f75475000`; active
+image ID is stock `d7755f13ac5a1224fef222e2d104192045fd01d61924f9b1ae31e941b73f049b`.
+The separate `.armada-bootimg.prev.id` still says candidate
+`2fde9022665b5aef44d538eb1d4930548627519b16d1a6fe49ca033d3c2a91fe`. This
+stale stamp is a leftover from earlier manual recovery and must not be trusted
+to identify the backup; the content hash is authoritative.
+
+`CONFIG_FAT_FS=y` and `CONFIG_VFAT_FS=y`, so the initrd kernel can mount the
+ESP without loading a filesystem module. The current initrd already contains
+`mount`, `umount`, `blkid`, and `systemctl`; it does not show `sha256sum`, so a
+candidate dracut module must explicitly include that tool. The pinned candidate
+image contains `dracut-108-8.fc44.aarch64`, so initramfs regeneration can be
+done in the OCI build without a kernel compile.
+
+The candidate recovery design is updated accordingly: verify the saved
+`KERNEL.BAK` bytes against the known stock SHA-256, restore atomically, and
+write the known stock active image ID directly. Do not copy the stale
+`.armada-bootimg.prev.id`. This was read-only; the active image, ESP, and bootc
+state were not changed.
+
+### 2026-09-20 21:19 UTC — Android modules are not mountable Linux sleep hooks
+
+The current goal already covers this question: a mounted Android partition
+would only expose its files. Android's `dcvs_fp.ko` is built for
+`5.15.123-g697b78910a71-dirty`, while Armada runs `7.2.3`; the module imports
+vendor-only `rpmh_init_fast_path()` and `rpmh_update_fast_path()` symbols that
+Armada does not export. The Android RPMh regulator module likewise cannot
+replace Armada's already-bound built-in mainline driver. The transferable
+piece is the firmware request contract, implemented with Linux 7.2.3 APIs.
+The previously tested MC4/SH5 request pair is already known insufficient on
+its own. No Android partition was mounted and no module was loaded.
+
+To close part of the candidate boot-recovery gap, added a candidate-only
+dracut module. Its 120-second initrd-systemd timer is wanted by
+`dracut-pre-mount.service` and conflicts with `initrd-switch-root.target`;
+when it fires, the helper requires the ESP backup to match the exact known
+stock SHA-256, copies it through `KERNEL.TMP`, syncs and verifies the copy,
+replaces `KERNEL`, writes the known stock image ID (not the stale previous-ID
+stamp), then requests reboot. It fails closed on a missing marker/device,
+non-vfat or read-only ESP, missing backup, hash mismatch, or write failure.
+The existing five-minute real-root rollback timer remains in the image.
+
+Local `bash -n`, `git diff --check`, and mocked success/failure tests pass. The
+tests cover successful restore, wrong backup hash, missing marker, mount
+failure, and an already-mounted read-only ESP. The pinned-base OCI build
+regenerated the initramfs without compiling the kernel. Its archive contains
+the marker, both units, the `dracut-pre-mount` drop-in, helper, and required
+utilities; `systemd-analyze verify` passed for both recovery layers. Dracut
+printed a nonfatal missing-logger message in the build container but exited
+successfully and passed every archive assertion. See the
+[initrd recovery receipt](receipts/2026-09-20-pcie-opp-initrd-recovery.md).
+
+The new image is `localhost/armada-pcie-opp-test-initrd-guard:20260920-03`
+with digest
+`sha256:eaee50deeee62e1135e8b56c57557ce17a19f6c94dc498634e88faea9d310a0a`.
+It is not staged or booted. The device remained on stock kernel `7.2.3` with
+boot ID `aa40c55e-d558-46a9-a710-3a7d926b9e9e`; no live ESP or bootc state was
+changed. This guard starts only after initrd systemd reaches its pre-mount
+unit. It cannot recover a kernel hang or an initrd systemd/pre-mount failure,
+and the old candidate's precise stall phase is still unknown. ABL remains the
+only known recovery for that early failure case, so the PCIe OPP A/B is still
+not safe to launch unattended.
+
+### 2026-09-20 21:29 UTC — corrected initrd timer ordering before use
+
+Reviewing the first built guard image (`20260920-03`) exposed an ordering
+weakness: its timer was ordered after `dracut-pre-mount.service`, so a hang
+inside that service could prevent the timer from starting. That image was never
+staged. The corrected version removes the recovery service's dependency on
+pre-mount completion and orders the timer before the pre-mount unit. The
+existing drop-in wants the timer from that unit, so it starts its countdown as
+pre-mount is queued and can recover while that work is stuck. It still cannot
+run if the kernel or initrd systemd fails before that unit is queued.
+
+Rebuilt as `localhost/armada-pcie-opp-test-initrd-guard:20260920-04`, version
+`20260920.pcie-opp-test-initrd-guard-02`, digest
+`sha256:f2aa1e6b6dea32ac27a8324c6215685d0121bfee4ac7e5430e7ddcf179325682`,
+image ID `2c67bc32cabdbc2147a02280069414a41bf883ea6a57788be77e31a81de4cc81`.
+The regenerated initramfs is 50,081,314 bytes, SHA-256
+`c5d3275ea48c03c5f2ee5b64e4bf3b7afba07fc01db9f06998f6643d09ec2369`.
+`systemd-analyze verify` passed for both recovery layers, and `lsinitrd -f`
+confirmed the timer's `Before=dracut-pre-mount.service` ordering plus the
+pre-mount `Wants=` drop-in. The image remains un-staged and un-booted. A fresh
+SSH check still reports stock kernel `7.2.3` and boot ID
+`aa40c55e-d558-46a9-a710-3a7d926b9e9e`. The corrected guard narrows but does
+not close the remaining kernel/initrd-systemd recovery gap.
