@@ -5747,3 +5747,48 @@ read-only `/sys/kernel/debug/interconnect/debug_suspend` hook, select deep,
 arm an 8-second PMIC RTC wake, then call `forceSuspend()`; restore the original
 sleep selection, hook `0`, and clear any remaining alarm after return. This is
 the smallest safe way to get the Android suspend-boundary ICC client snapshot.
+
+### 2026-09-20 ~06:47 UTC — Android deep capture advances AOSD/CXSD/DDR
+
+Wireless ADB was active on the same rooted Android boot. Preflight verified
+boot ID `d927cfaa-54f1-428d-9f3b-1298aa1982fc`,
+`mem_sleep=[s2idle] deep`, `debug_suspend=0`, empty `rtc0/wakealarm`, RTC
+`alarm_IRQ=no`, and `suspend_stats` success 0 / fail 3. APSS, AOSD, CXSD, and
+DDR counters were all zero.
+
+Ran only the previously validated bounded path: enabled the read-only
+`/sys/kernel/debug/interconnect/debug_suspend` hook, temporarily selected
+`deep`, armed `rtc0` with `rtcwake -u -m no -s 8 -d /dev/rtc0`, verified the
+nonempty alarm and `alarm_IRQ=yes`, then invoked
+`service call suspend_control_internal 2`. It returned `true`. The kernel
+logged `PM: suspend entry (deep)`, WLAN bus-suspend success, wake IRQ
+`pm8xxx_rtc_alarm`, and `PM: suspend exit`. Suspend stats changed to success
+1 / fail 3 (`failed_suspend=1`, `failed_suspend_noirq=0`).
+
+The records, zero at baseline, then reported APSS `Count=1`, accumulated raw
+duration `119285904`; AOSD `Count=165`, `111831600`; CXSD `Count=17`,
+`112746986`; and DDR `Count=17`, `113022361`. Their raw last-enter/exit values
+are preserved in `../../receipts/2026-09-20-android-deep-icc-followup.md`.
+This confirms firmware-backed AOSD/CXSD/DDR records advanced during this
+successful Android deep run. Do not treat their raw accumulated values as
+wall-clock residency without checking the ABI units.
+
+At `machine_suspend`, the hook printed two enabled ICC clients: DCVS DDR tag
+3 with average `1593832`, peak `2188000` on `llcc_mc`/`ebi`; and DCVS LLCC tag
+3 with average `2589968`, peak `4800000` on `chm_apps`/`qns_llcc`. No PCIe
+client appeared. Tag 3 is ACTIVE_ONLY, excluding SLEEP. The snapshot is
+consistent with Android clearing the PCIe request before the suspend
+boundary, but it is not the final Apps-RSC TCS and does not reveal whether
+connected-DRV, the root-device late fixup, or APSS/L1SS host suspend ran.
+
+After resume, Wi-Fi reported connected, `wlan0` was `UP/LOWER_UP`, and
+Wireless ADB remained available. The original `[s2idle] deep` selection was
+restored, `debug_suspend=0`, the wakealarm was cleared (`alarm_IRQ=no`), and
+the boot ID was unchanged. No permanent device change was made. Receipt:
+`../../receipts/2026-09-20-android-deep-icc-followup.md`.
+
+This supersedes the 06:39 statement that this Android boot had no successful
+suspend. Do not repeat this identical capture. Next, inspect whether Android
+exposes safe runtime tracing for the exact CNSS/PCIe module branch and
+suspend-time PCI state; no behavioral A/B is justified from this capture
+alone.

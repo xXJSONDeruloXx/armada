@@ -6,22 +6,24 @@ the chronological record, including failed runs and superseded interpretations.
 Update this page when a checklist item changes; put raw output in a dated
 receipt and explain the result in the notebook.
 
-Status as of 2026-09-20 06:39 UTC. Repository branch
+Status as of 2026-09-20 06:47 UTC. Repository branch
 `feat/sm8550-suspend-lab`. The read-only ICC attribution profile and tests are
 committed on this branch; a live, lossless device trace now identifies the
 PCIe request in the final SLEEP bucket. Exact A-slot Android WCN/CNSS/PCIe
 modules have now been extracted and manually decompiled read-only from Linux.
 The exact CNSS branch is conditional: connected DRV suspend skips the explicit
 endpoint D3hot request, while the disconnected/non-DRV path requests it. The
-successful Android run's branch is still unknown. Wireless ADB is now
-available on Android and root works. Live merged DT confirms the L1SS/no-client
-properties are on disabled pcie1, not active WCN pcie0. Android has made no
-successful suspend in this boot. A repeated direct `rtcwake` test returned
-`EBUSY` and was cleaned up. One unarmed `forceSuspend()` probe returned
-false and no qcom sleep records advanced; do not call it again until the
-known 8-second RTC recovery alarm is armed. Use the already-proven
-`debug_suspend`/`forceSuspend()` diagnostic sequence. The user supplied anchor
-`054766d5...` is an earlier commit; work continues from the newer tip.
+successful Android run's branch is still unknown. Wireless ADB is available
+on Android and root works. Live merged DT confirms the L1SS/no-client
+properties are on disabled pcie1, not active WCN pcie0. At approximately
+06:47 UTC, a bounded `forceSuspend()` run selected `deep`, woke by PMIC RTC,
+and advanced APSS/AOSD/CXSD/DDR counters from zero. The ICC hook showed only
+ACTIVE_ONLY DCVS requests and no PCIe client at the suspend boundary. The
+temporary sleep selection, hook, and RTC alarm were restored; the same Android
+boot and Wi-Fi/ADB remain healthy. Earlier direct-`rtcwake -m mem` and
+unarmed-forceSuspend mistakes remain documented; do not repeat them. The user
+supplied anchor `054766d5...` is an earlier commit; work continues from the
+newer tip.
 
 ## Current objective
 
@@ -51,7 +53,8 @@ open until measured.
 | Status | Finding |
 |---|---|
 | Observed, live Android merged DT | Runtime model is KalamaP HDK with IDs matching the public Nova DTBO candidate. Active WCN is under `pcie@1c00000`, has `qcom,drv-name=lpass`, and lacks `qcom,apss-based-l1ss-sleep`, `qcom,no-client-based-bw-voting`, and `qcom,pcie-switch-type`. Those L1SS/no-client properties appear only on `pcie@1c08000`, which runtime DT marks disabled. Exact CNSS binary falls back from absent `qcom,drv-supported` to `qcom,drv-name`; DRV support is therefore likely on pcie0, but disable-DRV quirk and connected state remain unknown. Receipt: `../../receipts/2026-09-20-android-live-runtime.md`. |
-| Observed, live Android suspend attempts | Current Android boot has `success=0`, `fail=3`. First attempt logged WLAN bus-suspend callback success then a `NETLINK` abort. A direct `rtcwake -m mem` returned `EBUSY`, left an alarm that was cleared, and a ~38 ms s2idle interval occurred while it was armed (cause unknown). An unarmed `forceSuspend()` probe returned false; an ~84 ms s2idle interval appeared, also unattributed. Same boot, `[s2idle] deep`, no alarm, all AOSD/CXSD/DDR/APSS zero; no successful sample. Do not repeat direct `rtcwake -m mem` or call forceSuspend before a wake alarm. Use the validated `debug_suspend` + deep + 8-second RTC + `forceSuspend()` sequence. Receipt: `../../receipts/2026-09-20-android-live-runtime.md`. |
+| Observed, earlier Android suspend attempts | Before the successful capture below, this boot had `success=0`, `fail=3`. One natural attempt logged WLAN bus-suspend success then a `NETLINK` abort. Direct `rtcwake -m mem` returned `EBUSY`; its alarm was cleared. A later unarmed `forceSuspend()` returned false. The short s2idle intervals around those attempts remain unattributed. Do not repeat direct `rtcwake -m mem` or call forceSuspend before a verified RTC alarm. Receipt: `../../receipts/2026-09-20-android-live-runtime.md`. |
+| Observed, controlled Android deep capture | On the same Android boot, `service call suspend_control_internal 2` returned true with temporary `deep` selected and a verified `+8s` rtc0 alarm. The kernel logged `PM: suspend entry (deep)` and `pm8xxx_rtc_alarm` wake; `suspend_stats` success advanced 0→1. Baseline-zero APSS/AOSD/CXSD/DDR records advanced to counts 1/165/17/17. The suspend-boundary ICC hook showed two tag-3 ACTIVE_ONLY DCVS clients and no PCIe client. Wi-Fi/ADB recovered; `mem_sleep`, hook, and alarm were restored. This proves Android deep reaches these firmware-recorded states in this run, but does not identify the exact PCIe suspend branch, final TCS, or a single causal difference. Receipt: `../../receipts/2026-09-20-android-deep-icc-followup.md`. |
 | Observed, host-side transport check | At 06:16 UTC the previously documented Android peer at `192.168.0.163` answered ping, but TCP/5555 and tested alternate access ports refused, ADB device/mDNS discovery was empty, and USB enumeration showed only the SanDisk drive. Current peer identity was not authenticated. No Android runtime state was collected or changed. Receipt: `../../receipts/2026-09-20-android-access-check.txt`. |
 | Observed | Armada s2idle and direct PSCI SYSTEM_SUSPEND suspend/resume successfully. AOSD/CXSD/scalar DDR and recognized detailed DDR LPM rows remain zero; APSS/other subsystem evidence advances. |
 | Observed | Android's captured Apps-RSC SLEEP/WAKE set has 11 BCM plus 3 PMIC regulator commands. It includes SH1, QUP2, ACV, MC4, SH5; MC0/SH0 SLEEP requests are zero/off; LDOE1/LDOE3 have explicit sleep requests. See `receipts/2026-09-19-android-deep-rpmh/`. |
@@ -142,9 +145,10 @@ support from `d3cold_allowed=1` alone.
   `0x1c08000`; the nearby public RP6 common DTSI disables `pcie1`. Cross-check
   the current Armada live FDT and WCN parent: active WLAN is under `pcie0` at
   `0x1c00000`. This weakens the overlay-property explanation for active WLAN.
-- [ ] Find the base symbol's node path and establish whether ABL selected
-  entry 51 and whether the property is present in the merged Android runtime
-  DT; the public source tree is not an exact build match.
+- [x] Inspect the merged Android runtime DT: active WCN pcie0 lacks the L1SS
+  and no-client-vote properties, while pcie1 is disabled and carries them.
+  This closes their applicability to the active host; exact ABL overlay
+  provenance remains unproven.
 - [ ] Find the exact Android source/build revision if available; otherwise keep
   each nearby public-source conclusion explicitly provisional.
 - [x] Identify the current Armada runtime PCIe compatible, bound endpoint,
@@ -155,6 +159,10 @@ support from `d3cold_allowed=1` alone.
   ICC and can suppress the later root fixup by changing link status. Exact
   A-slot module disassembly now confirms the CNSS caller and both possible
   enum values; the runtime branch remains unknown.
+- [x] Run one bounded Android `deep` capture through `forceSuspend()` with an
+  armed RTC wake. The call succeeded, firmware sleep records advanced, and
+  Wi-Fi/ADB recovered. The suspend-boundary hook saw only ACTIVE_ONLY DCVS
+  votes, not a PCIe request. This does not identify the PCIe callback route.
 - [x] From Linux, inspect and manually reconstruct the exact A-slot
   `qca_cld3_kiwi_v2.ko`, `cnss2.ko`, and `pci-msm-drv.ko` without mounting or
   changing Android partitions. The connected-DRV versus D3hot branch, host
@@ -234,10 +242,12 @@ support from `d3cold_allowed=1` alone.
 
 ## Safety and continuity constraints
 
-- The Nova is currently on Linux and reachable over Wi-Fi SSH. After the last
-  run it stayed on boot ID `45137c86-bb9a-4021-9973-4bc6200fc9e6`, `wlp1s0`
-  was connected, rfkill was unblocked, and no run-owned kprobe/trace instance
-  remained. Preserve that boot and Wi-Fi access during source work.
+- The Nova is currently on rooted Android, reachable over Wireless ADB at the
+  discovered TLS endpoint (it may change after reconnect). The last bounded
+  run stayed on boot ID `d927cfaa-54f1-428d-9f3b-1298aa1982fc`; `wlan0` is
+  connected. `mem_sleep=[s2idle] deep`, `debug_suspend=0`, and RTC wakealarm
+  empty were verified after cleanup. Preserve Android Wi-Fi/ADB access during
+  further runtime tracing.
 - Do not force PCI D3hot, bypass `pci_host_common_d3cold_possible()`, change
   `pcie_ports` again, manually alter ICC votes, blindly disable shared rails,
   send AOSS/QMP commands, or access guessed MMIO/AOP memory.
@@ -248,23 +258,21 @@ support from `d3cold_allowed=1` alone.
 
 ## Next action
 
-No new suspend run is justified yet: the exact ICC trace attributes the staged
-floor, the prior Wi-Fi-off and pcieport-binding A/Bs did not produce residency,
-and no new single safe variable is identified. The Linux device remains awake
-and reachable. The current compat-mode `PCI_UNKNOWN` path is explained by PCI
-core source; the old bound-port run still needs an in-suspend `skip_bus_pm`
-and endpoint-state trace, but the goal rules out another `pcie_ports` trial.
-The installed Android modules are now manually decompiled far enough to show
-that connected-DRV suspend skips an explicit endpoint D3hot request, while
-host mode 0 still clears PCIe ICC. Static analysis is complete for the key
-routes; the missing fact is the successful Android run's
-`drv_connected_last` value and selected host mode. The preserved log only
-proves the WLAN callback reported success. If another Android boot is
-available, capture that branch state plus root-fixup/noirq markers; do not
-infer them from final TCS words. No behavioral A/B is justified yet. The
-latest run receipt and host reanalysis are in
-`.external-research/sm8550-suspend-lab-runs/`; do not edit the saved raw or
-original device-derived result.
+The latest Android capture confirms that a successful `deep` path can advance
+AOSD/CXSD/DDR on this Nova. Its suspend-boundary ICC snapshot contains only
+tag-3 ACTIVE_ONLY DCVS requests and no PCIe client, consistent with Android
+clearing PCIe ICC before the boundary. This is stronger runtime evidence but
+still does not prove which host/client suspend route ran or that the cleared
+request alone causes residency. The exact Android module binaries show that
+connected-DRV suspend skips an explicit endpoint D3hot request, while host
+mode 0 still clears PCIe ICC; the live branch (`drv_connected_last`, selected
+`msm_pcie_pm_control()` mode), root-fixup/noirq markers, and suspend-time PCI
+state remain unknown. Do not repeat an identical Android suspend capture.
+Next, inspect read-only Android tracing support for those exact module
+functions and determine whether the runtime branch can be captured safely.
+Continue source comparison before selecting any behavioral A/B. The archived
+Linux trace and host reanalysis remain under
+`.external-research/sm8550-suspend-lab-runs/`; do not edit their raw data.
 
 ## Working files
 
