@@ -99,7 +99,9 @@ showing both CMD-DB addresses and both contexts. If insertion, lookup, or either
 RPMh request fails, do not suspend. If SLEEP succeeds but WAKE_ONLY fails,
 reboot before another test. If both succeed, run the existing harness in direct
 `deep` mode for its 10-second minimum, preserving Wi-Fi and using the
-`rsc-success` trace profile. Capture final Apps-RSC TCS contents, PCIe
-host/request state, PSCI result, AOSD/CXSD/DDR and detailed DDR deltas, and
-resume health. Reboot the unchanged deployment after the A/B to clear the
-cached pair.
+`rpmh-aoss` trace profile. This Nova kernel exposes `rpmh_send_msg`,
+`rpmh_tx_done`, and both `qcom_aoss` events, but not `rpmh_rsc_snapshot`; the
+selected profile therefore captures per-command RPMh payloads without a
+separate RSC snapshot. Record PCIe host/request state, PSCI result,
+AOSD/CXSD/DDR and detailed DDR deltas, and resume health. Reboot the unchanged
+deployment after the A/B to clear the cached pair.

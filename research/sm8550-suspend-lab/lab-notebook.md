@@ -6419,5 +6419,23 @@ The device is still on the same Linux boot ID, Wi-Fi and SSH are healthy, and
 the probe has not been copied to or loaded on it. No suspend test has run. The
 next gate is to insert the module, verify its one-line `SLEEP_AB` success log,
 and only then run the harness's 10-second minimum RTC-woken direct-deep test
-with the `rsc-success` trace profile. After the trial, reboot the unchanged
+with the available `rpmh-aoss` trace profile. After the trial, reboot the unchanged
 deployment to clear the cached RPMh pair.
+
+### 2026-09-20 13:15 UTC — use available RPMh tracepoints for the A/B
+
+The root-only preflight passed again on the same Linux boot
+`09a76af5-4e8f-454a-858e-dedb4ebb1d4d`: kernel `7.2.3`, Wi-Fi link up, no
+failed systemd units, no RTC wake alarm, suspend success/fail `0/0`, and
+AOSD/CXSD/scalar DDR `0/0/0`. The module is present in `/tmp` with the expected
+hash and vermagic but is not loaded. No behavior or suspend setting changed.
+
+This kernel does not expose `rpmh:rpmh_rsc_snapshot`; therefore the harness's
+`rsc-success` profile would stop before suspend. It does expose
+`rpmh:rpmh_send_msg`, `rpmh:rpmh_tx_done`, and both `qcom_aoss` send/done events,
+so use the existing `rpmh-aoss` profile instead. The RPMh send-message event
+captures the command payloads written into TCS during flush; there is no
+separate RSC-snapshot event on this kernel. Tracefs has zero private instances
+and global `tracing_on=1` at baseline; the harness will use its own private
+instance and leave the global setting alone. This narrows the trace evidence
+but does not change the A/B variable.

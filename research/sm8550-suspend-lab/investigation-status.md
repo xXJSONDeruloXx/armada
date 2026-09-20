@@ -6,7 +6,7 @@ the chronological record, including failed runs and superseded interpretations.
 Update this page when a checklist item changes; put raw output in a dated
 receipt and explain the result in the notebook.
 
-Status as of 2026-09-20 13:01 UTC. Branch `feat/sm8550-suspend-lab`.
+Status as of 2026-09-20 13:15 UTC. Branch `feat/sm8550-suspend-lab`.
 
 The sleep-stats offset question is closed: Android and Armada both resolve the
 SM8550 records at `+0x48` and `+0xb8`. Android's successful deep path advances
@@ -333,9 +333,10 @@ PCI D-state, or infer safe D3 support from `d3cold_allowed=1` alone.
   If either fails, do not suspend; reboot immediately if SLEEP was accepted but
   WAKE_ONLY failed.
 - [ ] If insertion succeeds, run one 10-second-minimum RTC-woken direct-deep
-  A/B with `rsc-success` tracing and capture final TCS requests plus residency
-  counters. Reboot into the unchanged deployment afterward to clear the RPMh
-  cache.
+  A/B with `rpmh-aoss` tracing and capture RPMh command payloads plus residency
+  counters. The kernel lacks `rpmh_rsc_snapshot`, so `rsc-success` is
+  unavailable. Reboot into the unchanged deployment afterward to clear the
+  RPMh cache.
 - [ ] If the pair is staged but AOSD/CXSD/DDR remain zero, keep the PCIe OPP
   proposal as the next candidate rather than combining variables.
 - [ ] For any justified A/B, record all of the following at matched boundaries:
@@ -374,11 +375,12 @@ pre-verified `17a00000.rsc:regulators-0` Apps-RSC client by device name,
 resolves MC4/SH5 through CMD-DB, then queues only the SLEEP/WAKE_ONLY pair with
 `rpmh_write_async()`. If module insertion, device lookup, CMD-DB lookup, or
 either API call fails, do not enter suspend. If both requests succeed, run one
-10-second-minimum direct-deep test with RTC wake and `rsc-success` tracing;
-capture the complete RSC TCS set, PCIe request/host state, PSCI result, firmware
-counters, and resume health. Reboot to the unchanged deployment afterward to
-clear the cached request pair. No kernel image, DTB, overlay, active bandwidth,
-PCI state, or regulator change is needed.
+10-second-minimum direct-deep test with RTC wake and `rpmh-aoss` tracing;
+capture per-command RPMh payloads, PCIe request/host state, PSCI result, firmware
+counters, and resume health. The kernel lacks a separate `rpmh_rsc_snapshot`
+event. Reboot to the unchanged deployment afterward to clear the cached request
+pair. No kernel image, DTB, overlay, active bandwidth, PCI state, or regulator
+change is needed.
 
 The archived Linux trace and host reanalysis remain under
 `.external-research/sm8550-suspend-lab-runs/`; do not edit their raw data.
