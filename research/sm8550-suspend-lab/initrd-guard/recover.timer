@@ -1,7 +1,7 @@
 [Unit]
 Description=Initrd recovery timer for the temporary Nova PCIe OPP test
 DefaultDependencies=no
-Before=dracut-pre-mount.service initrd-switch-root.target
+Before=basic.target dracut-pre-mount.service initrd-switch-root.target
 Conflicts=initrd-switch-root.target
 ConditionPathExists=/usr/lib/armada/suspend-lab/pcie-opp-test-rollback
 

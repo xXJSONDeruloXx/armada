@@ -20,7 +20,7 @@ install() {
     inst_simple "$moddir/marker" \
         /usr/lib/armada/suspend-lab/pcie-opp-test-rollback
 
-    mkdir -p "$initdir/$systemdsystemunitdir/dracut-pre-mount.service.d"
-    printf '[Unit]\nWants=sm8550-pcie-opp-initrd-recover.timer\n' \
-        > "$initdir/$systemdsystemunitdir/dracut-pre-mount.service.d/pcie-opp-recover.conf"
+    mkdir -p "$initdir/$systemdsystemunitdir/basic.target.wants"
+    ln -s ../sm8550-pcie-opp-initrd-recover.timer \
+        "$initdir/$systemdsystemunitdir/basic.target.wants/sm8550-pcie-opp-initrd-recover.timer"
 }

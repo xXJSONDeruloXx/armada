@@ -105,6 +105,32 @@ journal or pstore record, so the actual boot failure stage remains unknown.
 The PCIe-MEM A/B has not run. Do not re-stage it while the user is away without
 first adding an observation/recovery plan that covers the early boot gap.
 
+## Could Armada user space run on Android's kernel?
+
+In principle, Linux user space can run on a different Linux kernel; Android
+user space is not required just because Android's kernel is in use. That would
+still be a different boot, not a way to mix two live kernels. Armada's
+Fedora/Steam processes would run on the Android 5.15 kernel, and Android's
+modules would execute inside that kernel. A bind mount, chroot, or container
+on Armada's current 7.2 kernel continues to use the 7.2 kernel and cannot
+activate Android `.ko` files.
+
+A hybrid boot would require repacking a boot image with the Android kernel and
+an initramfs that mounts Armada's OSTree root, plus the matching DTB,
+5.15-built vendor modules, firmware, and a tested boot command line. It would
+also need runtime validation of Fedora/systemd, the bootc flow, and the
+Qualcomm display/GPU and Wi-Fi stacks against that older downstream kernel.
+Armada's 7.2.3 modules cannot be reused with 5.15. This is technically
+conceivable, but it is a separate, high-effort boot port; it would test the
+Android kernel PM path under Linux user space, not fix Armada's 7.2 driver
+path.
+
+The exact Android source is still unavailable and early-boot recovery is not
+proven. Do not make a hybrid image the next test. Continue porting behavior to
+Armada's native driver/API surface; revisit a hybrid only if the question
+specifically becomes whether Android's kernel PM path works with Armada user
+space and a reliable recovery route is available.
+
 ## Conclusion
 
 Mounting Android partitions or copying their modules cannot make Android's

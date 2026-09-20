@@ -7401,3 +7401,54 @@ This strengthens the repeatability of the observed Linux baseline and keeps
 the staged-request versus firmware-acceptance distinction open. It does not
 make the PCIe floor causal evidence for zero AOSD/CXSD/DDR residency, so the
 candidate OPP remains unbooted until the early-boot recovery gap is covered.
+
+### 2026-09-20 22:43 UTC — Android kernel reuse boundary and earlier initrd guard
+
+The Android-kernel idea is now bounded. A mount, bind mount, chroot, or
+container cannot attach Android's sleep `.ko` files to the running Armada
+kernel: modules execute only inside the kernel that loads them, and this
+device's Android modules target downstream `5.15.123` while Armada runs `7.2.3`.
+The exact `dcvs_fp.ko` also imports fast-path RPMh symbols absent from Armada;
+the Android RPMh regulator module would conflict with Armada's already-bound
+built-in driver. The viable reuse is still to translate request behavior to
+Linux 7.2.3 APIs. The completed MC4/SH5 request-only test was insufficient by
+itself.
+
+Running Armada user space on the Android kernel is theoretically possible as a
+separate hybrid boot, but not by mounting Android while Armada is running. It
+would require a repacked Android boot image, a matching initramfs/DTB and
+5.15-matched module set, then validation of the OSTree boot flow and Armada's
+display/GPU/Wi-Fi stack on that kernel. This is substantially riskier than a
+native Linux driver change and would not fix the Linux 7.2.3 path. The exact
+Android source remains unavailable and the earlier candidate's pre-systemd
+failure recovery is unresolved, so this is not the next experiment. The
+expanded analysis is in [`android-module-reuse.md`](android-module-reuse.md).
+
+The candidate-only initrd rollback timer was moved from the pre-mount unit's
+drop-in to `basic.target.wants`, with ordering before `basic.target`. This
+starts the 120-second timer earlier in initrd boot and still before
+`dracut-pre-mount.service`; it does not cover a kernel failure or an initrd
+systemd failure before the basic-target transaction starts. The first build
+of tag `20260920-05` regenerated the initramfs but its final assertion failed:
+the `lsinitrd` symlink row ends with the link target, so the generic `$NF`
+matcher did not recognize the link path. The assertion now checks that path
+explicitly. Rebuild passed, confirmed the symlink and timer ordering, and
+`systemd-analyze verify` passed for both initrd recovery units and the existing
+real-root rollback units. Local shell syntax, mocked recovery tests, and
+`git diff --check` also pass. The successful image is version
+`20260920.pcie-opp-test-initrd-guard-03`, manifest digest
+`sha256:ee083828400828329df59ad7ca9084a8a745894d95831efeb8e77a1f1d5688cc`,
+image ID `a0455586b6be5aa5770e0afcd69523cd07ca6e849bfe45efc6af7acb3676b0b2`,
+and initramfs SHA-256
+`9d71e262d0190f220c3cf685b656986fc6001b3cc775ee795460c793aa91379d`.
+Dracut emitted its known nonfatal missing-logger warning; the build exited
+successfully.
+
+A fresh post-build SSH check still reports stock kernel `7.2.3`, boot ID
+`aa40c55e-d558-46a9-a710-3a7d926b9e9e`, Armada image
+`20260915.feca679`, default boot order, `staged=null`, and no queued rollback.
+Only a local Podman image was added; no bootc deployment, ESP file, reboot, or
+suspend state was changed. This guard improves early timer coverage but does
+not close the recovery gap, so the PCIe OPP candidate remains un-staged. Full
+build and verification details are in the
+[`early-target guard receipt`](receipts/2026-09-20-initrd-guard-early-target-build.md).

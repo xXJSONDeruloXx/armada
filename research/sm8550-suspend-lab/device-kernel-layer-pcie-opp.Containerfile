@@ -3,7 +3,7 @@
 FROM ghcr.io/armada-os/armada@sha256:5fe995d5fedf5034ee42a8f0e54dbd2d08e0c85adb9e3f88cfd52e55636eeb88
 
 LABEL ostree.linux="7.2.3"
-LABEL org.opencontainers.image.version="20260920.pcie-opp-test-initrd-guard-02"
+LABEL org.opencontainers.image.version="20260920.pcie-opp-test-initrd-guard-03"
 
 ARG ARMADA_TEST_KERNEL_SHA256
 ARG ARMADA_TEST_DTB_SHA256
@@ -21,7 +21,7 @@ RUN set -eux; \
     test -n "${ARMADA_TEST_DTB_SHA256}"; \
     printf '%s  %s\n' "${ARMADA_TEST_KERNEL_SHA256}" /usr/lib/modules/7.2.3/vmlinuz | sha256sum -c -; \
     printf '%s  %s\n' "${ARMADA_TEST_DTB_SHA256}" /usr/lib/modules/7.2.3/dtb/qcom/qcs8550-retroidpocket-rpnova.dtb | sha256sum -c -; \
-    printf '%s\n' '20260920.pcie-opp-test-initrd-guard-02' > /usr/lib/armada/version; \
+    printf '%s\n' '20260920.pcie-opp-test-initrd-guard-03' > /usr/lib/armada/version; \
     chmod 0755 /usr/lib/dracut/modules.d/91armada-pcie-opp-initrd-recovery/module-setup.sh \
         /usr/lib/dracut/modules.d/91armada-pcie-opp-initrd-recovery/recover.sh; \
     install -d /usr/lib/systemd/system/timers.target.wants; \
@@ -39,8 +39,9 @@ RUN set -eux; \
         usr/libexec/armada/sm8550-pcie-opp-initrd-recover \
         usr/lib/systemd/system/sm8550-pcie-opp-initrd-recover.service \
         usr/lib/systemd/system/sm8550-pcie-opp-initrd-recover.timer \
-        usr/lib/systemd/system/dracut-pre-mount.service.d/pcie-opp-recover.conf \
         usr/lib/armada/suspend-lab/pcie-opp-test-rollback; do \
         awk -v required="$path" '$NF == required { found=1 } END { exit !found }' /tmp/initramfs.list || \
             { echo "ERROR: $path missing from initramfs" >&2; exit 1; }; \
-    done
+    done; \
+    grep -Fq 'usr/lib/systemd/system/basic.target.wants/sm8550-pcie-opp-initrd-recover.timer' /tmp/initramfs.list || \
+        { echo 'ERROR: early initrd recovery timer link missing from initramfs' >&2; exit 1; }
