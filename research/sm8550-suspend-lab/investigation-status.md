@@ -6,7 +6,7 @@ the chronological record, including failed runs and superseded interpretations.
 Update this page when a checklist item changes; put raw output in a dated
 receipt and explain the result in the notebook.
 
-Status as of 2026-09-20 15:06 UTC. Branch `feat/sm8550-suspend-lab`.
+Status as of 2026-09-20 15:20 UTC. Branch `feat/sm8550-suspend-lab`.
 
 The sleep-stats offset question is closed: Android and Armada both resolve the
 SM8550 records at `+0x48` and `+0xb8`. Android's successful deep path advances
@@ -62,7 +62,9 @@ reboot from Android returns to Linux when Android ADB is available.
 The [boot-image recovery receipt](receipts/2026-09-20-bootimg-recovery-path.md)
 confirms the existing KERNEL.BAK matches the current boot image and documents
 a test-layer drop-in needed to keep that backup from being replaced at the
-first diagnostic boot. No test image has been staged.
+first diagnostic boot. The device-scoped layer recipe is now tracked at
+[`device-kernel-layer-pcie-opp.Containerfile`](device-kernel-layer-pcie-opp.Containerfile).
+No test image has been staged.
 
 ## Latest Android suspend attempt (historical)
 
@@ -112,8 +114,8 @@ manually changing shared bandwidth/regulator requests.
   6.07 GB compressed base into the currently empty rootful image store.
 - [x] Read current bootc switch semantics and Armada's boot-image refresh path;
   verify the current ESP backup matches the active boot image.
-- [ ] Prepare the image-layer-only backup-preservation drop-in, then stage and
-  inspect the candidate before rebooting.
+- [x] Prepare a device-scoped image recipe and backup-preservation drop-in.
+- [ ] Build and stage the candidate, then inspect it before rebooting.
 - [ ] Run one RTC-bounded deep A/B only if the artifact and rollback gates
   pass. Record the command set, residency counters, PSCI result, resume, and
   Wi-Fi state; do not use battery drain as the short-run verdict.

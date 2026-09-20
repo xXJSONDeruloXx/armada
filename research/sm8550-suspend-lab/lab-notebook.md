@@ -6637,6 +6637,16 @@ a manual recovery path if SSH does not return. No deployment or ESP file was
 changed. Full facts and source references are in the
 [bootimg-recovery-path.md](receipts/2026-09-20-bootimg-recovery-path.md).
 
+### 2026-09-20 15:20:50 UTC — pinned Nova PCIe test-layer recipe added
+
+Added a test-only Containerfile pinned to the installed Armada base digest.
+It accepts and verifies the final kernel and Nova DTB hashes, replaces only
+the 7.2.3 kernel image and Nova DTB, labels the deployment distinctly, and
+adds the boot-service drop-in that preserves the known-good KERNEL.BAK while
+keeping the startup freshness check and shutdown updater. It does not replace
+modules or regenerate the unchanged initramfs. The recipe and drop-in are
+tracked on the branch; no image has been built, pulled, staged, or applied.
+
 ### 2026-09-20 14:52 UTC — Linux SSH is available; matching-config rebuild is active
 
 The user confirmed Armada Linux is Nova's default boot; if the device is on
