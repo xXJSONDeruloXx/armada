@@ -147,3 +147,15 @@ without an explicit endpoint D3hot request. Do not infer this from TCS values.
 No module was replaced or reloaded. No Android partition, PCI configuration,
 device power policy, ICC request, regulator state, or sleep state was changed
 during this static analysis.
+
+## Follow-up: live BTF branch mapping
+
+Wireless ADB later confirmed the pulled PCIe module is byte-identical to the
+installed module and exposed its split-BTF. The exact `link_status` and
+`apss_based_l1ss_sleep` field offsets now map the mode-0 trace to the
+root-fixup and noirq branch gates. This resolves that the active pcie0
+APSS/L1SS noirq body was skipped, while the root-fixup teardown gate requires
+`link_status=ENABLED` and the connected-DRV route sets `DRV`. The callback
+entry itself, physical PCI state during sleep, and PCIe/WCN wake behavior
+remain unobserved. Details and exact BTF hashes are in
+[`2026-09-20-android-live-pcie-validation.md`](2026-09-20-android-live-pcie-validation.md).

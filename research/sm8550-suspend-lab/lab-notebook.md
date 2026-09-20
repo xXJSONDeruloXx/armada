@@ -5792,3 +5792,172 @@ suspend. Do not repeat this identical capture. Next, inspect whether Android
 exposes safe runtime tracing for the exact CNSS/PCIe module branch and
 suspend-time PCI state; no behavioral A/B is justified from this capture
 alone.
+
+### 2026-09-20 ~07:10 UTC — exact Android CNSS branch and TCS captured
+
+The read-only runtime-tracing audit found `CONFIG_KPROBE_EVENTS=y`, exact
+loaded module symbols, and tracepoint formats for RPMh messages and BCM voter
+commits. A temporary tracefs instance was created; global `tracing_on` stayed
+0. The bounded instrumented capture used entry/return probes for the CNSS
+suspend callbacks, PM-control mode, DRV/noirq/clock paths, and PCIe ICC helper,
+plus Apps-RSC RPMh, BCM-voter, and PM-phase events.
+
+At the actual successful system-suspend bracket, `cnss_pci_suspend()` and
+`cnss_pci_suspend_bus()` returned 0. CNSS selected
+`msm_pcie_pm_control(mode=0)`, entered `msm_pcie_drv_suspend()`, and called
+`qcom_pcie_icc_bw_update(avg=0, peak=0)`. The resume path used mode 2. Given
+the active pcie0 DT has no `qcom,pcie-switch-type` and the installed CNSS
+binary defaults that field to 0, mode 0 identifies the connected-DRV path.
+This resolves the successful Android host branch that was previously
+unknown. The exact branch skips CNSS's explicit PCI D3hot calls; no probe read
+the endpoint's actual PCI config state.
+
+The host `msm_pcie_pm_suspend_noirq()` callback entry was observed, but
+active WCN pcie0 lacks `qcom,apss-based-l1ss-sleep`. There were no hits for
+`msm_pcie_pm_suspend()` or `msm_pcie_clk_deinit()` in the capture, consistent
+with the root-device late-fixup clock-deinit route not running after the
+link entered DRV state. The callback entry alone does not show that the
+APSS/L1SS body ran.
+
+The same bracket captured all 14 Apps-RSC TCS3 SLEEP and all 14 TCS5 WAKE
+commands. MC0 (`0x50000`) was `0x40000000` and SH0 (`0x50004`) was `0` in
+SLEEP; both are off/zero while the successful Android run advances APSS,
+AOSD, CXSD, and DDR counters. LDOE1/LDOE3 sleep/wake words were present, and
+the SLEEP set also includes SH1, QUP0/1/2, ACV, MC4, and SH5. The complete
+payload table and trace are in
+`../../receipts/2026-09-20-android-exact-pcie-branch.md` and
+`../../receipts/2026-09-20-android-pcie-branch-trace.txt`. RPMh tracepoint
+writes prove TCS staging, not AOP acceptance; counter advancement is the
+independent firmware-recorded result.
+
+The ADB shell lost transport during this run, then returned on the same
+device/boot after the RTC wake. The kernel recorded `deep` success and
+`pm8xxx_rtc_alarm`; sleep counters advanced again. I stopped tracing, removed
+the instance and every kprobe, restored `[s2idle]`, verified `debug_suspend=0`
+and an empty alarm (`alarm_IRQ=no`), and confirmed global tracing remained
+off. No permanent device state changed.
+
+This supersedes the 06:47 note that the Android PCIe branch remained unknown.
+The strongest remaining causal hypothesis is now specific: Android's
+connected-DRV route clears its PCIe ICC request and stages MC0/SH0 off,
+while Armada's Linux path retains a SLEEP-tagged PCIe bandwidth request when
+the D3cold eligibility check prevents host teardown. Correlation is strong,
+but the regulator and request-set differences mean causation still requires
+a source-validated, one-variable Linux test. Do not force PCI D3hot or bypass
+the generic D3cold check. Next inspect whether the mainline ICC API can
+exclude only the PCIe path's SLEEP bucket while retaining active/wake votes.
+
+### 2026-09-20 ~07:34 UTC — Android PCI PM callbacks succeed without observed D-state setters
+
+Wireless ADB was available on the same rooted Android boot. A bounded,
+10-second RTC-woken `deep` capture used a temporary tracefs instance for
+generic PM callbacks and kprobes for PCI suspend and power-state setter
+functions. It did not repeat the CNSS-branch/TCS capture. The 4 MiB trace
+buffer recorded 11,803 events without loss.
+
+The Qualcomm host's normal `pci-msm` suspend callback returned `err=0`; the
+generic root-port `0000:00:00.0` callback returned `err=0`; the WCN endpoint
+`cnss_pci 0000:01:00.0` callback and its power-domain callback returned
+`err=0`; the host and endpoint noirq suspend callbacks also returned `err=0`.
+Matching noirq resume callbacks succeeded. No hits were recorded for
+`pci_set_power_state()`, `pci_raw_set_power_state()`, or the generic PCI
+suspend kprobes. This means no OS-issued D-state setter was observed in this
+run; it does not reveal the endpoint's physical state while asleep.
+
+After the RTC wake, the same boot remained available, both PCI functions read
+D0, and `wlan0` was up. These are post-resume health checks only. I restored
+`[s2idle]`, cleared the RTC alarm, stopped tracing, removed the trace instance
+and probes, and checked `tracing_on=0`, empty `kprobe_events`, and
+`debug_suspend=0`. The current read-only recheck confirms the same boot ID,
+empty alarm, those controls restored, and Wi-Fi up. Receipt:
+`../../receipts/2026-09-20-android-live-pcie-validation.md`.
+
+### 2026-09-20 ~07:40 UTC — source audit rules out a simple ICC retag test
+
+The v7.2.3 QCOM PCIe probe uses OPP-managed ICC whenever the DT has an OPP
+table; on this SM8550 node it does, so `use_pm_opp=true` and the driver does
+not retain direct `icc_mem`/`icc_cpu` path handles. At the live 5 GT/s x1 OPP,
+the DT asks for 500,000 kB/s on the SLEEP-capable `pcie-mem` path and 1 kB/s
+on ACTIVE_ONLY `cpu-pcie`, with `rpmhpd_opp_low_svs` as the required power
+domain OPP. This matches the live Linux ICC attribution trace.
+
+When `pci_host_common_d3cold_possible()` vetoes the controller, DesignWare
+returns success before stopping the link or setting `pci->suspended`. The QCOM
+driver takes its host-active fallback. Its direct-ICC variant lowers
+`pcie-mem` to 1 kB/s, but the OPP-backed variant makes no OPP change for
+`PM_SUSPEND_MEM`: Armada patch 0513 only calls its suspend-OPP helper in the
+non-MEM branch of that fallback. Thus the active 500,000 kB/s OPP remains in
+direct deep when the host is not suspended. This gives a concrete source path
+for the observed retained floor without bypassing the PCI core.
+
+The proposed tag-only test is not a small change here. `icc_set_tag()` only
+updates path request metadata; `icc_set_bw()` performs aggregation and applies
+the constraints. The OPP framework owns the ICC paths, and QCOM PCIe has no
+handle to retag them. A static `ACTIVE_ONLY` DT tag would also remove the
+1,000 kB/s SLEEP OPP floor used by patch 0520 for s2idle, risking the prior
+hard-reset regression.
+
+Selected next A/B, still only a design: for direct `PM_SUSPEND_MEM` with the
+host unsuspended, set a test-only OPP with `required-opps` unchanged at
+`rpmhpd_opp_low_svs`, memory-path peak reduced from 500,000 to 1,000 kB/s, and
+CPU-path peak left at 1 kB/s. Use a unique synthetic 64-bit `opp-hz` without
+`opp-level`, selected only by an explicit diagnostic helper. This isolates
+bandwidth magnitude; it does not alter PCI state, regulator requests, or the
+existing s2idle `opp-suspend` behavior. Do not deploy it on Android. The
+experiment still needs a test-kernel build and a Linux boot, so no build or
+device behavior change was started. Source receipts and links are in
+`../../receipts/2026-09-20-android-live-pcie-validation.md`.
+
+### 2026-09-20 07:42 UTC — wireless ADB validates the exact installed modules
+
+The user enabled Wireless debugging. ADB connected to the same Android boot
+and reported the already-known Kalama fingerprint, slot `_a`, and kernel
+`5.15.123-android13-8-g697b78910a71-dirty`. `/proc/modules` shows `cnss2`,
+`pci_msm_drv`, and `kiwi_v2` loaded. I pulled their installed
+`/vendor_dlkm/lib/modules/*.ko` files read-only and recomputed SHA-256. All
+three hashes exactly match the previously decompiled A-slot files. This
+closes the concern that the earlier disassembly came from a different module
+copy; it still cannot identify the exact vendor source commit.
+
+The current post-run read-only check confirms same boot, both PCI functions
+back in D0, `wlan0=up`, `[s2idle] deep`, no RTC alarm, global tracing off,
+empty kprobes, and `debug_suspend=0`. No Android image, module, or persistent
+configuration was modified. Receipt:
+`../../receipts/2026-09-20-android-live-pcie-validation.md`.
+
+### 2026-09-20 08:06 UTC — live BTF closes the Android noirq-body ambiguity
+
+Wireless ADB is still on the same Android boot. I pulled the live split-BTF
+for `vmlinux` and `pci_msm_drv` read-only and mapped the exact installed
+`struct msm_pcie_dev_t` fields. This does not repeat the sleep-stats offset
+experiment. The new facts are specific to the PCIe suspend control flow:
+
+- `link_status` is at byte `0x480`; `apss_based_l1ss_sleep` is at `0x409`;
+  `enumerated` is at `0x535`; `power_on` is at `0x6a4`.
+- Exact `msm_pcie_drv_suspend()` disassembly writes `3` to `link_status`, the
+  BTF-described `MSM_PCIE_LINK_DRV` enum value.
+- The exact registered root-port `SUSPEND_LATE` CFI function reads the same
+  field and continues to its teardown only when it equals `1`
+  (`MSM_PCIE_LINK_ENABLED`). The earlier successful mode-0 trace shows the
+  DRV suspend function ran, while its `msm_pcie_pm_suspend()` and
+  `msm_pcie_clk_deinit()` callees had no hits. This is consistent with the
+  fixup teardown being gated out; the fixup entry itself was not separately
+  probed, so do not report its callback invocation as directly observed.
+- The exact noirq function checks `enumerated`, `power_on`, and
+  `apss_based_l1ss_sleep` and jumps to unlock/return if any is false. The
+  active merged pcie0 DT has no `qcom,apss-based-l1ss-sleep`, the input for the
+  last flag. Therefore this callback's APSS/L1SS teardown body was not
+  selected in the captured build, despite seeing its callback entry. It could
+  not be the route that cleared ICC or shut down its host clocks/regulators.
+
+This narrows Android's observed PCIe request removal to the connected-DRV
+route's explicit `0/0` ICC call for this run. It still does not prove physical
+PCI/link state during sleep, AOP acceptance of each staged command, or
+PCIe/WCN wake safety. Exact Android source remains unavailable; this is an
+exact installed-binary reconstruction based on matching module hashes, live
+BTF, relocations, and disassembly. Hashes and instruction addresses are in
+`../../receipts/2026-09-20-android-live-pcie-validation.md`.
+
+No further Android suspend was needed. Post-check remained on the same boot
+with `wlan0=up`, `[s2idle] deep`, empty alarm, global tracing off, empty
+kprobes, and `debug_suspend=0`.
