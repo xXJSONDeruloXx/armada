@@ -6616,6 +6616,18 @@ staging. I have not pulled it; first budget the unpacked storage so the build
 does not crowd the live device. No deployment changed. Details are in the
 [bootc base/space receipt](receipts/2026-09-20-bootc-base-and-space.md).
 
+### 2026-09-20 14:52 UTC — Linux SSH is available; matching-config rebuild is active
+
+The user confirmed Armada Linux is Nova's default boot; if the device is on
+Android with ADB available, an ADB reboot returns to Linux. At this check,
+`adb devices -l` had no Android target, while SSH alias `armada` returned the
+Nova on kernel `7.2.3`, boot ID
+`cd02fc51-33c5-4b1a-96a7-75a17eb98b30`. The device remains on its unchanged
+Linux deployment. The diagnostic `Image dtbs` rebuild is active in the
+external AArch64 build container (274% CPU at the check); the Image and Nova
+DTB timestamps are still from the prior build, so they must not be deployed
+yet. No device reboot, overlay, RPMh change, or test module was applied.
+
 ### 2026-09-20 15:06 UTC — bootc apply and Nova boot-image rollback path verified
 
 Read-only inspection confirmed that bootc switch --download-only can stage
@@ -6647,14 +6659,10 @@ keeping the startup freshness check and shutdown updater. It does not replace
 modules or regenerate the unchanged initramfs. The recipe and drop-in are
 tracked on the branch; no image has been built, pulled, staged, or applied.
 
-### 2026-09-20 14:52 UTC — Linux SSH is available; matching-config rebuild is active
+### 2026-09-20 15:28 UTC — matching-config kernel build reached final link
 
-The user confirmed Armada Linux is Nova's default boot; if the device is on
-Android with ADB available, an ADB reboot returns to Linux. At this check,
-`adb devices -l` had no Android target, while SSH alias `armada` returned the
-Nova on kernel `7.2.3`, boot ID
-`cd02fc51-33c5-4b1a-96a7-75a17eb98b30`. The device remains on its unchanged
-Linux deployment. The diagnostic `Image dtbs` rebuild is active in the
-external AArch64 build container (274% CPU at the check); the Image and Nova
-DTB timestamps are still from the prior build, so they must not be deployed
-yet. No device reboot, overlay, RPMh change, or test module was applied.
+The full kernel objects and built-in archives compiled successfully. The first
+vmlinux link and BTF generation completed; Kbuild is on the second/final link
+pass. No build error has appeared, but the final vmlinux, boot Image, and DTB
+are not yet verified, so the older artifacts remain unusable. The Nova remains
+on its unchanged Linux deployment and no test image is staged.

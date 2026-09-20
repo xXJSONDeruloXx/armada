@@ -6,7 +6,7 @@ the chronological record, including failed runs and superseded interpretations.
 Update this page when a checklist item changes; put raw output in a dated
 receipt and explain the result in the notebook.
 
-Status as of 2026-09-20 15:20 UTC. Branch `feat/sm8550-suspend-lab`.
+Status as of 2026-09-20 15:28 UTC. Branch `feat/sm8550-suspend-lab`.
 
 The sleep-stats offset question is closed: Android and Armada both resolve the
 SM8550 records at `+0x48` and `+0xb8`. Android's successful deep path advances
@@ -46,8 +46,11 @@ write an ICC vote. The candidate object, Nova DTB, linked `vmlinux`, and
 blocked because its config omitted scheduler-extension options enabled on the
 device. I restored the scratch `.config` through Kconfig; it now byte-matches
 the live config, but the Image/DTB have not yet been rebuilt with it. The
-matching-config `Image dtbs` rebuild is now running; after it exits, verify
-artifacts and establish a reversible boot layer before any test. See
+matching-config rebuild has compiled and archived the kernel objects and
+completed its first `vmlinux` link/BTF pass. The final `vmlinux` link is
+running; the Image and Nova DTB timestamps are still from the prior build.
+Verify all artifacts after make exits, then stage the reversible boot layer
+before any test. See
 the [config-reconcile receipt](receipts/2026-09-20-pcie-opp-config-reconcile.md).
 The currently installed base is `ghcr.io/armada-os/armada:beta` at digest
 `sha256:5fe995d5fedf5034ee42a8f0e54dbd2d08e0c85adb9e3f88cfd52e55636eeb88`;
