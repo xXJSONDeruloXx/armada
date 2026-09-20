@@ -6199,3 +6199,142 @@ consistent, but is not the same capture as the final-TCS run.
 
 No Android suspend, module operation, setting change, or kernel write was
 performed. The device remains awake on Android with Wireless ADB available.
+
+### 2026-09-20 10:54 UTC — exact Android RPMh/ICC modules recovered and checked
+
+Wireless ADB is live on Android slot `_a`, with `wlan0` up. The loaded core
+RPMh/ICC/NoC modules were missing from the mounted `vendor_dlkm` file list; I
+read `vendor_boot_a` without writing to the device and unpacked its v4 LZ4
+vendor ramdisk with the official AOSP `unpack_bootimg.py`. The ramdisk contains
+the exact loaded `icc-rpmh`, `icc-bcm-voter`, `rpmh-regulator`, `qnoc-kalama`,
+and `qnoc-crow` modules. Their `.modinfo` vermagic and live sysfs scmversion
+match `5.15.123-g697b78910a71-dirty` / `g697b78910a71-dirty`. The image, ten
+selected modules, byte sizes, and SHA-256 hashes are retained outside Git on
+`/Volumes/NovaKernelBuild/android-binaries/`; see the
+[module receipt](../../receipts/2026-09-20-android-live-rpmh-module-decomp.md).
+
+Exact AArch64 disassembly of `icc-bcm-voter.ko`'s
+`qcom_icc_bcm_voter_commit()` shows `rpmh_write_batch()` called with state
+values 2, 1, and 0 (ACTIVE_ONLY, WAKE_ONLY, SLEEP). This matches the call
+sequence in mainline v7.2.3 `bcm-voter.c`; the common BCM-voter state pipeline
+is not the observed distinction. The exact `rpmh-regulator.ko`'s
+`rpmh_regulator_send_aggregate_requests()` instead confirms active, sleep, and
+wake-only regulator aggregates. Mainline v7.2.3's regulator send helper uses
+only ACTIVE_ONLY. This verifies a real capability gap, but it is not causal
+proof and does not justify changing shared-rail behavior without wake-path
+analysis.
+
+The exact Kalama NoC module contains static BCM objects for MC0, SH0, SH1, and
+ACV plus QUP2; mainline `sm8550.c` defines those same resources. Thus their
+presence in the Android TCS is not itself evidence of a vendor-only voter
+feature. The producer of the TCS `MC4`/`SH5` commands at `0x50060`/`0x50064`
+remains unidentified; neither named object was found in the exact Kalama/Crow
+module symbol tables or mainline `sm8550.c`. Keep the prepared PCIe low-bandwidth
+OPP A/B as the narrow first test after Linux boot/rollback preflight. The
+regulator-context difference stays a separate, higher-risk hypothesis.
+
+No Android suspend, module operation, setting change, or kernel write was
+performed. The linked Linux Image+Nova DTB build is still running off-device.
+
+### 2026-09-20 11:27 UTC — active Android boot image and failed trace attempt
+
+Wireless ADB is live as root on slot `_a`, kernel
+`5.15.123-android13-8-g697b78910a71-dirty`. I pulled the active 96 MiB
+`boot_a` partition read-only and unpacked its v4 header. The kernel image
+contains source paths under `/home/liuwen/q9ex/VENDOR.13.2.6/kernel_platform/common`,
+but this is only a build-tree label; it does not identify the exact vendor
+source revision. The full image and extracted-kernel hashes are in the
+[boot-image/trace receipt](../../receipts/2026-09-20-android-boot-image-and-trace-failure.md).
+
+The live CMD-DB again maps `0x50060` to `MC4` and `0x50064` to `SH5`. Searches
+of the exact `vendor_boot` RPMh/ICC modules and the mounted module tree found
+no printable resource-name references that identify their producer. The
+active kernel image scan also provided no meaningful paired references. This
+does not prove the names are absent from indirect/generated tables.
+
+I attempted one bounded Android `deep` capture with temporary,
+per-instance `interconnect_qcom:bcm_voter_commit` and `rpmh:rpmh_send_msg`
+tracepoints. The vendor tracefs rejected the address filter, so the attempt
+was unfiltered. The first setup attempt and the run using the wrong
+`/sys/power/suspend_stats` path both stopped before arming RTC or requesting
+suspend. After correcting the stats path, the service returned false and
+`suspend_stats` success remained 3 while fail advanced 3→4 and
+`failed_prepare` 0→1. Kernel log identifies `3da0000.kgsl-smmu` returning
+`-115` (`EINPROGRESS`); the built-in display was ON. Thus this run did not
+reach the low-power path and its awake RPMh traffic cannot attribute the
+`MC4`/`SH5` sleep commands. Tool output was truncated, so the full 180-event
+trace was not retained as a raw receipt.
+
+Cleanup verified the original boot ID, `[s2idle] deep`, empty RTC alarm and
+`alarm_IRQ=no`, no tracefs instance, global tracing off, `debug_suspend=0`,
+and `wlan0=UP/LOWER_UP`. No bandwidth vote, regulator, PCI state, Android
+image, or module was changed. A retry should wait until display/GPU idle and
+capture unfiltered to a host file; if KGSL SMMU still rejects prepare, stop
+and treat Android-side event attribution as blocked by that suspend-preparation
+path. This is separate from the Linux low-bandwidth PCIe OPP A/B.
+
+### 2026-09-20 11:38 UTC — screen-off Android retry still aborted; device restored
+
+Wireless ADB reconnected to rooted Android (`kalama`, build
+`qti/kalama/kalama:13/TKQ1.231222.001/eng.RPN.20260722.081626:user/release-keys`,
+kernel `5.15.123-android13-8-g697b78910a71-dirty`). At reconnect the screen was
+OFF and `mWakefulness=Asleep`; I woke it and verified `mWakefulness=Awake`,
+screen ON, `wlan0=up`, `[s2idle] deep`, empty RTC wakealarm, global tracing
+off, and no temporary tracefs instance. Boot ID is unchanged.
+
+The saved screen-off trace from the prior bounded attempt is 107,372 bytes,
+SHA-256
+`ad0e367a94a98f309b7bed8e633e3160b55d362e3f558027634dbf259242d49b`. Its
+force-suspend Binder result was false; success stayed 99, fail rose 6→8, and
+`failed_freeze` rose 2→3. The latest failure was `alarmtimer.0.auto` (`-16`),
+not a successful deep entry. The 679 trace entries include 283
+`bcm_voter_commit` and 396 `rpmh_send_msg` events. There were no `0x50060`
+(`MC4`) or `0x50064` (`SH5`) writes in the trace; because this attempt never
+completed deep and tracing began after boot, that is only a negative result
+for this awake/aborted interval, not proof about pre-staged TCS contents or
+their producer. Exact address counts and limitations are in the
+[Android trace receipt](../../receipts/2026-09-20-android-boot-image-and-trace-failure.md).
+
+Further Android retries are paused pending read-only identification of the
+freeze/prepare blockers. No module, image, sleep policy, regulator, vote, or
+PCI state was changed.
+
+### 2026-09-20 11:50 UTC — exact Android DCVS-FP binary owns MC4/SH5 staging
+
+I extracted the active A-slot `dcvs_fp.ko` from the already-pulled vendor-boot
+ramdisk and confirmed its `vermagic` is
+`5.15.123-g697b78910a71-dirty`; live `/sys/module/dcvs_fp/scmversion` is the
+same suffix. The module is loaded and its platform driver is bound to the
+live DT node `/soc/apps_rsc@17a00000/drv@2/qcom,dcvs-fp`.
+
+The live node has `qcom,ddr-bcm-name=MC4` and
+`qcom,llcc-bcm-name=SH5`, matching the earlier CMD-DB resource map
+(`MC4=0x50060`, `SH5=0x50064`). Exact AArch64 disassembly shows the probe calls
+`populate_bcm_data()` for those two property names; that function uses
+`cmd_db_read_addr()` and `cmd_db_read_aux_data()`. Probe then initializes the
+RPMh fast path and calls `rpmh_write_async()` for both commands with
+`RPMH_SLEEP_STATE` and `RPMH_WAKE_ONLY_STATE`. Later fast-path updates use the
+ACTIVE_ONLY context. Module hash, ELF offsets, disassembly facts, and live DT
+bytes are in the [DCVS-FP receipt](../../receipts/2026-09-20-android-dcvs-fp-binary-and-dt.md).
+
+This is strong software attribution for Android's two extra BCM commands;
+it is not evidence that they alone enable AOSD/CXSD/DDR residency. Next compare
+the `dcvs_fp` source/DT and runtime role against Armada's kernel/device tree,
+then determine how much of the Android staging can be represented upstream.
+No code or device behavior changed during this inspection.
+
+### 2026-09-20 12:11 UTC — Wireless ADB restored; Android state rechecked
+
+Wireless ADB now sees rooted Android as `192.168.0.163:42265`. The live build
+is `qti/kalama/kalama:13/TKQ1.231222.001/eng.RPN.20260722.081626:user/release-keys`
+with kernel `5.15.123-android13-8-g697b78910a71-dirty`, the same boot ID
+`d927cfaa-54f1-428d-9f3b-1298aa1982fc`, and `wlan0` at `192.168.0.163`. The
+system is awake. The PCIe host module remains bound to `1c00000.qcom,pcie`; the
+root port and WCN endpoint both report D0 in this awake snapshot. `dcvs_fp`,
+`qcom_rpmh`, `icc_rpmh`, `icc_bcm_voter`, and `rpmh_regulator` are loaded.
+
+This confirms Android transport and build identity only; it adds no sleep-time
+state evidence. No module, image, suspend setting, vote, regulator, or PCI
+state was changed. An SSH attempt to the Armada alias timed out while Android
+was active. The user confirms `adb reboot` returns to the default Linux boot;
+that transition is the next read-only baseline check.
