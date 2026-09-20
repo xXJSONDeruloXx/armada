@@ -1,7 +1,7 @@
 # Post-apply device reachability check
 
 Captured 2026-09-20 17:16 UTC after requesting application of the staged PCIe
-OPP diagnostic deployment; follow-up connectivity checks ran at 17:19 UTC.
+OPP diagnostic deployment; follow-up checks ran through 17:22 UTC.
 
 ## Apply request
 
@@ -26,6 +26,8 @@ No subsequent command reached the device.
   route lookup scoped to `en1` selected the Wi-Fi interface; `ping -b en1`
   reported `Host is down`, and SSH with `BindInterface=en1` returned
   `Host is down` as well.
+- At 17:22 UTC, SSH still timed out; ADB listed no device, and USB inventory
+  remained empty.
 
 The candidate boot, bootc rollback state, Wi-Fi, and current ESP contents are
 unknown. No second reboot, suspend, or other device mutation was attempted.
@@ -40,10 +42,26 @@ extracted stock `KERNEL` and `KERNEL.BAK` were previously verified against the
 device's pre-test hashes. This is a manual recovery copy, not proof that the
 current device can boot or that the current ESP is unchanged.
 
+## Source-checked access path
+
+The local `armada-bootimg-finalize` script calls `bootc rollback` only if
+regenerating `/boot/efi/KERNEL` fails; that does not cover a kernel that boots
+but fails to bring up Wi-Fi. The local `armada-boot-hotkeys` handler only
+changes to Desktop Mode after Linux userspace reaches the boot splash, so it is
+not a kernel recovery route.
+
+Armada's [documented ABL procedure](https://armadaos.dev/getting-started/uninstalling-and-restoring-android/)
+is: power off, hold VOL- while powering on, then select **Switch Boot Mode**
+and use POWER to choose Android. This is the concrete path to regain Android
+ADB access if ABL remains available. Do not choose **UNINSTALL CFW**. Entering
+Android provides an inspection route; it does not itself prove or repair the
+Linux deployment. No physical action has been taken.
+
 ## Next gate
 
-Reestablish network or USB/physical access. Before another suspend test, read
-the live boot ID, kernel/version, bootc booted/staged/rollback deployments,
-Wi-Fi state, ESP image hashes, and candidate BTF. If the candidate did not
-boot cleanly, use the documented rollback/recovery path rather than repeating
-the apply blindly.
+Use the documented ABL mode selector to enter Android and reconnect ADB/USB,
+or restore Linux and reconnect SSH. Before another suspend test, read the live
+boot ID, kernel/version, bootc booted/staged/rollback deployments, Wi-Fi state,
+ESP image hashes, and candidate BTF. If the candidate did not boot cleanly,
+use the documented rollback/recovery path rather than repeating the apply
+blindly.

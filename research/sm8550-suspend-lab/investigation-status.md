@@ -6,7 +6,7 @@ the chronological record, including failed runs and superseded interpretations.
 Update this page when a checklist item changes; put raw output in a dated
 receipt and explain the result in the notebook.
 
-Status as of 2026-09-20 17:19 UTC. Branch `feat/sm8550-suspend-lab`.
+Status as of 2026-09-20 17:22 UTC. Branch `feat/sm8550-suspend-lab`.
 
 The sleep-stats offset question is closed: Android and Armada both resolve the
 SM8550 records at `+0x48` and `+0xb8`. Android's successful deep path advances
@@ -477,7 +477,7 @@ PCI D-state, manually change an ICC vote, or infer safe D3 support from
 
 - The last confirmed live device state was the stock Linux kernel `7.2.3`, boot
   ID `55fdad18-019d-4c92-8ebd-8a558574c1d3`, at 17:05 UTC before the candidate
-  apply request. At 17:19 UTC the device still did not answer SSH, ICMP, or
+  apply request. At 17:22 UTC the device still did not answer SSH, ICMP, or
   TCP/22; interface-scoped checks on the Mac's Wi-Fi reported the host down.
   ADB and USB discovery were empty. Its current OS, boot ID, rollback state,
   Wi-Fi, and ESP contents are unknown. Do not launch another reboot or suspend
@@ -492,12 +492,16 @@ PCI D-state, manually change an ICC vote, or infer safe D3 support from
 
 ## Next action
 
-Reestablish device access (network or USB/physical recovery), then immediately
-read boot ID, kernel/version, bootc booted/staged/rollback deployments, Wi-Fi,
-ESP `KERNEL`/`KERNEL.BAK` hashes, and candidate BTF. Do not run the suspend
-test until those checks establish the candidate or a known-good rollback is
-healthy and the preserved backup is still intact. The A/B remains unrun. The
-completed MC4/SH5 receipt is
+Use the documented ABL boot-mode selector to enter Android (power off, hold
+VOL- while powering on, then select **Switch Boot Mode** and choose Android),
+or restore Linux and attach USB if Android access is unavailable. Do not select
+**UNINSTALL CFW**. Once Android ADB or Linux SSH is available, read boot ID,
+kernel/version, bootc booted/staged/rollback deployments, Wi-Fi, ESP
+`KERNEL`/`KERNEL.BAK` hashes, and candidate BTF. Do not run the suspend test
+until those checks establish the candidate or a known-good rollback is healthy
+and the preserved backup is still intact. The A/B remains unrun. See the
+[ABL access notes](receipts/2026-09-20-post-apply-device-reachability.md) and
+completed MC4/SH5 receipt:
 [`rpmh-dcvs-pair-ab.md`](receipts/2026-09-20-rpmh-dcvs-pair-ab.md).
 
 The archived Linux trace and host reanalysis remain under

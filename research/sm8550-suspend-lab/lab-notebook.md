@@ -6795,3 +6795,13 @@ Ethernet route. An interface-scoped route lookup selected Wi-Fi (`en1`), where
 `.20` neighbor record remained stale. This confirms the device did not respond
 over either tested interface, but it does not distinguish a failed boot from
 Wi-Fi/network startup failure. No reboot was issued.
+
+A 17:22 UTC retry still found no SSH, ADB, or USB device. Source review found
+no remote or automatic kernel-hang recovery: `armada-bootimg-finalize` rolls
+back only when boot-image regeneration fails, and the Select boot hotkey only
+changes session mode after Linux userspace starts. The official Armada recovery
+guide documents entering ABL with VOL- while powering on, then choosing
+**Switch Boot Mode → Android**. This gives a concrete way to regain ADB if ABL
+is reachable; it does not repair or verify the Linux deployment. No physical
+action was taken. Details are in the
+[post-apply reachability receipt](receipts/2026-09-20-post-apply-device-reachability.md).
