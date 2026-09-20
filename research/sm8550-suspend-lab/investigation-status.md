@@ -6,7 +6,7 @@ the chronological record, including failed runs and superseded interpretations.
 Update this page when a checklist item changes; put raw output in a dated
 receipt and explain the result in the notebook.
 
-Status as of 2026-09-20 09:35 UTC. Repository branch
+Status as of 2026-09-20 09:44 UTC. Repository branch
 `feat/sm8550-suspend-lab`. Wireless ADB verified that the installed Android
 PCIe module matches the disassembled copy. Live split-BTF maps the connected-
 DRV `link_status` and the late-fixup/noirq gates; the successful Android
@@ -26,13 +26,20 @@ property. Android trace settings and sleep controls are restored; same boot
 and Wi-Fi/ADB are healthy, and no state was changed in the latest read-only
 check. Earlier direct `rtcwake -m mem` and unarmed-forceSuspend mistakes
 remain documented; do not repeat them. The user-supplied anchor
-`054766d5...` predates the current branch tip. The prepared Linux 7.2.3
-candidate config has `CONFIG_PCIE_QCOM=y` (even though `CONFIG_MODULES=y`),
-and Kbuild maps that setting to the built-in `pcie-qcom.o`; there is no
-`pcie-qcom.ko`. This is the candidate scratch config, not a fresh read of the
-currently installed Linux boot. A functional A/B therefore needs a newly
-linked kernel Image plus the Nova DTB, not a driver-module swap. Receipt:
-`receipts/2026-09-20-pcie-qcom-linkage-check.txt`.
+`054766d5...` predates the current branch tip. The candidate Linux 7.2.3
+config has `CONFIG_PCIE_QCOM=y` (even though `CONFIG_MODULES=y`), so Kbuild
+links `pcie-qcom.o` into the kernel and emits no `.ko`. This is also the
+package's normal configuration: ARM64 defconfig sets the symbol to `y`, the
+package override does not change it, and the standard build targets
+`Image dtbs modules`. The current device is Android, so this is not a live read
+of its installed Linux config. A functional A/B needs a linked kernel Image
+plus the Nova DTB, not a driver-module swap. Receipt:
+`receipts/2026-09-20-pcie-qcom-linkage-check.txt`. Wireless ADB now reports
+the Android kernel suffix `g697b78910a71-dirty` and RPN engineering build
+fingerprint. That commit is absent from the nearby public checkout and GitHub
+returns no commit for it; use exact installed-binary evidence and keep the
+public source labeled as a match, not the exact vendor tree. Receipt:
+`receipts/2026-09-20-android-kernel-build-identity.txt`.
 
 ## Current objective
 
@@ -67,6 +74,7 @@ open until measured.
 | Observed, exact Android PCIe branch and final staged TCS | A bounded `deep` run traced `cnss_pci_suspend()`/`cnss_pci_suspend_bus()` success, `msm_pcie_pm_control(mode=0)`, `msm_pcie_drv_suspend()`, and `qcom_pcie_icc_bw_update(0, 0)`. The exact binary stores `link_status=DRV(3)`; its root-port `SUSPEND_LATE` body requires `ENABLED(1)`, matching the absence of `msm_pcie_pm_suspend()`/`msm_pcie_clk_deinit()` hits. The noirq callback checks `enumerated`, `power_on`, and `apss_based_l1ss_sleep`; live pcie0 lacks the DT property setting the last flag, so the APSS/L1SS teardown body is skipped. The run stages 14 SLEEP/14 WAKE commands; MC0/SH0 SLEEP words are zero, LDOE1/LDOE3 requests are present, and APSS/AOSD/CXSD/DDR advance. Neither no OS-issued D-state setter calls nor post-resume D0 establishes physical PCI state during sleep. Receipt: `../../receipts/2026-09-20-android-exact-pcie-branch.md` and `../../receipts/2026-09-20-android-live-pcie-validation.md`. |
 | Observed, Android PCI PM callbacks | A separate short Android `deep` run saw successful normal/noirq suspend and resume callbacks for Qualcomm host, root port, and WCN endpoint. Kprobes for `pci_set_power_state()` and `pci_raw_set_power_state()` recorded no hits. This establishes no software D-state setter was observed, not the physical sleep-time state. Post-resume root and endpoint were D0 and WLAN was up. Trace settings/probes were cleaned and verified. Receipt: `../../receipts/2026-09-20-android-live-pcie-validation.md`. |
 | Observed, exact live Android modules/BTF | Wireless ADB reported the same fingerprint, slot `_a`, and kernel as the prior capture. The three installed modules match prior A-slot SHA-256 values; live split-BTF gives exact `msm_pcie_dev_t` offsets for `link_status=0x480`, `apss_based_l1ss_sleep=0x409`, `enumerated=0x535`, and `power_on=0x6a4`. These offsets anchor the exact binary branch reconstruction. This does not identify the missing vendor source revision or physical PCI state during sleep. Receipt: `../../receipts/2026-09-20-android-live-pcie-validation.md`. |
+| Observed, Android source identity check | Live `uname`/`/proc/version` report `5.15.123-android13-8-g697b78910a71-dirty`, Clang 14.0.7, and build time 2026-07-20; fingerprint is `qti/kalama/kalama:13/TKQ1.231222.001/eng.RPN.20260722.081626:user/release-keys`. The nearby public checkout is `93c5cc6ad1d0b807510cfa0fb1d06f47407881f9` on `lineage-23.2`; it does not contain the reported suffix, and GitHub's commit endpoint/search returns no matching commit. Exact vendor source is still unlocated; disassembly is from hash-matched installed modules. Receipt: `receipts/2026-09-20-android-kernel-build-identity.txt`. |
 | Observed, exact CNSS property fallback | The live pcie0 DT has `qcom,drv-name="lpass"` but no `qcom,drv-supported`. Disassembly of the hash-matched installed `cnss2.ko` shows `cnss_pci_update_drv_supported()` checks for the first property, then uses presence of `qcom,drv-name` as its fallback and stores the boolean. Thus the exact module enables its DRV-supported path for this host. Combined with the saved mode-0 trace and absent/default-zero switch type, the connected-DRV branch is established for that successful run. This does not prove physical PCI state while asleep. Receipt: [live DT and binary fallback](receipts/2026-09-20-android-live-dt-refresh.txt). |
 | Observed, live Android awake regulator summary | Read-only root access over Wireless ADB shows `pm_v6e_l1` active (`use=1`, `open=14`, 880 mV), including PCIe 0.9-V consumer `1c00000.qcom,pcie-vreg-0p9` at 80 mA and DSI0 PHY. `pm_v6e_l3` is active (`use=2`, `open=15`, 1200 mV), including PCIe 1.2-V consumer at 18 mA and DSI0. The `pm_v6e_l1_so` and `pm_v6e_l3_so` sleep-only proxy rows are idle with zero users while awake; UFS/USB/DP consumers shown in the excerpt are inactive. These are awake regulator-core accounting values, not proof of which loads or physical rails are active during suspend. Receipt: [Android awake regulator excerpt](receipts/2026-09-20-android-regulator-summary-awake.txt). |
 | Observed, host-side transport check | At 06:16 UTC the previously documented Android peer at `192.168.0.163` answered ping, but TCP/5555 and tested alternate access ports refused, ADB device/mDNS discovery was empty, and USB enumeration showed only the SanDisk drive. Current peer identity was not authenticated. No Android runtime state was collected or changed. Receipt: `../../receipts/2026-09-20-android-access-check.txt`. |
@@ -166,9 +174,12 @@ generic D3cold check or infer safe D3 support from `d3cold_allowed=1` alone.
   and no-client-vote properties, while pcie1 is disabled and carries them.
   This closes their applicability to the active host; exact ABL overlay
   provenance remains unproven.
-- [ ] Find the exact Android source/build revision if available. The live
-  installed modules are now identified by matching hashes and disassembled,
-  but source-level conclusions still rely on the nearby public match.
+- [x] Capture the exact running Android build identity and check the nearby
+  public checkout/GitHub for its kernel suffix. The suffix is not present; the
+  nearby source remains a public match, while exact installed-module
+  disassembly anchors runtime conclusions.
+- [ ] Obtain the matching vendor source tree or build source if it becomes
+  available; the public checks did not locate it.
 - [x] Identify the current Armada runtime PCIe compatible, bound endpoint,
   and live DT status. Root port is unbound, WCN is bound to ath12k, both are
   awake in D0; WCN is under pcie0. This is not a suspend-time snapshot.
@@ -291,8 +302,9 @@ generic D3cold check or infer safe D3 support from `d3cold_allowed=1` alone.
   the driver is built into the kernel despite general module support; a
   `.ko` replacement is not an option. This was read from the candidate scratch
   tree only; verify the production package config before a full build.
-- [ ] Reproduce/verify the exact packaged Nova kernel config and full-image
-  build path before spending time on a linked-kernel A/B.
+- [x] Verify the package's normal kernel config/build path. ARM64 defconfig
+  enables `PCIE_QCOM=y`, the package override does not demote it, and the
+  production script builds `Image dtbs modules`; see the linkage receipt.
 - [ ] Verify current Linux test-layer/rollback feasibility before deployment.
 - [ ] Run the A/B on Linux only after the test image and rollback are ready.
 - [ ] For any justified A/B, record all of the following at matched boundaries:

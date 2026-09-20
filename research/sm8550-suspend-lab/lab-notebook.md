@@ -6104,3 +6104,44 @@ device mutation was performed during this check. Next verify that the scratch
 config is reproduced by the package's actual kernel build path, then finish
 the Linux rollback audit before deciding whether a full linked-kernel A/B is
 worth building.
+
+### 2026-09-20 09:39 UTC — exact Android source commit remains unavailable
+
+Read-only Wireless ADB reports kernel
+`5.15.123-android13-8-g697b78910a71-dirty`, Clang 14.0.7 based on Android
+toolchain `r450784e`, build time 2026-07-20, and fingerprint
+`qti/kalama/kalama:13/TKQ1.231222.001/eng.RPN.20260722.081626:user/release-keys`.
+The nearby public `lineage-23.2` checkout is at
+`93c5cc6ad1d0b807510cfa0fb1d06f47407881f9`; it has no object for
+`697b78910a71`. GitHub's commit lookup returns HTTP 422 “No commit found,” and
+commit search returns no result. This does not prove the source is private or
+does not exist, but the currently available public tree is not the identified
+build revision. Continue labeling source comparisons provisional and base
+exact runtime-branch conclusions on the hash-matched installed-module
+disassembly. Full output is in
+`receipts/2026-09-20-android-kernel-build-identity.txt`.
+
+The device remains on the same Android boot with Wi-Fi up. This was an
+identity-only read; no suspend or device modification occurred.
+
+### 2026-09-20 09:44 UTC — package build confirms a linked-kernel test
+
+Compared the targeted-build config path with the checked-out Armada package
+(`armada-packages` `ffc331f`, kernel 7.2.3). The real package script starts
+from ARM64 `defconfig`, merges `config/armada-kernel.config.overrides`, and
+builds `Image dtbs modules`. The patched source's ARM64 defconfig sets
+`CONFIG_PCIE_QCOM=y`; the Armada override does not set that symbol. The
+targeted-build helper uses the same config steps and only narrows its build
+targets to `pcie-qcom.o` and the Nova DTB. This confirms the candidate follows
+the package's built-in driver configuration: a module swap is not possible,
+and a functional trial needs at least a linked Image plus the Nova DTB. No
+full build has started. Docker 28.2.2 is available on the aarch64 builder;
+the normal wrapper invokes Podman, which is absent, so an isolated Docker run
+would be needed unless Podman is otherwise supplied. Package/script details
+are in `receipts/2026-09-20-pcie-qcom-linkage-check.txt`.
+
+Expanded the public-source lookup: global commit search returned no result,
+and the nearby public repository exposes four branch heads without the
+reported Android suffix. This strengthens “not in the available public
+checkout/refs” but still does not prove the OEM source does not exist. The
+installed-module disassembly remains the exact runtime evidence.

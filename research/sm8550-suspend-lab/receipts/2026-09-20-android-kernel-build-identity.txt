@@ -1,0 +1,48 @@
+SM8550 suspend lab: live Android kernel identity
+Captured: 2026-09-20 09:38 UTC over Wireless ADB
+ADB serial: 192.168.0.163:42265
+
+Device output:
+  uname -a:
+    Linux localhost 5.15.123-android13-8-g697b78910a71-dirty #1 SMP PREEMPT
+    Mon Jul 20 10:48:54 UTC 2026 aarch64 Toybox
+  /proc/version:
+    Linux version 5.15.123-android13-8-g697b78910a71-dirty
+    (build-user@build-host) (Android clang 14.0.7, based on r450784e,
+    toolchain commit 4c603efb0cca074e9238af8b4106c30add4418f6)
+    #1 SMP PREEMPT Mon Jul 20 10:48:54 UTC 2026
+  ro.build.fingerprint:
+    qti/kalama/kalama:13/TKQ1.231222.001/eng.RPN.20260722.081626:user/release-keys
+  ro.build.version.incremental: eng.RPN.20260722.081626
+  ro.product.board: kalama
+  ro.boot.slot_suffix: _a
+  wlan0: UP
+
+Public-source lookup:
+  Nearby checkout:
+    /Volumes/NovaKernelBuild/source/android_kernel_ayn_qcs8550
+    branch lineage-23.2, HEAD
+    93c5cc6ad1d0b807510cfa0fb1d06f47407881f9 (2026-08-05, "tmp")
+  `git cat-file -t 697b78910a71` in that checkout:
+    fatal: Not a valid object name
+  `gh api repos/Ayn8550Dev/android_kernel_ayn_qcs8550/commits/697b78910a71`:
+    No commit found for SHA (HTTP 422)
+  `gh search commits '697b78910a71' --repo Ayn8550Dev/android_kernel_ayn_qcs8550`:
+    no matching result
+  Global `gh search commits '697b78910a71'`:
+    no matching result
+  `git ls-remote --heads` for the nearby public repository:
+    four refs (`dj/dual-panel-notifiers`, `dj/erm`, `lineage-23.2`,
+    `lineage-24.0`); none has the reported suffix as its tip.
+
+Conclusion:
+  The running image identifies a vendor/RPN kernel build whose reported git
+  suffix is not available in the nearby public repository. This does not prove
+  the source is private or nonexistent, only that this checkout and GitHub
+  lookup do not contain it. Treat the public source as a close match, not the
+  exact vendor source. Exact module hashes and disassembly remain the stronger
+  evidence for runtime branch behavior.
+
+Scope:
+  Read-only identity query. No suspend, source fetch, module change, or Android
+  device setting was changed.

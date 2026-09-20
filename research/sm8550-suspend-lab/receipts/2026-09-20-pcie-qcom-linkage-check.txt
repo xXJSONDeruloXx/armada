@@ -34,3 +34,18 @@ Scope and device state:
   Wireless ADB currently reports Android kernel
   5.15.123-android13-8-g697b78910a71-dirty on the Nova with wlan0 up. No
   Android or Linux device state was modified.
+
+Cross-check against the package build path (2026-09-20 09:43 UTC):
+  armada-packages checkout: branch fix-steam-charging-eta, commit ffc331f,
+  clean worktree; kernel/BASE.env says VERSION=7.2.3.
+  kernel/scripts/build-kernel.sh runs ARM64 `defconfig`, merges
+  config/armada-kernel.config.overrides, then builds `Image dtbs modules`.
+  kernel/config/armada-kernel.config.overrides contains no PCIE_QCOM setting.
+  The exact patched source tree's arch/arm64/configs/defconfig has
+  CONFIG_PCIE_QCOM=y, so the production package path also builds this driver
+  in. The external partial-build script differs from the package script only
+  in source reuse and limiting step 5 to pcie-qcom.o plus the Nova DTB; its
+  defconfig and override merge are the same.
+  The host has Docker 28.2.2 reporting linux/aarch64; the package wrapper
+  calls Podman, which is not installed here. The pinned Fedora builder image
+  is in toolchain.env. No full Image/modules build has been started.
