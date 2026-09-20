@@ -1,0 +1,11 @@
+[Unit]
+Description=Automatic rollback guard for the temporary Nova PCIe OPP test
+ConditionPathExists=/usr/lib/armada/suspend-lab/pcie-opp-test-rollback
+
+[Timer]
+OnBootSec=5min
+AccuracySec=1s
+Unit=sm8550-pcie-opp-test-rollback.service
+
+[Install]
+WantedBy=timers.target

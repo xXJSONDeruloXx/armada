@@ -6,7 +6,28 @@ the chronological record, including failed runs and superseded interpretations.
 Update this page when a checklist item changes; put raw output in a dated
 receipt and explain the result in the notebook.
 
-Status as of 2026-09-20 19:23 UTC. Branch `feat/sm8550-suspend-lab`.
+Status as of 2026-09-20 20:18 UTC. Branch `feat/sm8550-suspend-lab`.
+
+## Current goal checklist
+
+- [x] Treat Android's sleep behavior as a reference; do not mount Android
+  expecting its kernel code to run or force-load Android `.ko` files into
+  Linux.
+- [x] Recheck live Linux: stock 7.2.3 is healthy, bootc is at the default
+  image with no staged/rollback deployment, and both PCIe functions are in D0.
+- [x] Narrow the PCIe test: s2idle selects the existing 1,000 kB/s
+  `opp-suspend` OPP; the diagnostic changes only the memory-path peak for the
+  direct-deep, host-unsuspended fallback, preserving `low_svs`.
+- [x] Confirm there is no exposed PCIe OPP sysfs control and the public
+  dynamic OPP API cannot define bandwidth for a new runtime OPP.
+- [x] Prepare a candidate-specific systemd rollback guard, build its OCI
+  image from cached artifacts, and verify the timer and marker in-container.
+  The image has not been staged or applied.
+- [x] Verify the rollback command reboots into the previous deployment and
+  that the automatic bootc update timer is masked on the device.
+- [ ] Explain the previous candidate boot's missing SSH observation and
+  establish recovery for failures before systemd. Do not boot the candidate
+  or run another suspend A/B until this gate is met.
 
 ## Latest device recovery state
 
@@ -24,6 +45,28 @@ boot-image updater has regenerated stock `/KERNEL`; root-level hashes for
 `KERNEL` and `KERNEL.BAK` are both the pre-test stock hash, and the active
 image-ID stamp is stock. The candidate's stale queue and stamp mismatch are
 resolved. See the [Android rollback receipt](receipts/2026-09-20-android-esp-rollback.md).
+
+A read-only SSH check at 19:45 UTC reconfirmed the same boot ID and bootc
+default state. PCIe root port `0000:00:00.0` and WCN endpoint
+`0000:01:00.0` are both D0; the host remains bound to `qcom-pcie` and the
+endpoint to `ath12k_wifi7_pci`. The PCIe host's sysfs tree exposes no runtime
+OPP/devfreq control. The original and guarded candidate OCI images and pinned
+base remain in rootful Podman storage, with 30 GB free on `/var`; none is
+staged. Use guarded tag `20260920-02`, manifest digest
+`sha256:b4560e90b4dfba8631a47c69de91bdcde7f491fa3fb47299b73d828de8e076e0`
+and version `20260920.pcie-opp-test-guarded-01`. The older guarded tag
+`20260920-01` has an ambiguous version marker and is superseded. The final
+image's units and marker pass in-container checks. See the
+[guarded-candidate receipt](receipts/2026-09-20-pcie-opp-guarded-candidate.md).
+
+A further read-only check at 20:18 UTC still finds the same stock boot ID and
+kernel. `bootc rollback --apply` is documented on-device to reboot into the
+previous deployment, and `bootc-fetch-apply-updates.timer` is masked/inactive,
+so it will not automatically undo the rollback during a test. The attached
+464-GB card is mounted at `/run/media/armada/sd`, but it is storage, not an
+independent boot-control channel. The host reports no ADB or fastboot device;
+the Linux UDC exists but no USB gadget configuration is mounted. This adds no
+recovery path for a kernel/initramfs failure before systemd.
 
 Before rebooting from Android to Linux, I reasserted `adb_wifi_enabled=1` and
 `persist.adb.tls_server.enable=1`; legacy TCP ADB remained unset. This booted
@@ -525,20 +568,26 @@ PCI D-state, manually change an ICC vote, or infer safe D3 support from
   offsets. The corrected RPMh probe was loaded only for the completed A/B; the
   device was rebooted afterward and its request cache is cleared. The probe is
   now absent; do not reload it for the next experiment.
+- The on-device `sm8550-pcie-test-rollback.timer` is disabled. Its service is
+  conditioned on `pcie_ports=compat` being absent, so it would not guard the
+  current OPP candidate, which retains `pcie_ports=compat`. Do not treat the
+  old timer as recovery coverage.
 
 ## Next action
 
-The stock Linux boot is healthy and boot selection is normalized. Next inspect
-the candidate kernel/DT changes and the available boot logs to explain why its
-first deployment did not return SSH; the candidate image is still local and
-can be restaged without a full rebuild. Do not rerun it until a concrete
-recovery/observation plan is ready. The retained journal has no candidate boot
-ID and pstore is empty, so current Linux cannot identify the stall stage. The
-PCIe-MEM OPP A/B remains unrun. Do not directly load Android modules; port
-behavior against Linux 7.2.3. For persistent Android Wireless debugging, wait
-until Android is reachable and add a Magisk late-start helper rather than
-editing its unmounted userdata from Linux. Do not select **UNINSTALL CFW** in
-ABL if recovery is needed. See the
+The stock Linux boot is healthy and boot selection is normalized. The exact
+candidate boot failure stage is still unknown: there is no separate candidate
+boot ID or pstore record. A candidate-only rollback timer is now built into a
+guarded OCI image and verified, but that image is not staged. It can recover a
+boot that reaches systemd, not a kernel or initramfs hang before systemd. Do
+not stage or reboot the candidate, or run another suspend A/B, until an
+observation and recovery path covers that early-boot gap. The PCIe-MEM OPP
+A/B remains the best single-variable test once this gate is met. Do not
+directly load Android
+modules; port behavior against Linux 7.2.3. For persistent Android Wireless
+debugging, wait until Android is reachable and add a Magisk late-start helper
+rather than editing its unmounted userdata from Linux. Do not select
+**UNINSTALL CFW** in ABL if recovery is needed. See the
 [Android rollback receipt](receipts/2026-09-20-android-esp-rollback.md),
 [ABL access notes](receipts/2026-09-20-post-apply-device-reachability.md), and
 completed MC4/SH5 receipt:

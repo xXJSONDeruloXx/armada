@@ -6980,3 +6980,139 @@ has an unexplained boot failure and its rollback timer is disabled. Keep the
 working stock boot; next resolve boot observability/recovery before staging a
 candidate again. Full findings are in
 [Android module reuse analysis](android-module-reuse.md).
+
+### 2026-09-20 19:58 UTC — Linux OPP test narrowed; current rollback guard is mismatched
+
+Read-only SSH recheck confirms the Nova remains on stock Armada 7.2.3, boot ID
+`aa40c55e-d558-46a9-a710-3a7d926b9e9e`, with `systemd` reporting `running`.
+`bootc status --json` shows the original beta digest booted, default boot
+order, and no staged or rollback deployment. `/var` has 30 GB free; the
+previous OPP candidate image remains in rootful Podman storage. The Qualcomm
+root port `0000:00:00.0` is bound to `qcom-pcie`, and WCN endpoint
+`0000:01:00.0` is bound to `ath12k_wifi7_pci`; both report D0 and
+`d3cold_allowed=1`. The PCIe platform-device sysfs tree has no exposed OPP or
+devfreq control. No suspend, reboot, module insertion, vote change, or power
+configuration change was made.
+
+Source recheck of the exact Linux 7.2.3 test tree and Armada patches 0513/0520
+clarifies the A/B scope. `qcom_pcie_suspend_noirq()` first calls the
+DesignWare suspend path. If the host is suspended, deep mode drops the OPP.
+If the host stays active after the D3cold veto, the ordinary direct-deep
+fallback does not select an OPP for an OPP-managed controller, so the active
+500,000/1,000,000 kB/s memory request can remain. The existing non-S2RAM
+`opp-suspend` route (including s2idle) already selects the 1,000 kB/s OPP
+from patch 0520, with its `min_svs` required corner. The test-only deep-mode
+OPP uses `low_svs` like the active 5 GT/s x1 link and changes only the
+PCIe-MEM peak to 1,000 kB/s; it intentionally leaves the regular s2idle OPP
+and CPU path unchanged. This remains the cleanest available A/B for the
+observed direct-deep floor, but it is not proof that bandwidth alone explains
+the zero AOSD/CXSD/DDR records.
+
+There is no clean stock-runtime OPP switch exposed to userspace. In the
+matching 7.2.3 OPP API, the dynamic `dev_pm_opp_data` contains frequency,
+voltage, level, and turbo fields, but no interconnect bandwidth. A temporary
+module could select an existing table entry, but the only existing 1,000
+kB/s entry requires `min_svs`, so using it would change both bandwidth and
+power-domain corner. It would not reproduce the isolated `low_svs` diagnostic
+entry. The kernel/DT candidate remains necessary for that single-variable
+test.
+
+The existing on-device rollback unit is not a guard for this candidate:
+`sm8550-pcie-test-rollback.timer` is disabled, and its service condition only
+runs when `pcie_ports=compat` is absent. Both the restored stock boot and OPP
+candidate use `pcie_ports=compat`. The earlier candidate failure still has no
+separate boot ID or pstore trace; "Preparing Armada" and missing SSH remain
+the only observed symptoms. A candidate-specific, image-marked timer could
+roll back if systemd starts, but cannot recover a kernel/initramfs failure
+before systemd. Do not stage or reboot the OPP image while that early-boot
+recovery gap remains. Next prepare and syntax-check the candidate-only guard,
+then find an independent observation/recovery path for a pre-systemd stall.
+
+### 2026-09-20 20:05 UTC — candidate-only rollback guard prepared
+
+Added a candidate image marker, a systemd oneshot service that runs
+`/usr/bin/bootc rollback --apply`, and an enabled timer scheduled five minutes
+after boot. Both units check for the marker, which exists only in the
+diagnostic candidate. The candidate Containerfile installs these files and
+enables the timer under `timers.target`; the production Armada image and
+currently booted system were not changed.
+
+Copied only the two unit files to `/tmp` on the live Nova, ran
+`systemd-analyze verify` against them, observed exit status 0, and removed the
+temporary copies. No image layer was built or staged. The guard can recover a
+candidate that reaches systemd but does not return SSH; it cannot help if the
+kernel or initramfs hangs before systemd. The existing disabled
+`sm8550-pcie-test-rollback.timer` has a `!pcie_ports=compat` condition and is
+not a fallback for this OPP test. Keep the candidate unapplied until the
+pre-systemd recovery gap is addressed; if a systemd-only guard is accepted as
+partial coverage later, keep it armed through the short A/B and disarm it only
+after the evidence is collected.
+
+### 2026-09-20 20:10 UTC — guarded OPP image built and verified, not staged
+
+Built `localhost/armada-pcie-opp-test-guarded:20260920-01` on the Nova from
+the pinned Armada beta base using the already-built candidate kernel and Nova
+DTB. The kernel and DTB SHA-256 checks passed. Manifest digest is
+`sha256:e2ea9a924bd82606036d9f9b0938ba51be850b1633d0895e8a6960b50b21b302`
+(reported image size 12.6 GB). The candidate rollback timer is enabled in the
+image and gated by a marker file that exists only in that image.
+
+The first `podman run` inspections failed before launching their commands
+because the device's Netavark/nftables setup rejects isolated networking.
+Retrying with `--network=host` succeeded: `systemd-analyze verify` returned 0,
+the marker exists, the `timers.target.wants` symlink points to the timer, and
+the image version marker is `20260920.pcie-opp-test-01`. This follows the
+already-used build workaround; it did not change device networking policy.
+
+Post-build `bootc status --json` still shows the stock beta deployment booted,
+default boot order, and no staged or rollback image. Boot ID remains
+`aa40c55e-d558-46a9-a710-3a7d926b9e9e`; `/var` still reports 30 GB free. No
+kernel, DTB, boot partition, or active systemd unit changed. The only device
+changes are the copied scratch context and local rootful OCI image. Full
+artifact and command details are in the
+[guarded-candidate receipt](receipts/2026-09-20-pcie-opp-guarded-candidate.md).
+
+The five-minute guard is useful only if the candidate reaches systemd. It does
+not solve the unknown pre-systemd boot failure, so the guarded image remains
+unstaged and no suspend A/B was run. The next gate is an independent way to
+observe/recover a pre-systemd stall or an attended recovery window; then the
+guarded candidate can be used for the single-variable PCIe-MEM OPP test.
+
+### 2026-09-20 20:14 UTC — guarded image has a unique boot version
+
+The first guarded image reused the unguarded candidate's
+`/usr/lib/armada/version` string, which would make boot identification
+ambiguous. Updated the image recipe and built a fresh unique tag:
+`localhost/armada-pcie-opp-test-guarded:20260920-02`, version
+`20260920.pcie-opp-test-guarded-01`, manifest digest
+`sha256:b4560e90b4dfba8631a47c69de91bdcde7f491fa3fb47299b73d828de8e076e0`.
+The two guarded image tags remain local; `20260920-01` is superseded and is
+not the one to stage. The final image's kernel/DTB hash checks passed,
+`systemd-analyze verify` returned 0 inside the image, its candidate marker and
+enabled timer link are present, and the pinned stock base has neither marker
+nor timer link.
+
+Post-build checks still show the same stock boot ID, bootc default order, and
+no staged/rollback deployment. No reboot or suspend was run. The timer is
+recovery for a boot that reaches systemd; it does not address the unknown
+early-boot gap.
+
+### 2026-09-20 20:18 UTC — rollback semantics and remote recovery rechecked
+
+The Nova is still reachable over SSH on the same stock Linux 7.2.3 boot
+(`aa40c55e-d558-46a9-a710-3a7d926b9e9e`). `bootc rollback --help` confirms
+that `--apply` reboots into the deployment queued as rollback. The
+`bootc-fetch-apply-updates.timer` is masked and inactive, so Armada's automatic
+update agent will not race the diagnostic rollback. The guard is therefore
+valid for a candidate that reaches systemd and can persistently request the
+previous deployment.
+
+The host sees no ADB or fastboot device from the USB connection. On Linux, an
+UDC is present, but configfs has no USB gadget configuration; this does not
+provide an out-of-band console. A 464-GB SD card is mounted at
+`/run/media/armada/sd`, which could hold captured logs but cannot recover an
+early boot. The failure boundary remains: a kernel/initramfs hang before
+systemd can start the five-minute timer, and no independent reset/boot control
+is currently available remotely. The guarded OPP image remains unstaged.
+
+No suspend, reboot, update, storage write, or boot-order change was performed.

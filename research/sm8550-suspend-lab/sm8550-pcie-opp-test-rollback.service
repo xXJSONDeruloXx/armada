@@ -1,0 +1,8 @@
+[Unit]
+Description=Roll back the temporary Nova PCIe OPP test if not cleared
+ConditionPathExists=/usr/lib/armada/suspend-lab/pcie-opp-test-rollback
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/bootc rollback --apply
+TimeoutStartSec=180
