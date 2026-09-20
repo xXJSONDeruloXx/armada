@@ -6,7 +6,7 @@ the chronological record, including failed runs and superseded interpretations.
 Update this page when a checklist item changes; put raw output in a dated
 receipt and explain the result in the notebook.
 
-Status as of 2026-09-20 14:47 UTC. Branch `feat/sm8550-suspend-lab`.
+Status as of 2026-09-20 14:52 UTC. Branch `feat/sm8550-suspend-lab`.
 
 The sleep-stats offset question is closed: Android and Armada both resolve the
 SM8550 records at `+0x48` and `+0xb8`. Android's successful deep path advances
@@ -45,8 +45,9 @@ write an ICC vote. The candidate object, Nova DTB, linked `vmlinux`, and
 `Image` exist in the external scratch tree. The original linked image was
 blocked because its config omitted scheduler-extension options enabled on the
 device. I restored the scratch `.config` through Kconfig; it now byte-matches
-the live config, but the Image/DTB have not been rebuilt with it. Rebuild and
-verify artifacts, then establish a reversible boot layer before any test. See
+the live config, but the Image/DTB have not yet been rebuilt with it. The
+matching-config `Image dtbs` rebuild is now running; after it exits, verify
+artifacts and establish a reversible boot layer before any test. See
 the [config-reconcile receipt](receipts/2026-09-20-pcie-opp-config-reconcile.md).
 The currently installed base is `ghcr.io/armada-os/armada:beta` at digest
 `sha256:5fe995d5fedf5034ee42a8f0e54dbd2d08e0c85adb9e3f88cfd52e55636eeb88`;
@@ -55,6 +56,9 @@ cannot be reused verbatim. The base layers total 6.07 GB compressed, while
 `/var` has 37 GB free and the rootful Podman store does not contain the base.
 Check unpacked space requirements before pulling or building a new layer. See
 the [bootc base receipt](receipts/2026-09-20-bootc-base-and-space.md).
+The device is currently on Armada Linux and reachable over SSH; ADB has no
+attached target. The user confirmed Linux is Nova's default boot, so an ADB
+reboot from Android returns to Linux when Android ADB is available.
 
 ## Latest Android suspend attempt (historical)
 

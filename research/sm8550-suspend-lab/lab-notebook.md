@@ -6615,3 +6615,15 @@ base's compressed OCI layers total about 5.65 GiB before extraction or bootc
 staging. I have not pulled it; first budget the unpacked storage so the build
 does not crowd the live device. No deployment changed. Details are in the
 [bootc base/space receipt](receipts/2026-09-20-bootc-base-and-space.md).
+
+### 2026-09-20 14:52 UTC — Linux SSH is available; matching-config rebuild is active
+
+The user confirmed Armada Linux is Nova's default boot; if the device is on
+Android with ADB available, an ADB reboot returns to Linux. At this check,
+`adb devices -l` had no Android target, while SSH alias `armada` returned the
+Nova on kernel `7.2.3`, boot ID
+`cd02fc51-33c5-4b1a-96a7-75a17eb98b30`. The device remains on its unchanged
+Linux deployment. The diagnostic `Image dtbs` rebuild is active in the
+external AArch64 build container (274% CPU at the check); the Image and Nova
+DTB timestamps are still from the prior build, so they must not be deployed
+yet. No device reboot, overlay, RPMh change, or test module was applied.
