@@ -20,7 +20,7 @@ install() {
     inst_simple "$moddir/marker" \
         /usr/lib/armada/suspend-lab/pcie-opp-test-rollback
 
-    mkdir -p "$initdir/$systemdsystemunitdir/basic.target.wants"
+    mkdir -p "$initdir/$systemdsystemunitdir/sysinit.target.wants"
     ln -s ../sm8550-pcie-opp-initrd-recover.timer \
-        "$initdir/$systemdsystemunitdir/basic.target.wants/sm8550-pcie-opp-initrd-recover.timer"
+        "$initdir/$systemdsystemunitdir/sysinit.target.wants/sm8550-pcie-opp-initrd-recover.timer"
 }

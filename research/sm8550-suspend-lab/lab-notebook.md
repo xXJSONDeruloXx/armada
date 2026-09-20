@@ -7489,3 +7489,24 @@ it. No Android partition was mounted or read, and no module, boot, or suspend
 state was changed. This is a live-state confirmation of the compatibility
 boundary in [`android-module-reuse.md`](android-module-reuse.md), not a new
 sleep-contract experiment.
+
+### 2026-09-20 23:35 UTC — initrd guard starts from `sysinit.target`
+
+The Nova's systemd 259 `basic.target` requires and follows `sysinit.target`,
+and `initrd.target` requires and follows `basic.target`. Moved the
+candidate-only recovery timer link to `sysinit.target.wants` and ordered it
+before `sysinit.target`. The timer now starts while sysinit dependencies are
+pending, earlier than the previous basic-target link; it still cannot run if
+the kernel or initrd systemd fails before the initrd target transaction queues
+`sysinit.target`.
+
+Built candidate image `localhost/armada-pcie-opp-test-initrd-guard:20260920-06`
+with the existing kernel/DTB artifacts and no kernel compile. Hash checks and
+the initrd link/content assertions passed. The generated initramfs contains
+the expected sysinit wants-link, timer ordering, and executable helper. The
+image remains local to rootful Podman; SSH still reports stock kernel `7.2.3`
+and boot ID `aa40c55e-d558-46a9-a710-3a7d926b9e9e`, and OSTree lists only the
+booted default deployment. No deployment was staged, and no ESP file, boot
+order, or suspend state changed. Manual ABL recovery is still required before
+the OPP A/B. See the
+[`sysinit guard build receipt`](receipts/2026-09-20-initrd-sysinit-guard-build.md).

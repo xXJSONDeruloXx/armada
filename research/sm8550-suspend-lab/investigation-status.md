@@ -6,7 +6,7 @@ the chronological record, including failed runs and superseded interpretations.
 Update this page when a checklist item changes; put raw output in a dated
 receipt and explain the result in the notebook.
 
-Status as of 2026-09-20 22:58 UTC. Branch `feat/sm8550-suspend-lab`.
+Status as of 2026-09-20 23:35 UTC. Branch `feat/sm8550-suspend-lab`.
 
 ## Current goal checklist
 
@@ -60,8 +60,10 @@ Status as of 2026-09-20 22:58 UTC. Branch `feat/sm8550-suspend-lab`.
 - [ ] Locate the previous candidate boot's SSH loss and cover failures before
   the initrd timer starts. The prior journal proves a clean bootc apply and
   boot-image rewrite, but there is no persistent journal for the subsequent
-  candidate boot. The timer cannot recover a kernel/initrd-systemd hang; do
-  not stage again until manual ABL recovery is available for that gap.
+  candidate boot. The newest candidate starts its timer from `sysinit.target`,
+  but cannot recover a kernel failure or an initrd systemd failure before that
+  target transaction is queued. Do not stage again until manual ABL recovery
+  is available for the remaining gap.
 
 ## Latest device recovery state
 
@@ -71,18 +73,24 @@ units; Wi-Fi/SSH and the Gamescope Steam session are active. Steam CEF reports
 Big Picture, Main Menu, and Quick Access pages. The display itself was not
 captured.
 
-At 22:43 UTC a new candidate image was built and verified in rootful Podman:
-`20260920-05`, version `20260920.pcie-opp-test-initrd-guard-03`, manifest
-digest `sha256:ee083828400828329df59ad7ca9084a8a745894d95831efeb8e77a1f1d5688cc`.
-Its generated initramfs contains the recovery timer under
-`basic.target.wants`; the timer is ordered before `basic.target` and
-`dracut-pre-mount.service`. Both initrd and real-root rollback units pass
-`systemd-analyze verify`. The image is only in local Podman storage: bootc
-still reports the original default deployment, `staged=null`, and no rollback.
-The boot ID and running kernel did not change. This earlier timer still cannot
-cover a kernel failure or initrd systemd failure before the `basic.target`
-transaction starts; manual ABL recovery remains necessary for that gap. See
-the [early-target guard receipt](receipts/2026-09-20-initrd-guard-early-target-build.md).
+At 23:35 UTC a new candidate image was built in rootful Podman:
+`20260920-06`, version `20260920.pcie-opp-test-initrd-guard-04`, manifest
+digest `sha256:21ba7a30b3585f3f438b32a1dbd8e4d4c2435d7ab968e9b91ed39acfa4a3cad6`.
+Its generated initramfs contains the recovery timer in
+`sysinit.target.wants`; the timer is ordered before `sysinit.target`,
+`basic.target`, `dracut-pre-mount.service`, and `initrd-switch-root.target`.
+On the device, `basic.target` requires and follows `sysinit.target`, while
+`initrd.target` requires and follows `basic.target`. The guard therefore starts
+earlier in the initrd transaction than the previous `basic.target.wants`
+version. `systemd-analyze verify` passed for the recovery units in isolation;
+full-initrd verification reports the existing `armada-splash-initrd.service`
+`KillMode=none` warning. The image is only in local Podman storage; the running
+kernel remains `7.2.3`, boot ID `aa40c55e-d558-46a9-a710-3a7d926b9e9e`, and
+`ostree admin status` lists only the booted default deployment. No image is
+staged, and no ESP/boot state changed. This still cannot recover a kernel
+failure or a systemd failure before the initrd queues `sysinit.target`; manual
+ABL recovery remains the safeguard for that gap. See the
+[sysinit guard receipt](receipts/2026-09-20-initrd-sysinit-guard-build.md).
 
 The test deployment has been removed from OSTree with
 `rpm-ostree cleanup --pending`; `bootc status` is now `bootOrder=default`,
@@ -717,17 +725,17 @@ PCI D-state, manually change an ICC vote, or infer safe D3 support from
 
 The stock Linux boot remains the only deployed boot; the candidate is not
 staged. Its exact prior failure stage is unknown because no candidate boot ID
-or pstore record survived. The newest `20260920-05` candidate starts its
-120-second initrd timer from `basic.target.wants` and orders the timer before
-`basic.target` and `dracut-pre-mount.service`; it restores the known stock ESP
-image if switch-root has not begun. The existing five-minute root-systemd
-timer covers later failures. Neither timer can help if the kernel or initrd
-systemd fails before the `basic.target` transaction starts. No remote
-ABL/BootNext route is exposed, so that residual case still needs manual ABL
-recovery. Do not stage or reboot the candidate until that manual recovery is
-available. The PCIe-MEM OPP A/B remains the best single-variable test once this
-gate is met. Do not directly load Android modules; port behavior against Linux
-7.2.3. For persistent Android Wireless debugging, wait
+or pstore record survived. The newest `20260920-06` candidate starts its
+120-second initrd timer from `sysinit.target.wants`, before that target becomes
+active; it restores the known stock ESP image if switch-root has not begun.
+The existing five-minute root-systemd timer covers later failures. Neither
+timer can help if the kernel fails or initrd systemd fails before the
+`sysinit.target` transaction starts. No remote ABL/BootNext route is exposed,
+so that residual case still needs manual ABL recovery. Do not stage or reboot
+the candidate until that manual recovery is available. The PCIe-MEM OPP A/B
+remains the best single-variable test once this gate is met. Do not directly
+load Android modules; port behavior against Linux 7.2.3. For persistent
+Android Wireless debugging, wait
 until Android is reachable and add a Magisk late-start helper rather than
 editing its unmounted userdata from Linux. Do not select **UNINSTALL CFW** in
 ABL if recovery is needed. See the
