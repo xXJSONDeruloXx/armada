@@ -6,7 +6,7 @@ the chronological record, including failed runs and superseded interpretations.
 Update this page when a checklist item changes; put raw output in a dated
 receipt and explain the result in the notebook.
 
-Status as of 2026-09-20 14:06 UTC. Branch `feat/sm8550-suspend-lab`.
+Status as of 2026-09-20 14:24 UTC. Branch `feat/sm8550-suspend-lab`.
 
 The sleep-stats offset question is closed: Android and Armada both resolve the
 SM8550 records at `+0x48` and `+0xb8`. Android's successful deep path advances
@@ -37,9 +37,17 @@ proven and `CONFIG_MODVERSIONS` is disabled.
 
 The exact Android source commit remains unidentified; runtime claims are
 anchored by hash-matched binaries, live DT, and traces, with nearby public
-source labeled as a match only. The prepared PCIe low-bandwidth OPP remains a
-reviewed fallback, not the first test. Its object and DTB passed targeted
-builds, but no linked image containing that change or bootc layer was built.
+source labeled as a match only. The current candidate A/B is a Nova-only OPP
+that keeps the active Gen2 x1 `low_svs` RPMh corner while lowering only the
+PCIe-MEM peak request from 500000 to 1000 kB/s; the CPU path remains 1 kB/s.
+It uses the normal OPP path and does not bypass PCI eligibility or directly
+write an ICC vote. The candidate object, Nova DTB, linked `vmlinux`, and
+`Image` exist in the external scratch tree, but that `Image` is not deployable:
+its config disables `SCHED_CLASS_EXT` and omits three scheduler-extension
+symbols enabled on the device. The Armada build fragment explicitly requires
+`SCHED_CLASS_EXT=y`. Rebuild and verify config/image/DTB, then establish a
+reversible boot layer before any test. See the
+[artifact config gate](receipts/2026-09-20-pcie-opp-image-config-gate.md).
 
 ## Latest Android suspend attempt (historical)
 
@@ -75,11 +83,16 @@ manually changing shared bandwidth/regulator requests.
   version, suspend selection/stats, and absence of the test module. Harness
   cleanup removed its trace instance before reboot; post-boot tracefs inventory
   requires root and was not independently read.
-- [ ] Reassess the retained PCIe/MC0/SH0 floor using source and existing
-  receipts; identify a safe way to test it without bypassing PCI D3cold checks
-  or manually changing an ICC vote.
-- [ ] If no safe single-variable A/B follows from that audit, document the
-  missing fact instead of deploying a behavioral patch.
+- [x] Attribute the retained MC0/SH0 floor to PCIe's only nonzero SLEEP-tagged
+  request and check the PCIe OPP semantics against source and trace.
+- [x] Prepare a device-scoped diagnostic OPP that retains the currently used
+  `low_svs` corner and lowers only PCIe-MEM bandwidth; it does not bypass PCI
+  D3cold eligibility or directly alter an ICC vote.
+- [ ] Restore the live scheduler config in the scratch build, rebuild and
+  inspect the candidate artifacts, then prove a reversible deployment path.
+- [ ] Run one RTC-bounded deep A/B only if the artifact and rollback gates
+  pass. Record the command set, residency counters, PSCI result, resume, and
+  Wi-Fi state; do not use battery drain as the short-run verdict.
 
 ## Closed question: sleep-stat offsets
 
@@ -187,11 +200,12 @@ Detailed extraction, hashes, and ELF offsets: [module receipt](../../receipts/20
 
 The Wi-Fi-off A/B reduced the MC0/SH0 word from 952 to 476 without advancing
 AOSD/CXSD/DDR; binding `pcieport` also left the root veto and counters
-unchanged. A reviewed Nova-only low-bandwidth OPP proposal remains a possible
-later experiment, but source review must first establish that it preserves the
-active WCN path and is deployable with a targeted build. Do not bypass the
-generic D3cold check, force a PCI D-state, manually change an ICC vote, or infer
-safe D3 support from `d3cold_allowed=1` alone.
+unchanged. The selected OPP A/B keeps the active link's `low_svs` power-domain
+corner and reduces only PCIe-MEM from 500000 to 1000 kB/s. It remains
+undeployed because the linked scratch image dropped scheduler-extension config
+options required on the device. Do not bypass the generic D3cold check, force a
+PCI D-state, manually change an ICC vote, or infer safe D3 support from
+`d3cold_allowed=1` alone.
 
 ## Work checklist
 
@@ -324,18 +338,20 @@ safe D3 support from `d3cold_allowed=1` alone.
   RPMh requests; do not blindly copy proxy properties or assume
   `regulator-state-mem` works in the current mainline driver.
 
-### 4. Choose one A/B after the source gate
+### 4. Selected A/B and deployment gate
 
 - [x] Rank the retained PCIe bandwidth request as the strongest directly
   observed Linux-side correlate; preserve other differences as alternatives,
   not proven causes.
 - [x] Identify the exact Android baseline MC4/SH5 SLEEP and WAKE_ONLY pair.
-- [x] Select that pair as the preferred first test-only A/B because it leaves
-  active PCIe/WCN bandwidth, PCI state, and shared regulators unchanged.
-- [x] Keep the Nova-only 1,000 kB/s OPP proposal as a reviewed alternate. Its
-  targeted object and DTB passed isolated checks; the full linked image and
-  bootc layer were not built. See the
-  [build receipt](receipts/2026-09-20-nova-opp-target-build.md).
+- [x] Run the MC4/SH5 pair as the first test-only A/B. It left active PCIe/WCN
+  bandwidth, PCI state, and shared regulators unchanged, but it did not
+  restore the observed AOSD/CXSD/scalar DDR counters.
+- [x] Select the Nova-only 1,000 kB/s PCIe-MEM OPP reduction as the next
+  diagnostic A/B. Its target object, Nova DTB, linked `vmlinux`, and `Image`
+  exist in the scratch tree, but the image config dropped live scheduler
+  options. See the [target-build receipt](receipts/2026-09-20-nova-opp-target-build.md)
+  and [config-gate receipt](receipts/2026-09-20-pcie-opp-image-config-gate.md).
 - [x] Reboot Android to the Nova's default Linux and verify bootc current and
   rollback deployments. Both use the same digest; no image layer was changed.
 - [x] Verify the live RSC parent and child relationship and both required RPMh
@@ -367,9 +383,9 @@ safe D3 support from `d3cold_allowed=1` alone.
   `rpmh-aoss` tracing and capture the Apps-RSC command payloads plus residency
   counters. The kernel lacks `rpmh_rsc_snapshot`, so this proves staged
   messages, not a firmware acknowledgment. See the A/B receipt.
-- [x] The MC4/SH5 pair was staged but AOSD/CXSD/scalar DDR remained zero. Keep
-  the PCIe/MC0/SH0 floor as the next hypothesis; audit for a safe single-variable
-  experiment before using the prepared OPP proposal.
+- [x] The MC4/SH5 pair was staged but AOSD/CXSD/scalar DDR remained zero.
+- [x] Source-check the PCIe-MEM OPP reduction as the next A/B; keep it
+  undeployed until the scheduler config and rollback gates pass.
 - [ ] For any justified A/B, record all of the following at matched boundaries:
   1. PCIe host suspend result.
   2. PCIe ICC/OPP request before suspend.
@@ -393,22 +409,19 @@ safe D3 support from `d3cold_allowed=1` alone.
   `pcie_ports` again, manually alter ICC votes, blindly disable shared rails,
   send AOSS/QMP commands, or access guessed MMIO/AOP memory.
 - Do not repeat the closed sleep-stats offset experiment or change `qcom_stats`
-  offsets. The rejected module is copied to `/tmp` only and is not loaded. It
-  staged no RPMh requests, so there is no cache to clear and no reboot is
-  required. If a rebuilt compatible module later loads and stages the pair,
-  reboot into the unchanged deployment afterward to clear the RPMh cache.
+  offsets. The corrected RPMh probe was loaded only for the completed A/B; the
+  device was rebooted afterward and its request cache is cleared. The probe is
+  now absent; do not reload it for the next experiment.
 
 ## Next action
 
-Copy the corrected module with SHA-256
-`548d9244a327cc16ba04d2ad644a0b87b08660dfd37e8db5144e07a0065eda2f` to `/tmp`
-and verify the hash on the Nova. Attempt one insertion and check that the
-module loads and logs successful CMD-DB lookups plus SLEEP and WAKE_ONLY
-requests. If insertion or any request fails, do not suspend. If both requests
-succeed, run the 10-second-minimum direct-deep harness with `rpmh-aoss` tracing,
-then reboot the unchanged deployment to clear the cached RPMh pair. Receipts:
-[failed first build](../../receipts/2026-09-20-rpmh-dcvs-pair-insertion-failure.md)
-and [corrected build checks](../../receipts/2026-09-20-rpmh-dcvs-pair-btf-rebuild.md).
+Back up the scratch tree's `.config`, restore `CONFIG_SCHED_CLASS_EXT=y`, run
+`olddefconfig`, and compare the four scheduler-extension symbols with the
+saved live config. Build `Image dtbs` incrementally only if the check passes;
+then verify the output hashes, kernel config, Nova OPP table, and the bootc
+rollback process. Do not install the current linked image. The Nova is awake
+on its normal Linux deployment with SSH up. The completed MC4/SH5 receipt is
+[`rpmh-dcvs-pair-ab.md`](receipts/2026-09-20-rpmh-dcvs-pair-ab.md).
 
 The archived Linux trace and host reanalysis remain under
 `.external-research/sm8550-suspend-lab-runs/`; do not edit their raw data.

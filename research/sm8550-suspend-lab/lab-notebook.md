@@ -6545,3 +6545,36 @@ reboot. Direct post-boot tracefs inventory is denied to the unprivileged SSH
 account, so I do not claim an independent post-boot tracefs listing. The
 device is back in its normal Linux state and is ready for further read-only
 source work.
+
+### 2026-09-20 14:24 UTC — linked PCIe OPP image found; scheduler config blocks deployment
+
+The earlier status text saying there was no linked OPP image was stale. The
+external `linux-7.2.3` scratch tree already contains the test OPP in its linked
+`vmlinux`/`Image` and Nova DTB. Their hashes and the source/DTB markers are in
+the [config-gate receipt](receipts/2026-09-20-pcie-opp-image-config-gate.md).
+
+The linked image is not safe to deploy. Its `.config` turned off
+`CONFIG_SCHED_CLASS_EXT` and omitted `CONFIG_GROUP_SCHED_BANDWIDTH`,
+`CONFIG_EXT_GROUP_SCHED`, and `CONFIG_EXT_SUB_SCHED`, all enabled in the live
+device config. The Armada kernel package fragment explicitly requires
+`SCHED_CLASS_EXT=y` for `scx_lavd`. This is a concrete config mismatch, not a
+theoretical warning. The target package checkout is on the unrelated
+`fix-steam-charging-eta` branch and was not modified.
+
+Source inspection also sharpened the test variable. The live link is Gen2 x1,
+whose 5 GT/s x1 OPP requests `low_svs` and PCIe-MEM/CPU-PCIe peak bandwidths
+`500000/1` kB/s. The diagnostic OPP uses the same `low_svs` corner and
+`1000/1` kB/s, so the intended change is the PCIe-MEM request while retaining
+the same RPMh power-domain performance state. It runs only when the normal
+host suspend path leaves PCIe unsuspended during direct suspend-to-RAM. It
+does not force PCI state, bypass the D3cold check, or manually write an ICC
+vote. This is a source-justified A/B candidate, not causal proof.
+
+An isolated `O=` Kconfig attempt stopped because the existing scratch source
+tree has an in-tree build; `mrproper` would destroy cached outputs, so it was
+not run. The `armada-kmod-build` container is native AArch64 and mounts the
+scratch tree, making an incremental rebuild possible. Next, preserve the
+current `.config`, restore the four live scheduler settings through Kconfig,
+verify the full diff, and rebuild only if the configuration gate passes. Do
+not install the currently linked image or stage a boot layer yet. No device
+state changed in this audit.
