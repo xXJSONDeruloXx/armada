@@ -5961,3 +5961,128 @@ BTF, relocations, and disassembly. Hashes and instruction addresses are in
 No further Android suspend was needed. Post-check remained on the same boot
 with `wlan0=up`, `[s2idle] deep`, empty alarm, global tracing off, empty
 kprobes, and `debug_suspend=0`.
+
+### 2026-09-20 09:02 UTC — Nova-only PCIe bandwidth A/B prepared
+
+- Wireless ADB is connected to the same rooted Android boot; all actions in
+  this pass were read-only. The live regulator debugfs excerpt shows active
+  `pm_v6e_l1`/`pm_v6e_l3` proxies and separate `*_so` sleep-only proxy rows.
+  Awake-state consumers include PCIe 0.9 V (80 mA) and 1.2 V (18 mA), plus
+  DSI0; UFS, USB, and DP consumers in the excerpt are inactive. This confirms
+  runtime registration/accounting, not suspend-time physical rail state or
+  whether PCIe/Wi-Fi wake remains powered. Receipt:
+  `receipts/2026-09-20-android-regulator-summary-awake.txt`.
+- The first proposed test OPP had been placed in the common SM8550 DTSI. I
+  replaced that scope before any package/device change: the new synthetic OPP
+  and a boolean opt-in now live only in the Nova-specific DTS proposal. The
+  kernel branch invokes it only for the OPP-backed host-active
+  `PM_SUSPEND_MEM` fallback. Its `required-opps` remains `low_svs`, and the CPU
+  interconnect peak remains 1 kB/s; only the PCIe memory path changes from
+  500,000 to 1,000 kB/s. The test never sets PCI state or alters the regular
+  s2idle suspend OPP. Proposal files are under `proposals/`.
+- Both proposal diffs pass patch checks. I copied the package kernel inputs to
+  `/Volumes/NovaKernelBuild/armada-packages-partial`, inserted the candidate
+  patch after 0513, and applied the full 145-patch package series against
+  Linux 7.2.3. Every patch and Nova DTS edit applied; there were zero failures.
+  A targeted build is now running for `drivers/pci/controller/dwc/pcie-qcom.o`
+  and `qcom/qcs8550-retroidpocket-rpnova.dtb`; no Image, modules, or full
+  kernel is being built. The work tree is isolated on the external volume.
+- A first source extraction inside Docker failed with directory-rename errors
+  on its external-volume mount. The incomplete generated tree was removed; the
+  preserved archive was extracted successfully with host `bsdtar`. No source
+  checkout or device files were modified. The current scratch target build is
+  what matters; do not repeat the failed Docker extraction.
+- Next: finish the two targets, check the object and DTB, then inspect the
+  live Linux deployment/rollback preflight before asking for a device switch.
+  Do not deploy this test to Android.
+
+### 2026-09-20 09:09 UTC — targeted build passed; resume restore gap caught
+
+- The first targeted scratch build completed successfully on the external
+  volume: `drivers/pci/controller/dwc/pcie-qcom.o` and the Nova DTB were
+  produced for Linux 7.2.3. The ARM64 object is 584 KiB with debug info and
+  contains the diagnostic property/error strings. The 143,771-byte DTB
+  contains both `armada,diag-pcie-mem-suspend-opp` and
+  `opp-test-sleep-bw`. SHA-256: object
+  `d9f774015ad7d1d06b7bbe1ed85d5a0978b0375bbc997940d6776f5b9474a5f2`, DTB
+  `72da8e0e5151d346fe48d5b46738fe74cac74981ffd9709a81d7df79df44d422`.
+- Before any device deployment, I traced the corresponding resume callback.
+  My first read missed the common tail call to
+  `qcom_pcie_icc_opp_update()`. The callback does recalculate OPP from the
+  negotiated link when `PCI_EXP_LNKSTA_DLLLA` is set. It does nothing if the
+  link-status bit is clear, so the diagnostic OPP could persist in that edge.
+  No device or package checkout was modified.
+- Next inspect how this driver represents the live PCIe OPP and add a
+  diagnostic-only restore that cannot leave the low OPP selected if the link
+  is not up. Rebuild only the object and Nova DTB. Android remains on the same
+  rooted boot with Wi-Fi ADB healthy, and no Android setting or file was
+  changed.
+
+### 2026-09-20 09:11 UTC — resume callback correction
+
+The common tail of `qcom_pcie_resume_noirq()` calls
+`qcom_pcie_icc_opp_update(pcie)`. That helper reads the live PCIe Link Status
+register and selects an OPP from the negotiated width and speed when
+`PCI_EXP_LNKSTA_DLLLA` is set. Thus the original candidate normally restores
+the link's actual OPP on the expected host-active, link-up path. The residual
+case is a down link: the helper returns early and leaves the selected OPP
+unchanged. The earlier statement that the OPP always persists was too broad.
+The test patch still needs a tracked fallback restore for that no-link edge;
+no runtime deployment has occurred.
+
+### 2026-09-20 09:22 UTC — revised Nova OPP candidate builds
+
+- Added a private `diag_opp_active` flag set only after the diagnostic OPP
+  transition succeeds. The resume callback restores the maximum OPP if that
+  flag is set, then the existing link-state updater selects the actual
+  negotiated OPP if DLLLA is present. A down link is left at the maximum
+  bandwidth OPP, never at the reduced test OPP. The initial candidate is
+  superseded; only the revised diff in `proposals/` should be considered.
+- Applied and reversed the revised patch against the isolated tree to confirm
+  its hunk boundaries. Built only `pcie-qcom.o` and the Nova DTB with the
+  pinned Fedora 44 AArch64 builder. DTC decomp confirms the opt-in is present
+  in the Nova pcie0 node and the 2 Hz OPP requests `low_svs`, 1,000 kB/s on
+  PCIe memory, and 1 kB/s on CPU path. DTC reports duplicate unit addresses
+  only in unrelated QUP nodes.
+- Object SHA-256 is
+  `bca7e626ae96c0ed7003b42eadc969f358db54ce433436743b6077ea243239d0`; DTB
+  SHA-256 is
+  `72da8e0e5151d346fe48d5b46738fe74cac74981ffd9709a81d7df79df44d422`.
+  Full kernel/modules, package artifact, bootc layer, and a device suspend
+  test remain undone. Full command, artifact sizes, and checks are in
+  `receipts/2026-09-20-nova-opp-target-build.md`.
+- Wireless ADB still reports the same Android boot ID and `wlan0=UP`; no
+  Android settings, modules, files, PCI state, ICC requests, regulators, or
+  suspend policy were changed. Next verify the current Linux deployment and
+  rollback path, then decide whether a full kernel artifact is warranted.
+
+### 2026-09-20 09:24 UTC — live Android PCIe DT refresh
+
+Wireless ADB still reaches the same Android boot and the live PCIe host's
+`of_node` resolves to `/sys/firmware/devicetree/base/soc/qcom,pcie@1c00000`.
+It contains `qcom,drv-name="lpass"`; `qcom,drv-supported`,
+`qcom,pcie-switch-type`, and `qcom,apss-based-l1ss-sleep` are absent. Both
+root port and WCN endpoint are awake at 5.0 GT/s x1 and D0. The CNSS module's
+visible `*drv*` parameter lookup and filtered dmesg showed no runtime branch
+marker; the previously captured kprobe/branch trace remains the evidence for
+the successful connected-DRV run. This refreshed tree/state receipt is
+`receipts/2026-09-20-android-live-dt-refresh.txt`. It was read-only; no
+suspend was run and no device state changed.
+
+### 2026-09-20 09:29 UTC — exact CNSS DRV-support fallback confirmed
+
+Pulled `/vendor_dlkm/lib/modules/cnss2.ko` read-only over Wireless ADB; its
+SHA-256 `7c23fc2fdf9a19b3ea2797eea377325c83cc5263df79c040b257908eb549c1b2`
+matches the previously disassembled installed module. At
+`cnss_pci_update_drv_supported()` (`.text+0x37870`), the exact AArch64 binary
+calls `of_find_property()` for `qcom,drv-supported`, then, if absent, for
+`qcom,drv-name`, and stores whether that property exists in its CNSS state at
+offset `0x2f1`. It does not compare the driver-name string. The refreshed live
+pcie0 node has no `qcom,drv-supported` and does have `qcom,drv-name="lpass"`,
+so the exact binary marks DRV as supported for this host. Together with the
+previous successful `msm_pcie_pm_control(mode=0)`/`msm_pcie_drv_suspend()`
+trace and absent switch-type property (default 0), this establishes the
+connected-DRV path for that run. The current awake read still cannot expose
+the saved flag during sleep or physical PCI state. Receipt:
+`receipts/2026-09-20-android-live-dt-refresh.txt`. No suspend or device change
+was made.

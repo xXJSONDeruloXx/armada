@@ -1,0 +1,47 @@
+Wireless ADB live read-only refresh, 2026-09-20.
+
+Build fingerprint: qti/kalama/kalama:13/TKQ1.231222.001/eng.RPN.20260722.081626:user/release-keys
+Kernel: 5.15.123-android13-8-g697b78910a71-dirty
+Boot ID: d927cfaa-54f1-428d-9f3b-1298aa1982fc
+Wi-Fi: wlan0 UP/LOWER_UP
+mem_sleep: [s2idle] deep
+
+Live platform device /sys/bus/platform/devices/1c00000.qcom,pcie resolves
+its of_node to /sys/firmware/devicetree/base/soc/qcom,pcie@1c00000. Properties:
+
+- qcom,drv-supported: absent
+- qcom,drv-name: `lpass` (bytes `6c 70 61 73 73 00`)
+- qcom,pcie-switch-type: absent
+- qcom,apss-based-l1ss-sleep: absent
+
+The read-only lookup of `/sys/module/cnss2/parameters/*drv*` found no matching
+parameter file. Filtered `dmesg` contained no DRV/PCIe suspend branch message.
+These absences do not override the captured exact branch trace in
+`../../receipts/2026-09-20-android-exact-pcie-branch.md`.
+
+Awake PCI sysfs:
+
+- Root port `0000:00:00.0`: 5.0 GT/s, x1, D0
+- WCN endpoint `0000:01:00.0`: 5.0 GT/s, x1, D0
+
+## Exact CNSS property fallback
+
+The just-pulled `/vendor_dlkm/lib/modules/cnss2.ko` has SHA-256
+`7c23fc2fdf9a19b3ea2797eea377325c83cc5263df79c040b257908eb549c1b2`, matching
+the previously validated installed module. Its exact
+`cnss_pci_update_drv_supported()` implementation at `.text+0x37870` calls
+`of_find_property()` for `qcom,drv-supported`; if absent, it calls
+`of_find_property()` for `qcom,drv-name` and stores the boolean result in its
+CNSS device state at offset `0x2f1`. This is property-presence fallback, not a
+string comparison. Since the live active pcie0 node lacks the first property
+and has `qcom,drv-name="lpass"`, this exact module marks DRV as supported for
+that host.
+
+Combined with the saved successful trace (`msm_pcie_pm_control(mode=0)` and
+`msm_pcie_drv_suspend()`), and absent `qcom,pcie-switch-type` defaulting to
+zero, the connected-DRV path is established for that run. This does not reveal
+the device's instantaneous DRV-connected flag during this awake refresh.
+
+This recheck did not suspend the device and does not reveal PCI state during
+sleep. No module, partition, DT, PCI state, interconnect vote, regulator, or
+suspend setting was changed.

@@ -1,0 +1,18 @@
+--- a/kernel/dts/qcs8550-retroidpocket-rpnova.dts
++++ b/kernel/dts/qcs8550-retroidpocket-rpnova.dts
+@@ -33,3 +33,15 @@
+ 	trigger-left-deadzone = <100>;
+ 	trigger-right-deadzone = <100>;
+ };
++
++&pcie0 {
++	armada,diag-pcie-mem-suspend-opp;
++};
++
++&pcie0_opp_table {
++	opp-test-sleep-bw {
++		opp-hz = /bits/ 64 <2>;
++		required-opps = <&rpmhpd_opp_low_svs>;
++		opp-peak-kBps = <1000 1>;
++	};
++};

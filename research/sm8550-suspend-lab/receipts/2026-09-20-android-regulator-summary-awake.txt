@@ -1,0 +1,37 @@
+ pm_v6e_l1                        1   14      0    fast   880mV     0mA   880mV   912mV
+    ae90000.qcom,dp_display-vdda_usb-0p9   0                                 0mA     0mV     0mV
+    ae97000.qcom,mdss_dsi_phy1-vdda-0p9   0                                 0mA     0mV     0mV
+    ae95000.qcom,mdss_dsi_phy0-vdda-0p9   0                                 0mA   880mV   880mV
+    acf2000.qcom,csiphy7-csi-vdd-0p9   0                                 0mA     0mV     0mV
+    acf0000.qcom,csiphy6-csi-vdd-0p9   0                                 0mA     0mV     0mV
+    acee000.qcom,csiphy5-csi-vdd-0p9   0                                 0mA     0mV     0mV
+    acec000.qcom,csiphy4-csi-vdd-0p9   0                                 0mA     0mV     0mV
+    acea000.qcom,csiphy3-csi-vdd-0p9   0                                 0mA     0mV     0mV
+    ace8000.qcom,csiphy2-csi-vdd-0p9   0                                 0mA     0mV     0mV
+    ace6000.qcom,csiphy1-csi-vdd-0p9   0                                 0mA     0mV     0mV
+    ace4000.qcom,csiphy0-csi-vdd-0p9   0                                 0mA     0mV     0mV
+    88e3000.hsphy-vdd             0                                 0mA   880mV   880mV
+    1c00000.qcom,pcie-vreg-0p9    1                                80mA   880mV   880mV
+    1d80000.ufsphy_mem-vdda-qref   0                                 0mA   880mV   912mV
+ pm_v6e_l1_ao                     1    1      0    fast   880mV     0mA   880mV   880mV
+    soc:qcom,limits-dcvs-isens_vref_0p8   1                                30mA   880mV   880mV
+ pm_v6e_l1_so                     0    0      0    idle   880mV     0mA   880mV   880mV
+ pm_v6e_l3                        2   15      0    fast  1200mV     0mA  1200mV  1200mV
+    ae90000.qcom,dp_display-vdda-1p2   0                                 0mA     0mV     0mV
+    ae96000.qcom,mdss_dsi_ctrl1-vdda-1p2   0                                 0mA     0mV     0mV
+    ae94000.qcom,mdss_dsi_ctrl0-vdda-1p2   1                                16mA  1200mV  1200mV
+    acf2000.qcom,csiphy7-csi-vdd-1p2   0                                 0mA     0mV     0mV
+    acf0000.qcom,csiphy6-csi-vdd-1p2   0                                 0mA     0mV     0mV
+    acee000.qcom,csiphy5-csi-vdd-1p2   0                                 0mA     0mV     0mV
+    acec000.qcom,csiphy4-csi-vdd-1p2   0                                 0mA     0mV     0mV
+    acea000.qcom,csiphy3-csi-vdd-1p2   0                                 0mA     0mV     0mV
+    ace8000.qcom,csiphy2-csi-vdd-1p2   0                                 0mA     0mV     0mV
+    ace6000.qcom,csiphy1-csi-vdd-1p2   0                                 0mA     0mV     0mV
+    ace4000.qcom,csiphy0-csi-vdd-1p2   0                                 0mA     0mV     0mV
+    88e8000.ssphy-core            0                                 0mA  1200mV  1200mV
+    88e3000.hsphy-vdda12          0                                 0mA  1200mV  1200mV
+    1c00000.qcom,pcie-vreg-1p2    1                                18mA  1200mV  1200mV
+    1d80000.ufsphy_mem-vdda-pll   0                                 0mA  1200mV  1200mV
+ pm_v6e_l3_ao                     1    1      0    idle  1200mV     0mA  1200mV  1200mV
+    soc:qcom,limits-dcvs-isens_vref_1p8   1                                 8mA  1200mV  1200mV
+ pm_v6e_l3_so                     0    0      0    idle  1200mV     0mA  1200mV  1200mV
