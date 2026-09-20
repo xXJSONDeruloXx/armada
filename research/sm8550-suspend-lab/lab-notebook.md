@@ -6712,3 +6712,21 @@ OS were stale; the current SSH boot ID and Linux checks establish that the
 Nova remained on Linux. The Android source/binary investigation is already
 captured; this next experiment is Linux-only. The candidate OCI image has not
 yet been built or staged.
+
+### 2026-09-20 16:37 UTC — pinned base pulled; first image build hit Netavark
+
+Transferred the verified build context to the Nova; remote Image and DTB
+SHA-256 values match the build receipt. Rootful Podman fetched the exact base
+manifest pinned in the Containerfile, and reports it as digest
+`sha256:5fe995d5fedf5034ee42a8f0e54dbd2d08e0c85adb9e3f88cfd52e55636eeb88`.
+The first build reached its final validation `RUN` step, but Podman failed to
+start that step because Netavark's isolated network setup could not apply its
+nftables ruleset. The validation step only checks local hashes and writes the
+Armada version marker, so a retry with `--network=host` does not change the
+build inputs or expose the command to a network requirement.
+
+The failed build did not complete or tag the candidate and did not stage or
+apply bootc. `/var` currently has 30 GB free; rootful Podman reports 12.8 GB
+of images. Continue monitoring free space during retry and bootc staging. Exact
+failure: `netavark: nftables error: "nft" did not return successfully while
+applying ruleset`. No device firewall or network configuration was changed.

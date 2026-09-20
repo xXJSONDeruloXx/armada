@@ -6,7 +6,7 @@ the chronological record, including failed runs and superseded interpretations.
 Update this page when a checklist item changes; put raw output in a dated
 receipt and explain the result in the notebook.
 
-Status as of 2026-09-20 16:35 UTC. Branch `feat/sm8550-suspend-lab`.
+Status as of 2026-09-20 16:37 UTC. Branch `feat/sm8550-suspend-lab`.
 
 The sleep-stats offset question is closed: Android and Armada both resolve the
 SM8550 records at `+0x48` and `+0xb8`. Android's successful deep path advances
@@ -62,10 +62,13 @@ through Kconfig before the successful build. See the
 The currently installed base is `ghcr.io/armada-os/armada:beta` at digest
 `sha256:5fe995d5fedf5034ee42a8f0e54dbd2d08e0c85adb9e3f88cfd52e55636eeb88`;
 the old local-layer recipe points at a 2026-09-01 image and kernel 7.2.0, so it
-cannot be reused verbatim. The base layers total 6.07 GB compressed, while
-`/var` has 37 GB free and the rootful Podman store does not contain the base.
-Check unpacked space requirements before pulling or building a new layer. See
-the [bootc base receipt](receipts/2026-09-20-bootc-base-and-space.md).
+cannot be reused verbatim. The pinned base has now been pulled into rootful
+Podman; its reported image size is 12.5 GB and `/var` has 30 GB free. The
+first image build failed at its final local hash-check step because Netavark
+could not set up its isolated nftables network. Retry with host networking,
+since the build step has no network dependency. See the
+[bootc base receipt](receipts/2026-09-20-bootc-base-and-space.md) and latest
+notebook entry for live measurements.
 The Nova is currently on Linux, not Android: fresh SSH reports Fedora 44,
 kernel `7.2.3`, boot ID `55fdad18-019d-4c92-8ebd-8a558574c1d3`, Wi-Fi
 connected, and systemd running. Empty ADB discovery is expected in this mode.
@@ -84,11 +87,13 @@ The device-scoped layer recipe is tracked at
 [`device-kernel-layer-pcie-opp.Containerfile`](device-kernel-layer-pcie-opp.Containerfile).
 Fresh bootc status shows both booted and rollback deployments at pinned base
 digest `sha256:5fe995d5fedf5034ee42a8f0e54dbd2d08e0c85adb9e3f88cfd52e55636eeb88`,
-with no image staged. `/var` has 37 GB free. Rootful Podman has only its 199 MB
-Fedora builder, so the Armada base must be pulled for this build. No test image
-has been built or staged. Device sudo allows the lab runner, Podman, and bootc
-without a prompt; other root commands still require the device password, which
-has not been persisted.
+with no image staged. After pulling the pinned base, rootful Podman reports
+12.8 GB in images and `/var` has 30 GB free. The first candidate build failed
+at its local hash-check `RUN` step because Netavark could not apply nftables;
+the same step can be retried with host networking and no network dependency.
+No candidate image has been completed or staged. Device sudo allows the lab
+runner, Podman, and bootc without a prompt; other root commands still require
+the device password, which has not been persisted.
 
 ## Latest Android suspend attempt (historical)
 
