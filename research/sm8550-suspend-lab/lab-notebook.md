@@ -7510,3 +7510,25 @@ booted default deployment. No deployment was staged, and no ESP file, boot
 order, or suspend state changed. Manual ABL recovery is still required before
 the OPP A/B. See the
 [`sysinit guard build receipt`](receipts/2026-09-20-initrd-sysinit-guard-build.md).
+
+### 2026-09-20 23:44 UTC — stock deep control records PSCI SYSTEM_SUSPEND return
+
+Ran one 15-second, RTC-woken direct-`deep` control on the unchanged stock
+image with the run-scoped `psci-kretprobe`. The kernel entered and exited
+`deep`, the suspend command returned 0, and the measured
+`CLOCK_BOOTTIME - CLOCK_MONOTONIC` separation was 13.530067 seconds. The
+`psci_system_suspend_enter` wrapper returned `retval=0` once. PSCI CPU/domain
+trace callbacks reported state `0x40000004` 797 times in each direction with
+`s2idle=no`; these show requested state/callback activity, not physical SoC
+residency.
+
+AOSD, CXSD, and scalar DDR records remained unchanged at zero. APSS SMEM
+advanced once; detailed DDR LPM ID `0xd0` duration advanced by 313042917 raw
+ticks without a count change. The RTC woke the device and the boot ID did not
+change. The immediate post-resume snapshot showed Wi-Fi `NO-CARRIER`; a later
+live check found `wlp1s0` UP with carrier and SSH available. Cleanup restored
+the RTC alarm, removed the run-specific kretprobe and trace instance, and
+restored the original `[s2idle] deep` setting. Checksum verification covered
+4594 files with no mismatches. This result narrows “PSCI was never invoked”
+but does not show that firmware entered an AOSD/CXSD/DDR state. See the
+[`PSCI return control receipt`](receipts/2026-09-20-stock-deep-psci-return.md).

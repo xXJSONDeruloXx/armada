@@ -6,7 +6,7 @@ the chronological record, including failed runs and superseded interpretations.
 Update this page when a checklist item changes; put raw output in a dated
 receipt and explain the result in the notebook.
 
-Status as of 2026-09-20 23:35 UTC. Branch `feat/sm8550-suspend-lab`.
+Status as of 2026-09-20 23:50 UTC. Branch `feat/sm8550-suspend-lab`.
 
 ## Current goal checklist
 
@@ -57,6 +57,10 @@ Status as of 2026-09-20 23:35 UTC. Branch `feat/sm8550-suspend-lab`.
   The root-port D3cold veto and MC0/SH0 SLEEP floor reproduced; AOSD/CXSD/
   scalar-DDR deltas remained zero. The run did not include a PSCI kretprobe.
   See the [stock control receipt](receipts/2026-09-20-stock-deep-pcie-control.md).
+- [x] Repeat an unchanged-stock direct-deep control with the PSCI
+  SYSTEM_SUSPEND kretprobe. The wrapper returned 0 once while AOSD/CXSD/
+  scalar-DDR remained zero; this confirms the call path, not physical
+  residency. See the [PSCI return receipt](receipts/2026-09-20-stock-deep-psci-return.md).
 - [ ] Locate the previous candidate boot's SSH loss and cover failures before
   the initrd timer starts. The prior journal proves a clean bootc apply and
   boot-image rewrite, but there is no persistent journal for the subsequent
@@ -72,6 +76,16 @@ The Nova is running the original Armada beta image, kernel `7.2.3`, boot ID
 units; Wi-Fi/SSH and the Gamescope Steam session are active. Steam CEF reports
 Big Picture, Main Menu, and Quick Access pages. The display itself was not
 captured.
+
+At 23:50 UTC, the stock Linux device remains on boot ID
+`aa40c55e-d558-46a9-a710-3a7d926b9e9e`, kernel `7.2.3`, with
+`[s2idle] deep`, no RTC wake alarm, Wi-Fi `wlp1s0` UP with carrier, systemd
+`running`, and no failed units. The 23:44 direct-deep control recorded
+`psci_system_suspend_enter retval=0` once, but AOSD/CXSD/scalar DDR remained
+zero. Its first immediate network snapshot was briefly `NO-CARRIER`; the
+later live check showed recovery. The run-specific trace instance and kretprobe
+were removed. The test changed no boot, kernel, firmware, bandwidth, or radio
+configuration. See the [PSCI return receipt](receipts/2026-09-20-stock-deep-psci-return.md).
 
 At 23:35 UTC a new candidate image was built in rootful Podman:
 `20260920-06`, version `20260920.pcie-opp-test-initrd-guard-04`, manifest
