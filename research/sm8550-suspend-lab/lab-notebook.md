@@ -5236,3 +5236,43 @@ occurred. The source result refines the leading hypothesis but does not justify
 forcing D3hot/D3cold, dropping the active vote manually, or changing shared
 regulators. Need the device back on Armada for the read-only attribution run;
 the exact Android source/build and selected DT overlay are still open.
+
+### 2026-09-20 00:32 UTC — Android awake PCIe vote matches the fixed-vote branch, not the candidate property branch
+
+The saved Android `interconnect_summary` provides an additional check on the
+candidate DTBO property. Under `llcc_mc` and `ebi`, the PCIe request is exactly
+`tag=0, avg=500, peak=800`; the same row is visible on `qnm_pcie`. In the
+nearby public `pci-msm.c`, those are the exact `ICC_AVG_BW=500` and
+`ICC_PEAK_BW=800` constants used when `no_client_based_bw_voting` is false.
+When the property is true, the helper instead calls `icc_set_bw(width * bw,
+0)`, using a speed-indexed 250000/500000/1000000/... average and zero peak.
+The stored 500/800 row therefore suggests the public driver's
+`no-client-based-bw-voting` flag was false for this request at capture time.
+This is an inference, because the captured Android kernel/build and runtime
+merged DT have not been matched to that public commit, and the DTBO target
+symbol `pcie1` has not been resolved to the `1c00000` request path.
+
+This means the DTBO's `qcom,no-client-based-bw-voting` entry is not evidence
+that the observed Wi-Fi PCIe request used the dynamic average-only branch.
+It also does not affect the stronger suspend-path finding: in either
+source-visible Android host-off route, the PCIe driver clears its request
+with `icc_set_bw(0,0)`. Receipts: [Android interconnect summary](../../receipts/2026-09-19-android-deep-rpmh/android-interconnect-summary.txt);
+[rooted Android build identity](../../receipts/2026-09-19-android-deep-rpmh/android-root-live-preflight.txt).
+Source: [fixed constants and bandwidth helper](https://github.com/Ayn8550Dev/android_kernel_ayn_qcs8550/blob/93c5cc6ad1d0b807510cfa0fb1d06f47407881f9/drivers/pci/controller/pci-msm.c#L248-L249),
+[property-selected vote form](https://github.com/Ayn8550Dev/android_kernel_ayn_qcs8550/blob/93c5cc6ad1d0b807510cfa0fb1d06f47407881f9/drivers/pci/controller/pci-msm.c#L3853-L3905).
+
+### 2026-09-20 00:39 UTC — Separate the Android aborted attempt from its RTC-resumed deep entry
+
+Cross-checking the Android run wrapper against the kernel excerpt shows two
+events, not one ambiguous wake: log sequence 45500 reports `Wakeup pending,
+aborting suspend` with `timerfd` active after the Wi-Fi driver logs an IRQ and
+WLAN-triggered wake; sequence 45536 then starts another explicit deep entry.
+That second entry takes CPUs offline, and sequence 45581 reports
+`pm8xxx_rtc_alarm` as `pm_system_irq_wakeup`. The wrapper records the RTC alarm
+was armed and captures the kernel log after the ten-second test window. This
+supports RTC as the recorded wake IRQ for the deeper retry; it does not show
+that Wi-Fi/PCIe cannot wake that state, nor that the first aborted attempt
+reached the same residency. Updated the status row to preserve that distinction.
+
+Receipt: [Android run wrapper](../../receipts/2026-09-19-android-deep-rpmh/android-icc-suspend-run.log)
+and [kernel excerpt](../../receipts/2026-09-19-android-deep-rpmh/android-icc-suspend-excerpt.txt).
