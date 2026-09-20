@@ -6,7 +6,7 @@ the chronological record, including failed runs and superseded interpretations.
 Update this page when a checklist item changes; put raw output in a dated
 receipt and explain the result in the notebook.
 
-Status as of 2026-09-20 17:05 UTC. Branch `feat/sm8550-suspend-lab`.
+Status as of 2026-09-20 17:16 UTC. Branch `feat/sm8550-suspend-lab`.
 
 The sleep-stats offset question is closed: Android and Armada both resolve the
 SM8550 records at `+0x48` and `+0xb8`. Android's successful deep path advances
@@ -68,10 +68,12 @@ the first attempt hit a Netavark/nftables setup error; retrying with
 `localhost/armada-pcie-opp-test:20260920-01`, manifest digest
 `sha256:d7eb055720a28bddc8f6a3e7267d6e56c54c53de719963ed06c1228f851e101b`.
 Bootc staged it as download-only at OSTree checksum
-`7eb51de69c15c669d35900ff93b279c8b8a21ffec8f415e7da00d14dd2d55cbf`; it is
-not queued. Booted and rollback deployments remain the pinned base, and `/var`
-has 30 GB free. See the
-[layer/stage receipt](receipts/2026-09-20-pcie-opp-layer-stage.md).
+`7eb51de69c15c669d35900ff93b279c8b8a21ffec8f415e7da00d14dd2d55cbf`. A later
+`bootc switch --from-downloaded --apply` request was accepted with the message
+"Staged deployment will now be applied on reboot"; SSH then closed. The
+candidate's boot and current bootc rollback state have not been confirmed. See
+the [layer/stage receipt](receipts/2026-09-20-pcie-opp-layer-stage.md) and the
+[post-apply reachability receipt](receipts/2026-09-20-post-apply-device-reachability.md).
 
 The diagnostic patch changes the global BTF blob by adding its private
 `qcom_pcie` state flag. Candidate BTF hash
@@ -81,14 +83,16 @@ accepts only the stock and this exact candidate hash and records the active
 hash. See the
 [candidate BTF receipt](receipts/2026-09-20-candidate-pcie-btf.md).
 The 17:05 UTC preflight confirms all nine `pcie-d3cold` tracepoints and both
-required kprobe targets are available and unblacklisted. The candidate still
-needs to boot before its live BTF allowlist can be checked. See the
+required kprobe targets were available and unblacklisted on the stock kernel.
+The candidate must boot before its live BTF allowlist can be checked. See the
 [pre-boot preflight receipt](receipts/2026-09-20-pcie-opp-preboot-harness-preflight.md).
-The Nova is currently on Linux, not Android: fresh SSH reports Fedora 44,
-kernel `7.2.3`, boot ID `55fdad18-019d-4c92-8ebd-8a558574c1d3`, Wi-Fi
-connected, and systemd running. Empty ADB discovery is expected in this mode.
-The Android binary/module analysis needed for the current PCIe hypothesis is
-already captured; the next test is Linux-only.
+Immediately before the apply request, SSH reported Linux kernel `7.2.3`, boot
+ID `55fdad18-019d-4c92-8ebd-8a558574c1d3`, and connected Wi-Fi. At 17:16 UTC,
+SSH, ping, and TCP/22 to `192.168.0.20` timed out; ADB listed no devices, USB
+inventory was empty, and mDNS advertised only this Mac. The running deployment
+and OS after apply are therefore unknown; do not assume the candidate booted.
+The Android binary/module analysis needed for this PCIe hypothesis is already
+captured; the next test remains Linux-only.
 The [boot-image recovery receipt](receipts/2026-09-20-bootimg-recovery-path.md)
 confirms the existing KERNEL.BAK matches the current boot image and documents
 a test-layer drop-in needed to keep that backup from being replaced at the
@@ -100,11 +104,11 @@ the extracted active and backup images both match SHA-256
 archive SHA-256 is `0760f9acf1399a98186233800185b8a37a781247c0a10f12b98999da409eee16`.
 The device-scoped layer recipe is tracked at
 [`device-kernel-layer-pcie-opp.Containerfile`](device-kernel-layer-pcie-opp.Containerfile).
-Fresh bootc status shows the candidate staged download-only but not queued;
-the booted and rollback deployments remain the pinned base. `/var` has 30 GB
-free. Device sudo allows the lab runner, Podman, and bootc without a prompt;
-other root commands still require the device password, which has not been
-persisted.
+The off-device ESP archive was reverified at 17:16 UTC: it remains mode 0600
+and has SHA-256
+`0760f9acf1399a98186233800185b8a37a781247c0a10f12b98999da409eee16`. It
+contains the previously hash-matched stock `KERNEL` and `KERNEL.BAK`; the
+device's current ESP contents cannot be checked while it is unreachable.
 
 ## Latest Android suspend attempt (historical)
 
@@ -469,11 +473,12 @@ PCI D-state, manually change an ICC vote, or infer safe D3 support from
 
 ## Safety and continuity constraints
 
-- The Nova is currently on Armada Linux at `192.168.0.20`, boot ID
-  `cd02fc51-33c5-4b1a-96a7-75a17eb98b30`, kernel `7.2.3`, and Armada version
-  `20260915.feca679`. `wlp1s0`/SSH are up, `systemctl` reports running with no
-  failed units, `mem_sleep` is `[s2idle] deep`, suspend stats are `0/0`, and
-  the test module is absent. Android remains unmodified.
+- The last confirmed live device state was the stock Linux kernel `7.2.3`, boot
+  ID `55fdad18-019d-4c92-8ebd-8a558574c1d3`, at 17:05 UTC before the candidate
+  apply request. At 17:16 UTC the device did not answer SSH, ICMP, or TCP/22;
+  ADB and USB discovery were empty. Its current OS, boot ID, rollback state,
+  Wi-Fi, and ESP contents are unknown. Do not launch another reboot or
+  suspend attempt while unreachable.
 - Do not force PCI D3hot, bypass `pci_host_common_d3cold_possible()`, change
   `pcie_ports` again, manually alter ICC votes, blindly disable shared rails,
   send AOSS/QMP commands, or access guessed MMIO/AOP memory.
@@ -484,11 +489,12 @@ PCI D-state, manually change an ICC vote, or infer safe D3 support from
 
 ## Next action
 
-The original scratch `.config` is backed up and the active config now matches
-the saved live config byte-for-byte. Build `Image dtbs` incrementally, then
-verify output hashes, embedded config, the Nova OPP table, and the bootc
-rollback process. Do not install the old linked image. The Nova is awake on its
-normal Linux deployment with SSH up. The completed MC4/SH5 receipt is
+Reestablish device access (network or USB/physical recovery), then immediately
+read boot ID, kernel/version, bootc booted/staged/rollback deployments, Wi-Fi,
+ESP `KERNEL`/`KERNEL.BAK` hashes, and candidate BTF. Do not run the suspend
+test until those checks establish the candidate or a known-good rollback is
+healthy and the preserved backup is still intact. The A/B remains unrun. The
+completed MC4/SH5 receipt is
 [`rpmh-dcvs-pair-ab.md`](receipts/2026-09-20-rpmh-dcvs-pair-ab.md).
 
 The archived Linux trace and host reanalysis remain under

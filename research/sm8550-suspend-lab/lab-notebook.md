@@ -6772,3 +6772,19 @@ preflight is retained outside Git with its hash and exact gates in the
 This closes the remaining instrumentation preflight. The next operation is to
 apply the already-staged candidate, confirm boot/SSH/Wi-Fi and candidate BTF,
 then run one short RTC-woken direct-deep A/B with the `pcie-d3cold` profile.
+
+### 2026-09-20 17:16 UTC — candidate apply requested; device unreachable
+
+After the preflight, `sudo -n bootc switch --from-downloaded --apply` returned
+`Staged deployment will now be applied on reboot` and the SSH session closed.
+The candidate boot is not confirmed. A fresh SSH connection, two pings, and a
+TCP/22 probe to `192.168.0.20` timed out. ADB listed no devices, USB inventory
+was empty, and mDNS discovery returned only this Mac. The existing ARP entry
+for `.20` is stale and is not evidence of a live device. No further reboot or
+suspend was issued. The mode-0600 ESP archive on `/Volumes/NovaKernelBuild`
+was rehashed and still matches its recorded SHA-256. See the
+[post-apply reachability receipt](receipts/2026-09-20-post-apply-device-reachability.md).
+
+The A/B is still pending. First regain access and establish whether the
+candidate or the stock deployment booted; verify bootc rollback state, Wi-Fi,
+ESP image hashes, and candidate BTF before considering a suspend run.
