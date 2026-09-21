@@ -7842,3 +7842,58 @@ candidate post-resume health snapshot did see wlp1s0 temporarily down with
 NO-CARRIER; after automatic rollback, Wi-Fi was connected. No ABL action was
 needed. Full evidence and hashes are in the
 [phase-03 candidate test receipt](receipts/2026-09-21-pcie-opp-phase-03-candidate-test.md).
+
+
+### 2026-09-21 02:59 UTC — source reconciliation after the phase-03 A/B
+
+Reconciled the candidate trace with the prior Android binary/TCS captures and
+the locally available Linux 7.2.3 source. The A/B has a clear negative result:
+the direct-deep candidate reduced the submitted Apps-RSC MC0/SH0 SLEEP words
+from the stock `0x600003b8` (952) to `0x60000001` (1), but AOSD, CXSD, and
+scalar DDR did not advance. The trace profile did not contain the D3cold or
+PSCI-return probes; the candidate changed only the diagnostic PCIe OPP path,
+and existing stock runs establish the unchanged root-port veto. The TCS trace
+still proves Linux submissions, not firmware application.
+
+The Android branch is now bounded by the exact installed binaries and the
+captured run. CNSS selects connected-DRV mode, the PCIe host driver clears its
+ICC request to `0/0`, and no explicit endpoint D3hot setter or normal host
+clock-teardown call was observed in that branch. The noirq APSS/L1SS body was
+not selected by the active DT. This explains the software-side request change
+but leaves the physical PCIe/link state during sleep unknown. Android's final
+TCS also contains SLEEP-off requests for SH1, QUP2, and ACV, plus the
+`dcvs_fp`-owned MC4/SH5 pair and LDOE1/LDOE3 sleep requests.
+
+The source comparison rules out a simple missing-mainline-BCM explanation:
+mainline `sm8550.c` defines ACV on EBI, QUP2 on the QUP2 virtual node, and SH1
+across nodes including the PCIe path; the nearby public Android `kalama.c`
+contains corresponding HLOS resources. Mainline `bcm-voter.c` already emits
+ACTIVE, WAKE, and SLEEP batches. The Android public source has additional
+aggregation details, but its exact revision does not match the installed
+Android kernel. In the Android awake interconnect summary, QUP2 has a
+50,000-kB/s request from `89c000.qcom,qup_uart`; this is a plausible owner of
+its SLEEP/WAKE pair, not a proven exact-runtime attribution. Exact owners for
+SH1/ACV remain unresolved. The installed Android `dcvs_fp` binary is the
+established source for MC4/SH5; a prior Linux A/B adding only that pair was
+insufficient.
+
+The regulator distinction is firmer: Android's downstream regulator setup
+stages LDOE1/LDOE3 mode/enable changes in SLEEP and WAKE contexts, whereas
+mainline `qcom-rpmh-regulator` sends ACTIVE_ONLY requests and has no suspend
+operations. Both rails feed shared PCIe, storage, USB, and display paths on
+this board. Android's successful run woke by RTC, but the available trace does
+not establish which of those consumers remained powered or their wake behavior
+after the regulator requests.
+
+Decision: do not lower the Linux MC0/SH0 request to zero or disable the shared
+LDOs as another quick test. Earlier Linux runs observed the D3cold veto; phase-03
+did not re-probe PCIe state, so the candidate's host state is inferred from the
+unchanged source path rather than directly measured. Patches 0513/0520 preserve
+a nonzero floor because dropping it can prevent SM8550's resume hand-back, and
+the 1-kB/s test did not establish which other contract is missing. The minimum
+facts for a safe behavior test are a source-backed Linux PCIe/WCN wake contract
+for the unsuspended-host fallback and an observation path that can distinguish
+staged RPMh words from firmware-applied policy. A future upstream-quality
+regulator fix would need real suspend regulator ops that issue RPMh SLEEP/WAKE
+requests; a DTS `regulator-state-mem` node alone cannot do that with the current
+driver.

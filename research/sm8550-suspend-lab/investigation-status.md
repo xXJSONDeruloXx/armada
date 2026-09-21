@@ -6,7 +6,7 @@ the chronological record, including failed runs and superseded interpretations.
 Update this page when a checklist item changes; put raw output in a dated
 receipt and explain the result in the notebook.
 
-Status as of 2026-09-21 02:43 UTC. Branch `feat/sm8550-suspend-lab`.
+Status as of 2026-09-21 02:59 UTC. Branch `feat/sm8550-suspend-lab`.
 
 ## Current goal checklist
 
@@ -98,19 +98,33 @@ Status as of 2026-09-21 02:43 UTC. Branch `feat/sm8550-suspend-lab`.
   after candidate resume; it was connected after automatic rollback to stock.
   The 5-minute rollback guard returned the device to stock; no ABL recovery
   was needed.
+- [x] Compare the Android PCIe path, the retained MC0/SH0 floor, Apps-RSC
+  resources, and regulator contexts against Armada. Exact Android binaries and
+  the captured TCS establish the connected-DRV ICC clear and request set; the
+  public Kalama source is a nearby match, not the exact Android revision.
+  Linux has the standard SH1/QUP2/ACV BCM definitions and SLEEP/WAKE batching;
+  the extra TCS members therefore are not explained by absent mainline resource
+  definitions. MC4/SH5 are attributable to Android `dcvs_fp`; exact active
+  client ownership for all remaining commands is still incomplete. Mainline's
+  RPMh regulator lacks the Android active/sleep proxy behavior. See the
+  evidence ledger and dated source notes below.
 - [x] Run one 15-second direct-deep candidate OPP test. The PCIe memory-path
   request fell to 1 kB/s and the submitted MC0/SH0 SLEEP words fell from 952
   to 1, but AOSD/CXSD/scalar-DDR counters stayed zero. This proves the PCIe
   floor changes as intended, not that firmware applied it or entered deeper
   residency. See the phase-03 candidate test receipt.
-- [ ] Finish the Android-versus-Armada source comparison for remaining Apps-RSC
-  BCM requests and regulator sleep contexts. Use the phase-03 result to select
-  a separate source-backed one-variable A/B; do not stack changes onto the
-  PCIe OPP experiment.
+- [ ] Do not run another behavioral A/B until the PCIe/WCN suspend and wake
+  contract is established and a readback/acknowledgment for staged RPMh sleep
+  requests is available. Earlier Linux runs show the host-unsuspended D3cold
+  veto; phase-03 did not re-probe it. Dropping MC0/SH0 to zero in that fallback
+  risks the resume failure that patches 0513/0520 address; disabling shared
+  LDOE rails has unverified PCIe, UFS, USB, and display wake behavior. The
+  phase-03 near-zero vote did not produce the named residency, so the exact
+  missing condition is not yet isolated.
 
 ## Latest device recovery state
 
-As of 2026-09-21 02:42 UTC, the Nova is back on stock Armada Linux
+As of 2026-09-21 02:59 UTC, the Nova is back on stock Armada Linux
 20260915.feca679, kernel 7.2.3, boot ID
 3656b0e7-5671-4b7e-9368-67965daa251a. Wi-Fi is connected, systemd has zero
 failed units, and bootc has stock booted with no staged deployment or queued
