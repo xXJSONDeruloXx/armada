@@ -6,7 +6,7 @@ the chronological record, including failed runs and superseded interpretations.
 Update this page when a checklist item changes; put raw output in a dated
 receipt and explain the result in the notebook.
 
-Status as of 2026-09-20 23:50 UTC. Branch `feat/sm8550-suspend-lab`.
+Status as of 2026-09-21 00:23 UTC. Branch `feat/sm8550-suspend-lab`.
 
 ## Current goal checklist
 
@@ -20,11 +20,11 @@ Status as of 2026-09-20 23:50 UTC. Branch `feat/sm8550-suspend-lab`.
   direct-deep, host-unsuspended fallback, preserving `low_svs`.
 - [x] Confirm there is no exposed PCIe OPP sysfs control and the public
   dynamic OPP API cannot define bandwidth for a new runtime OPP.
-- [x] Prepare a candidate-specific systemd rollback guard, build its OCI
-  image from cached artifacts, and verify the timer and marker in-container.
-  The newest un-staged image starts its initrd timer in the `basic.target`
-  transaction and orders it before that target. The image has not been staged
-  or applied.
+- [x] Build the guarded PCIe OPP candidate from cached artifacts and verify
+  its initrd timer and recovery helper. Apply it once with ABL recovery
+  available. The device returned to the stock root, so no candidate userspace
+  or suspend A/B was confirmed. The pending deployment and candidate ESP image
+  were then removed/restored; see the [apply receipt](receipts/2026-09-21-pcie-opp-guarded-apply.md).
 - [x] Evaluate whether Android's kernel modules can be mounted into Armada and
   whether Armada user space could run on Android's kernel. Direct module reuse
   is incompatible; a hybrid boot is theoretically possible but is a separate
@@ -61,15 +61,40 @@ Status as of 2026-09-20 23:50 UTC. Branch `feat/sm8550-suspend-lab`.
   SYSTEM_SUSPEND kretprobe. The wrapper returned 0 once while AOSD/CXSD/
   scalar-DDR remained zero; this confirms the call path, not physical
   residency. See the [PSCI return receipt](receipts/2026-09-20-stock-deep-psci-return.md).
-- [ ] Locate the previous candidate boot's SSH loss and cover failures before
-  the initrd timer starts. The prior journal proves a clean bootc apply and
-  boot-image rewrite, but there is no persistent journal for the subsequent
-  candidate boot. The newest candidate starts its timer from `sysinit.target`,
-  but cannot recover a kernel failure or an initrd systemd failure before that
-  target transaction is queued. Do not stage again until manual ABL recovery
-  is available for the remaining gap.
+- [ ] Determine whether the 2026-09-21 return to stock was caused by the initrd
+  guard, ABL/firmware fallback, or a manual reset. There is no candidate-root
+  journal or pstore record; the owner was asked whether they used ABL.
+- [ ] Add a durable initrd/recovery phase receipt before retrying the OPP
+  candidate. The stock startup updater rewrote the pending candidate into
+  `/KERNEL` after the stock root returned, so any fallback test must also
+  account for the bootc pending deployment and Armada's BLS-based updater.
+- [ ] Run the PCIe OPP direct-deep A/B only after the candidate version/DTB is
+  positively identified on the running device. No suspend command was issued
+  during the failed-to-launch attempt.
 
 ## Latest device recovery state
+
+As of 2026-09-21 00:22 UTC, the Nova is healthy on stock Armada Linux
+`20260915.feca679`, kernel `7.2.3`, boot ID
+`ef966ac2-4fb6-4222-b573-fb84d474e295`. Wi-Fi is connected, systemd is
+`running` with zero failed units, and no RTC wake alarm is armed. `bootc`
+reports `bootOrder=default`, `rollback=null`, `rollbackQueued=false`, and
+`staged=null`; OSTree lists only the stock deployment. Both ESP kernel files
+match stock SHA-256
+`0b0d7c03a88e77c480ad31d145a6718916638ba62287ff5a2b427c0f75475000`; the
+active boot-image stamp is stock. The guarded candidate remains only in local
+rootful Podman storage. See the [guarded apply receipt](receipts/2026-09-21-pcie-opp-guarded-apply.md).
+
+The 2026-09-21 guarded candidate apply did not yield a confirmed candidate
+userspace, and no suspend A/B ran. The returned stock boot's journal shows
+that Armada's BLS-based startup updater wrote the still-pending candidate into
+`/KERNEL`; `KERNEL.BAK` remained stock. The pending OSTree deployment was
+removed and Armada's updater regenerated the stock image. Whether the initrd
+guard, ABL/firmware, or a manual reset returned the device to stock remains
+unresolved.
+
+Older dated live-state observations below are historical; use the latest
+state above for current device status.
 
 The Nova is running the original Armada beta image, kernel `7.2.3`, boot ID
 `aa40c55e-d558-46a9-a710-3a7d926b9e9e`. Systemd is `running` with no failed
@@ -719,10 +744,10 @@ PCI D-state, manually change an ICC vote, or infer safe D3 support from
 
 - The current OS is stock Armada Linux 7.2.3 with a clean bootc default order,
   no staged/pending deployment, and verified stock `KERNEL`/`KERNEL.BAK`.
-  The candidate boot previously failed to return SSH and the user observed
-  “Preparing Armada”; its precise failure phase is unknown. Do not rerun the
-  candidate or suspend test until its boot failure is diagnosed and recovery
-  remains available.
+  The guarded candidate was applied once, but SSH returned on stock and no
+  suspend test ran. `rpm-ostree cleanup --pending` plus Armada's updater
+  restored the clean state without another reboot. Do not retry until the
+  initrd/ABL return path is observable; manual ABL recovery is available.
 - Do not force PCI D3hot, bypass `pci_host_common_d3cold_possible()`, change
   `pcie_ports` again, manually alter ICC votes, blindly disable shared rails,
   send AOSS/QMP commands, or access guessed MMIO/AOP memory.
@@ -737,22 +762,26 @@ PCI D-state, manually change an ICC vote, or infer safe D3 support from
 
 ## Next action
 
-The stock Linux boot remains the only deployed boot; the candidate is not
-staged. Its exact prior failure stage is unknown because no candidate boot ID
-or pstore record survived. The newest `20260920-06` candidate starts its
-120-second initrd timer from `sysinit.target.wants`, before that target becomes
-active; it restores the known stock ESP image if switch-root has not begun.
-The existing five-minute root-systemd timer covers later failures. Neither
-timer can help if the kernel fails or initrd systemd fails before the
-`sysinit.target` transaction starts. No remote ABL/BootNext route is exposed,
-so that residual case still needs manual ABL recovery. Do not stage or reboot
-the candidate until that manual recovery is available. The PCIe-MEM OPP A/B
-remains the best single-variable test once this gate is met. Do not directly
-load Android modules; port behavior against Linux 7.2.3. For persistent
-Android Wireless debugging, wait
-until Android is reachable and add a Magisk late-start helper rather than
-editing its unmounted userdata from Linux. Do not select **UNINSTALL CFW** in
-ABL if recovery is needed. See the
+The stock Linux boot is the only deployed boot and the test image is not
+staged. The guarded candidate was applied once, but no candidate userspace or
+sleep test was confirmed. The returned stock system's startup updater wrote
+the still-pending candidate into `/KERNEL`; cleanup removed the pending
+deployment and the updater regenerated stock. The initrd timer may have
+restored the stock kernel before that boot, but there is no persistent receipt
+proving it. The owner is checking whether they manually reset in ABL.
+
+Before another apply, add durable candidate initrd/recovery phase markers and
+confirm the test image can be positively identified before starting suspend.
+The current 120-second initrd timer begins from `sysinit.target.wants` and
+restores the hash-checked stock ESP image if it fires, but it cannot help if
+the kernel or initrd systemd fails before that transaction. Manual ABL
+recovery is available; still keep the stock `KERNEL.BAK` and rootfs verified
+before each apply. The PCIe-MEM OPP A/B remains the best single-variable sleep
+test once boot diagnostics are observable. Do not directly load Android
+modules; port behavior against Linux 7.2.3. For persistent Android Wireless
+debugging, wait until Android is reachable and add a Magisk late-start helper
+rather than editing its unmounted userdata from Linux. Do not select
+**UNINSTALL CFW** in ABL if recovery is needed. See the
 [Android rollback receipt](receipts/2026-09-20-android-esp-rollback.md),
 [ABL access notes](receipts/2026-09-20-post-apply-device-reachability.md), and
 completed MC4/SH5 receipt:

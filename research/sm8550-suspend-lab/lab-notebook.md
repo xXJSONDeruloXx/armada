@@ -7532,3 +7532,34 @@ restored the original `[s2idle] deep` setting. Checksum verification covered
 4594 files with no mismatches. This result narrows “PSCI was never invoked”
 but does not show that firmware entered an AOSD/CXSD/DDR state. See the
 [`PSCI return control receipt`](receipts/2026-09-20-stock-deep-psci-return.md).
+
+### 2026-09-21 00:23 UTC — guarded PCIe OPP image returned to stock before test
+
+With the owner available for manual ABL recovery, staged and applied the
+guarded candidate image `20260920-06`. Both ESP kernel files matched the
+known stock hash before apply, and bootc verified the candidate digest before
+the reboot. SSH later returned on a new boot ID, but the running version and
+OSTree command line were stock. Bootc showed the test image pending in its
+rollback slot with `rollbackQueued=true`; no candidate version/DTB marker,
+candidate-root journal, or pstore record established that candidate userspace
+was reached. No suspend command or OPP A/B ran.
+
+The returned stock boot's journal shows `initrd-switch-root.target` at
+00:14:55 UTC. Armada's stock startup updater then saved the existing
+`KERNEL.BAK` and wrote `/KERNEL` at 00:15:02 while the candidate BLS deployment
+was still pending. Before cleanup, `/KERNEL` was no longer the stock hash,
+but `KERNEL.BAK` remained the exact verified stock image. This demonstrates
+why an ABL/firmware or initrd fallback can return to stock yet leave the
+candidate queued for the following boot: the stock startup updater prepares
+the next-boot BLS entry, not necessarily the currently running root.
+
+Removed the pending deployment with `rpm-ostree cleanup --pending` and ran
+Armada's own `armada-bootimg-update` without rebooting. Post-cleanup checks
+show bootc `bootOrder=default` with no rollback/staged deployment; OSTree lists
+only stock; both ESP kernel files match the known stock SHA-256 and both
+stamps read the stock ID. The device is healthy on stock kernel `7.2.3`, Wi-Fi
+is connected, systemd has no failed units, and RTC wakealarm is empty. The
+candidate image remains in Podman storage. We cannot tell whether the initrd
+timer, ABL/firmware fallback, or a manual reset caused the return; the owner
+was asked to clarify. Do not count this as a sleep result. See the
+[`guarded apply receipt`](receipts/2026-09-21-pcie-opp-guarded-apply.md).
