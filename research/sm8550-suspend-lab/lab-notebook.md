@@ -8411,3 +8411,37 @@ The live default boot cannot reproduce that bound case because pcieport is
 absent, and we are not repeating the boot-policy experiment. No behavioral
 A/B is justified. The exact new evidence and next diagnostic fields are in
 the [root-port eligibility audit](receipts/2026-09-21-root-port-eligibility-audit.md).
+
+
+### 2026-09-21 10:25 UTC — WCN suspend paths and host wake contract
+
+Compared the actual 08:32 run probes with Linux 7.2.3 source. The captured
+run passed ath12k's OFF-state guard and invoked ath12k_core_suspend_late(),
+ath12k_pci_power_down(is_suspend=1), and MHI
+mhi_power_down_keep_dev(graceful=1). This is the full MHI power-off path;
+it is not the separate WoW path, which configures firmware wake triggers and
+offloads, enables WoW, and requests MHI M3. The capture proves the driver's
+request, not physical WCN or PCIe link power. The interface returned
+UP/LOWER_UP after resume, but the run did not prove Wi-Fi reconnection or
+traffic.
+
+Source shows that the Qualcomm PCIe host only powers down its link and WCN
+pwrseq after the common D3cold check permits it. ICC/OPP removal depends on
+the host's pci->suspended state. Host resume restores ICC/OPP and the
+controller/PHY before it powers the WCN pwrseq back on and deasserts PERST.
+The pwrctrl match for WCN7850 delegates to the QCOM WCN sequencer, whose WLAN
+disable step drives the WLAN-enable GPIO low. The provider explicitly warns
+that doing this without coordinated host link-down handling makes the WCN
+device unusable. No direct GPIO or regulator change is safe.
+
+The Nova DTS declares wake-gpios on the PCIe root-port node, but the active
+Linux QCOM host driver does not parse it or configure a wake IRQ from it. The
+current awake sysfs snapshot says wakeup is disabled for root and endpoint;
+that does not prove the state used during suspend. This leaves Wi-Fi/PME
+wake behavior unresolved. LDOE1 and LDOE3 are also shared with DSI, PCIe,
+UFS, USB, and USB/DP PHY consumers; Android's sleep requests cannot yet be
+ported safely as simple regulator disables.
+
+No behavior A/B or device configuration change was made. The source path,
+consumer map, wake gap, and exact trace needed next are recorded in the
+[WCN/PCIe wake contract audit](receipts/2026-09-21-wcn-pcie-wake-contract-audit.md).

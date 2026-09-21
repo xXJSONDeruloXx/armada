@@ -6,7 +6,7 @@ the chronological record, including failed runs and superseded interpretations.
 Update this page when a checklist item changes; put raw output in a dated
 receipt and explain the result in the notebook.
 
-Status as of 2026-09-21 10:14 UTC. Branch `feat/sm8550-suspend-lab`.
+Status as of 2026-09-21 10:25 UTC. Branch `feat/sm8550-suspend-lab`.
 
 ## Immediate next checkpoint
 
@@ -53,6 +53,14 @@ Status as of 2026-09-21 10:14 UTC. Branch `feat/sm8550-suspend-lab`.
   This closes the software-path questions only. The root port still failed
   D3cold at `PCI_UNKNOWN`, and no firmware acknowledgment/readback was found.
   See the [suspend-contract capture](receipts/2026-09-21-suspend-contract-probe-capture.md).
+- [x] Distinguish ath12k full MHI shutdown from WoW/M3 and map the WCN
+  pwrseq handoff. The captured run used POWER_OFF_KEEP_DEV, not the WoW
+  path; endpoint software D3hot still does not prove physical link-off.
+  Qualcomm PCI host deinit is the only coordinated path to WCN pwrseq
+  power-off, and the WCN source warns that an uncoordinated WLAN GPIO low
+  causes link-down. The board declares a host wake-gpios, but the active
+  QCOM host driver does not consume it. See the [WCN/PCIe wake contract
+  audit](receipts/2026-09-21-wcn-pcie-wake-contract-audit.md).
 - [x] Capture `pci_prepare_to_sleep()` entry/return plus BTF-validated PCI
   state. Linux prepares WCN7850 `0000:01:00.0` from software D0 to D3hot
   successfully. The enabled root port `0000:00:00.0` remains PCI_UNKNOWN and
@@ -97,7 +105,11 @@ Status as of 2026-09-21 10:14 UTC. Branch `feat/sm8550-suspend-lab`.
   pcie_ports experiment, force a PCI state, or bypass the common safety
   predicate. See the [root-port eligibility audit](receipts/2026-09-21-root-port-eligibility-audit.md).
 - [ ] Complete the Linux/Android required-wake map for PCIe/WCN, UFS, USB and
-  display before considering regulator-context behavior.
+  display before considering regulator-context behavior. LDOE1 is shared by
+  DSI1/PCIe/USB HS; LDOE3 by DSI1/PCIe/UFS/USB HS/USB-DP. The Nova PCIe
+  wake-gpios property is not consumed by the active host driver, and awake
+  sysfs wakeup settings do not prove the suspend-time route. Do not disable
+  either rail until that contract is established.
 - [ ] Select one behavior-changing A/B only after those PCIe/wake and request
   ownership gaps produce a source-backed single-variable mechanism.
 
