@@ -6,7 +6,7 @@ the chronological record, including failed runs and superseded interpretations.
 Update this page when a checklist item changes; put raw output in a dated
 receipt and explain the result in the notebook.
 
-Status as of 2026-09-21 01:51 UTC. Branch `feat/sm8550-suspend-lab`.
+Status as of 2026-09-21 02:18 UTC. Branch `feat/sm8550-suspend-lab`.
 
 ## Current goal checklist
 
@@ -87,44 +87,48 @@ Status as of 2026-09-21 01:51 UTC. Branch `feat/sm8550-suspend-lab`.
 - [x] Identify the exact candidate tree and builder: Linux 7.2.3 patched
   source, config matching the saved live config, and the native AArch64 Fedora
   builder with matching GCC 16.2.1 and `pahole` 1.30.
-- [ ] Build a bounded module set (the 96 modules currently loaded, their
-  dependencies, and the initrd root closure) using Kbuild single-module
-  targets. Validate BTF/modpost, package the matching `.ko` files, and
-  regenerate initramfs before another boot. Avoid all 1,458 configured modules
-  unless the targeted build proves insufficient.
-- [ ] Run the PCIe OPP direct-deep A/B only after candidate kernel/DTB and root
-  are positively identified. Neither candidate attempt has run a suspend test.
+- [x] Build the 96 currently loaded modules and root dependencies using
+  Kbuild single-module targets. All compiled modules have matching vermagic
+  and `.BTF`; the stripped overlay is 17 MB. No kernel image rebuild.
+- [ ] Build phase-03 with the hash-checked module overlay, run `depmod`, and
+  regenerate the guarded initramfs. Verify Btrfs, dm-mod, and their module
+  dependencies are included before staging/applying.
+- [ ] After candidate-root marker and post-boot health checks pass, run the
+  PCIe OPP direct-deep A/B. Neither candidate attempt has run a suspend test.
 
 ## Latest device recovery state
 
-As of 2026-09-21 01:34 UTC, the Nova is healthy on stock Armada Linux
+As of 2026-09-21 02:12 UTC, the Nova is healthy on stock Armada Linux
 `20260915.feca679`, kernel `7.2.3`, boot ID
-`f884a7fb-79d5-4247-9d1e-c634ed2b0141`. Wi-Fi is connected, systemd is
-`running` with zero failed units, and no RTC wake alarm is armed. Root-level
-`bootc status` reports `staged: null` and `rollback: null`; OSTree lists only
-the stock default deployment. The phase-02 candidate initrd ran on boot
+`f884a7fb-79d5-4247-9d1e-c634ed2b0141`. Wi-Fi is connected, systemd has zero
+failed units, and `bootc status` reports no staged or rollback deployment.
+There are 29 GB free on `/var`; the rootful Podman store retains the previous
+diagnostic images. The phase-02 candidate initrd ran on boot
 `529c658e-7b48-47ca-b626-a579fd239cf2`, failed before switch-root because
 essential stock modules were rejected by candidate-kernel BTF validation,
 then its recovery service restored the known-good kernel. No candidate root
-marker appeared and no suspend A/B ran. The preserved log, diagnosis, and
-build details are in the
+marker appeared and no suspend A/B ran. The targeted 96-module rebuild is
+now complete with matching vermagic and BTF; phase-03 will package those
+modules, verify their hashes, regenerate initramfs, and assert the root
+modules are included before any deployment is staged. The candidate image has
+not yet been built or deployed. The preserved log and phase-02 diagnosis are
+in the
 [phase-02 initrd diagnosis](receipts/2026-09-21-pcie-opp-phase-02-initrd-diagnosis.md),
 [raw initrd journal](receipts/2026-09-21-pcie-opp-phase-02-initrd-journal.txt),
 [phase-02 build receipt](receipts/2026-09-21-pcie-opp-phase-02-build.md), and
 [phase-marker recovery receipt](receipts/2026-09-21-pcie-opp-phase-01-recovery.md).
 
-The decisive failure is in boot packaging: the image paired a modified
+The decisive phase-02 failure was boot packaging: the image paired a modified
 candidate kernel with the base image's stock modules. Candidate `vmlinux` has
 a different `.BTF` hash, and the captured initrd journal shows BTF validation
-failures followed by `dm_mod` and `btrfs` insertion failures. The build tree
-has not yet produced candidate `.ko` files or `Module.symvers`. The exact
-native AArch64 Fedora builder is now identified and matches the candidate's
-GCC 16.2.1 metadata; the configured tree also has `vmlinux.o` and module BTF
-enabled. The first build attempt will target the 96 modules currently loaded
-on the Nova plus dependencies and Btrfs/initrd requirements, not every module
-in the config. Keep the 120-second guard and PCIe OPP behavior unchanged.
-See the [initrd diagnosis](receipts/2026-09-21-pcie-opp-phase-02-initrd-diagnosis.md)
-and [targeted build plan](receipts/2026-09-21-candidate-module-build-path.md).
+failures followed by `dm_mod` and `btrfs` insertion failures. That mismatch
+is addressed for the next attempt by rebuilding the 96 loaded modules and
+root dependencies from the matching tree/toolchain, then packaging the
+hash-checked BTF-bearing modules with the candidate kernel. The 120-second
+guard and PCIe OPP behavior remain unchanged. See the
+[initrd diagnosis](receipts/2026-09-21-pcie-opp-phase-02-initrd-diagnosis.md),
+[targeted build plan](receipts/2026-09-21-candidate-module-build-path.md),
+and [module-build receipt](receipts/2026-09-21-candidate-module-build.md).
 
 Older dated live-state observations below are historical; use the latest
 state above for current device status.

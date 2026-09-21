@@ -7751,3 +7751,61 @@ No module has been built or deployed. The Nova remains on stock
 `20260915.feca679` / kernel `7.2.3`, Wi-Fi up, with no staged or rollback
 bootc deployment. Detailed evidence and the bounded plan are in the
 [`candidate module-build receipt`](receipts/2026-09-21-candidate-module-build-path.md).
+
+
+### 2026-09-21 02:04 UTC — targeted module build succeeded with matching BTF
+
+Using the existing candidate tree and its exact native AArch64 builder, ran
+Kbuild only for the 96 modules loaded on the stock Nova. The builder's GCC
+16.2.1 matches `include/generated/compile.h`; `pahole` is v1.30. The config,
+linked `vmlinux`, and `Image` hashes remain unchanged. Kbuild exited 0 after
+579 module-object compilations, linking 96 selected `.ko` files, and creating
+BTF for all 96. The full log has no modpost, unresolved-symbol, compiler, or
+BTF errors. This did not build another kernel image or DTB.
+
+Validated each output file exists, has the stock-compatible vermagic
+`7.2.3 SMP preempt mod_unload aarch64`, and contains `.BTF`. A disposable
+`strip --strip-debug` check preserved BTF and vermagic. The staged overlay
+contains the 96 selected module files and is 17 MB. Btrfs is 44,734,592 bytes
+unstripped and 3,214,128 bytes stripped. The manifest records every final
+module path and hash (96 entries; SHA-256
+`8ae27c4a1f9990adcdc0592de50b9622a4eebd8a4bb4ed4c8e376492e9914521`).
+
+The stock initramfs inspection as root confirms it contains Btrfs, dm-mod,
+raid6_pq, xor, and libblake2b at the module paths expected by the new image.
+The PCIe OPP Containerfile now copies the matching overlay into those same
+paths, verifies all 96 hashes, runs `depmod`, regenerates the existing guarded
+initramfs, and asserts those five modules are included. The image is not built
+or staged yet; no modules were loaded into stock and no device boot or suspend
+state changed. Next build the unique phase-03 image and inspect its initramfs
+before applying it with the 120-second restore guard and ABL recovery
+available. Full evidence is in the
+[`candidate module-build receipt`](receipts/2026-09-21-candidate-module-build.md)
+and [module manifest](receipts/2026-09-21-candidate-module-manifest.sha256).
+
+
+### 2026-09-21 02:12 UTC — stock recovery state revalidated before phase-03
+
+The device is still on stock Armada `20260915.feca679` / kernel `7.2.3`, boot
+ID `f884a7fb-79d5-4247-9d1e-c634ed2b0141`. SSH/Wi-Fi are active, systemd
+reports zero failed units, and the parsed `bootc status --json` has no staged
+or rollback deployment. `/var` has 29 GB free. The rootful Podman image store
+is available without a password prompt and retains the previous guarded test
+images, so a new candidate can be built before changing device deployment
+state. The build will use a unique phase-03 tag and version marker, include
+only the validated matching module overlay, and keep the 120-second initrd
+restore guard. No candidate image has been built or staged, and no suspend
+test has run. The stale phase-02-only status text has been corrected in the
+[current checklist](investigation-status.md).
+
+
+### 2026-09-21 02:18 UTC — module manifest root verified before image build
+
+A local sha256sum check from the overlay directory failed because the
+manifest paths are rooted at /usr/lib/modules/7.2.3 and begin with
+kernel/, while the overlay stores the corresponding subtree under
+modules/. Rechecking each manifest entry with that documented path mapping
+validated all 96 hashes. The existing Containerfile copy destination
+/usr/lib/modules/7.2.3/kernel/ is correct; the earlier failure was only a
+verification working-directory mismatch. No recipe edit, image build, or
+device change resulted from it.
