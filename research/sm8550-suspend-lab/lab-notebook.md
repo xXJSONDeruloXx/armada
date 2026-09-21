@@ -7809,3 +7809,36 @@ validated all 96 hashes. The existing Containerfile copy destination
 /usr/lib/modules/7.2.3/kernel/ is correct; the earlier failure was only a
 verification working-directory mismatch. No recipe edit, image build, or
 device change resulted from it.
+
+
+### 2026-09-21 02:43 UTC — phase-03 lowers the PCIe sleep floor, not residency
+
+Phase-03 fixed the prior initrd failure: its matching 96-module overlay passed
+all image checks, the root marker recorded candidate boot ID
+6660e4d7-3e96-4cf3-900f-9ba32710b494, and Btrfs/dm-mod loaded. A single
+15-second direct-deep run completed with RTC wake, suspend command return 0,
+and 14.286997 seconds of BOOTTIME-minus-MONOTONIC separation.
+
+The rpmh-aoss trace observed 1c00000.pcie lowering its xm_pcie3_0 memory-path
+peak request to 1,000 kB/s. Apps-RSC SLEEP submissions at MC0/SH0 addresses
+0x50000/0x50004 were 0x60000001 (1), versus the stock control's 0x600003b8
+(952). The other four SLEEP payloads and all WAKE payloads matched stock.
+rpmh_rsc_snapshot remains unavailable, so these are Linux-submitted values,
+not proof firmware applied them.
+
+AOSD, CXSD, and scalar DDR count/duration deltas all remained zero. APSS SMEM
+advanced by one count; detailed DDR ID 0xd0 advanced by 318,614,909 raw
+ticks, with 0x11, 0xd3, and 0xd4 unchanged. The test therefore shows that
+lowering the PCIe memory-path floor is real but insufficient by itself to
+produce the named AOP/RPM firmware residency. The trace profile did not
+collect PCIe D3cold eligibility or a psci_system_suspend_enter return.
+
+The candidate's 5-minute userspace guard started bootc rollback --apply at
+02:35:14 UTC after the run; the same candidate boot ID existed before and
+after suspend. The Nova rebooted automatically to stock boot ID
+3656b0e7-5671-4b7e-9368-67965daa251a. Current stock has connected Wi-Fi,
+zero failed units, no staged deployment, and no queued rollback. The immediate
+candidate post-resume health snapshot did see wlp1s0 temporarily down with
+NO-CARRIER; after automatic rollback, Wi-Fi was connected. No ABL action was
+needed. Full evidence and hashes are in the
+[phase-03 candidate test receipt](receipts/2026-09-21-pcie-opp-phase-03-candidate-test.md).
