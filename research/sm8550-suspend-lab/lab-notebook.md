@@ -7722,3 +7722,32 @@ source/toolchain can be reconstructed. The OPP remains unchanged and the
 recovery guard stays at 120 seconds. Full evidence is in the
 [`phase-02 diagnosis receipt`](receipts/2026-09-21-pcie-opp-phase-02-initrd-diagnosis.md)
 and the [captured initrd journal](receipts/2026-09-21-pcie-opp-phase-02-initrd-journal.txt).
+
+
+### 2026-09-21 01:51 UTC — matching module-only builder identified
+
+The active `armada-kmod-build` Docker container is still available and has
+`/Volumes/NovaKernelBuild/work/linux-7.2.3` mounted read/write at `/kernel`.
+Its GCC is `16.2.1`, matching `include/generated/compile.h` for the candidate;
+`pahole` is `v1.30`, the kernel release is `7.2.3`, and the source contains
+the exact `diag_opp_active` diagnostic change. The `.config` hash exactly
+matches the saved live Linux config. Existing `vmlinux`, `Image`, and 1.5-GB
+`vmlinux.o` are present; `Module.symvers` and all needed module outputs are
+absent. `CONFIG_MODVERSIONS` is disabled and module BTF is enabled.
+
+The current stock device has 96 loaded modules. This includes Btrfs and its
+`raid6_pq`, `xor`, and `libblake2b` dependencies, device-mapper modules, and
+the active Wi-Fi, audio, input, power, and remote-processor stacks. The config
+has 1,458 `=m` symbols, so compiling every module is avoidable as a first
+attempt. Kbuild supports requested `.ko` targets through a single-module path;
+with the existing `vmlinux.o`, that path should modpost selected module
+symbols against the exact candidate kernel. This method has not yet been
+run. Next, derive source-tree target paths from the currently loaded module
+filenames and build that closure plus initrd root modules. If Kbuild reports
+unresolved symbols or module BTF errors, stop and correct the build method
+before packaging. Do not use warning suppression to force a candidate.
+
+No module has been built or deployed. The Nova remains on stock
+`20260915.feca679` / kernel `7.2.3`, Wi-Fi up, with no staged or rollback
+bootc deployment. Detailed evidence and the bounded plan are in the
+[`candidate module-build receipt`](receipts/2026-09-21-candidate-module-build-path.md).

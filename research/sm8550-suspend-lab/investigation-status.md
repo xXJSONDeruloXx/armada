@@ -6,7 +6,7 @@ the chronological record, including failed runs and superseded interpretations.
 Update this page when a checklist item changes; put raw output in a dated
 receipt and explain the result in the notebook.
 
-Status as of 2026-09-21 01:34 UTC. Branch `feat/sm8550-suspend-lab`.
+Status as of 2026-09-21 01:51 UTC. Branch `feat/sm8550-suspend-lab`.
 
 ## Current goal checklist
 
@@ -84,9 +84,14 @@ Status as of 2026-09-21 01:34 UTC. Branch `feat/sm8550-suspend-lab`.
 - [x] Diagnose the pre-switch-root failure: candidate kernel BTF rejects stock
   `dm_mod` and `btrfs` modules. The test image copied a candidate kernel/DTB
   but retained the base image's stock module tree. No suspend A/B ran.
-- [ ] Establish the exact candidate source snapshot and builder, then build
-  matching modules from the existing configured tree if feasible. Package
-  them with the candidate and regenerate the initramfs before another boot.
+- [x] Identify the exact candidate tree and builder: Linux 7.2.3 patched
+  source, config matching the saved live config, and the native AArch64 Fedora
+  builder with matching GCC 16.2.1 and `pahole` 1.30.
+- [ ] Build a bounded module set (the 96 modules currently loaded, their
+  dependencies, and the initrd root closure) using Kbuild single-module
+  targets. Validate BTF/modpost, package the matching `.ko` files, and
+  regenerate initramfs before another boot. Avoid all 1,458 configured modules
+  unless the targeted build proves insufficient.
 - [ ] Run the PCIe OPP direct-deep A/B only after candidate kernel/DTB and root
   are positively identified. Neither candidate attempt has run a suspend test.
 
@@ -112,10 +117,14 @@ The decisive failure is in boot packaging: the image paired a modified
 candidate kernel with the base image's stock modules. Candidate `vmlinux` has
 a different `.BTF` hash, and the captured initrd journal shows BTF validation
 failures followed by `dm_mod` and `btrfs` insertion failures. The build tree
-has not yet produced candidate `.ko` files or `Module.symvers`; inspect the
-candidate source/toolchain path and build matching modules before rebuilding
-the test image. Keep the 120-second guard and PCIe OPP behavior unchanged.
-See the [diagnosis receipt](receipts/2026-09-21-pcie-opp-phase-02-initrd-diagnosis.md).
+has not yet produced candidate `.ko` files or `Module.symvers`. The exact
+native AArch64 Fedora builder is now identified and matches the candidate's
+GCC 16.2.1 metadata; the configured tree also has `vmlinux.o` and module BTF
+enabled. The first build attempt will target the 96 modules currently loaded
+on the Nova plus dependencies and Btrfs/initrd requirements, not every module
+in the config. Keep the 120-second guard and PCIe OPP behavior unchanged.
+See the [initrd diagnosis](receipts/2026-09-21-pcie-opp-phase-02-initrd-diagnosis.md)
+and [targeted build plan](receipts/2026-09-21-candidate-module-build-path.md).
 
 Older dated live-state observations below are historical; use the latest
 state above for current device status.
