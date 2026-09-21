@@ -51,6 +51,12 @@ cat > "$mock/systemctl" <<'SH'
 #!/bin/sh
 printf '%s\n' "$*" >> "$MOCK_REBOOT_LOG"
 SH
+cat > "$mock/journalctl" <<'SH'
+#!/bin/sh
+[ "${MOCK_JOURNALCTL_FAIL:-0}" = 0 ] || exit 1
+printf 'initrd journal fixture: %s\n' "$*"
+printf '%s\n' 'dracut-initqueue.service: waiting for /sysroot'
+SH
 cat > "$mock/sha256sum" <<'SH'
 #!/usr/bin/env python3
 import hashlib
@@ -93,6 +99,7 @@ run_guard() {
         MOCK_SYSROOT_ESP="$case_dir/sysroot-esp" \
         MOCK_ROOT_FSTYPE="${MOCK_ROOT_FSTYPE:-}" \
         MOCK_ROOT_OPTIONS="${MOCK_ROOT_OPTIONS:-}" \
+        MOCK_JOURNALCTL_FAIL="${MOCK_JOURNALCTL_FAIL:-0}" \
         MOCK_MOUNT_FAIL="${MOCK_MOUNT_FAIL:-0}" \
         ARMADA_PCIE_TEST_ESP_DEVICE="$case_dir/device" \
         ARMADA_PCIE_TEST_ESP_MOUNT="$esp" \
@@ -110,6 +117,15 @@ cmp -s "$esp/KERNEL" "$esp/KERNEL.BAK" || fail 'stock KERNEL was not restored'
 [[ $(cat "$esp/.armada-bootimg.prev.id") == stale-previous-id ]] || fail 'previous ID was changed'
 grep -qx 'reboot --force' "$case_dir/reboots" || fail 'reboot was not requested'
 grep -q '^event=stock_kernel_restored boot_id=' "$esp/SUSDIAG.LOG" || fail 'successful recovery phase was not persisted'
+grep -q 'dracut-initqueue.service: waiting for /sysroot' "$esp/SUSDIAG.JRN" || fail 'initrd journal was not persisted'
+[[ ! -e "$esp/SUSDIAG.JRN.TMP" ]] || fail 'temporary journal file was left behind'
+
+new_case journal_capture_failure
+MOCK_JOURNALCTL_FAIL=1
+run_guard || fail 'journal capture failure blocked recovery'
+unset MOCK_JOURNALCTL_FAIL
+cmp -s "$esp/KERNEL" "$esp/KERNEL.BAK" || fail 'journal capture failure prevented stock restore'
+[[ ! -e "$esp/SUSDIAG.JRN.TMP" ]] || fail 'failed journal capture left a temporary file'
 
 new_case wrong_hash
 EXPECTED_HASH=deadbeef
@@ -144,11 +160,11 @@ grep -q 'candidate boot image' "$esp/KERNEL" || fail 'read-only case changed KER
 state_file="$tmp/root-marker/boot-phases.log"
 version_file="$tmp/root-marker/version"
 mkdir -p "${state_file%/*}"
-printf '%s\n' '20260921.pcie-opp-test-phase-01' > "$version_file"
+printf '%s\n' '20260921.pcie-opp-test-phase-02' > "$version_file"
 ARMADA_PCIE_TEST_STATE_FILE="$state_file" \
 ARMADA_PCIE_TEST_VERSION_FILE="$version_file" \
     "$ROOT/root-phase/mark-root.sh"
-grep -q '^root boot_id=.* version=20260921.pcie-opp-test-phase-01$' "$state_file" ||
+grep -q '^root boot_id=.* version=20260921.pcie-opp-test-phase-02$' "$state_file" ||
     fail 'candidate root phase was not persisted'
 
 printf '%s\n' 'initrd recovery tests passed'

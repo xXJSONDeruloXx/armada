@@ -72,6 +72,24 @@ record_phase() {
 
 record_phase initrd_recovery_started
 
+capture_initrd_journal() {
+    local temporary="$ESP_MOUNT/SUSDIAG.JRN.TMP"
+    if ! command -v journalctl >/dev/null 2>&1; then
+        log "journalctl is unavailable; no initrd journal persisted"
+        return
+    fi
+    if journalctl --no-pager --output=short-monotonic --lines=500 > "$temporary" 2>&1 &&
+        sync "$temporary" &&
+        mv -f "$temporary" "$ESP_MOUNT/SUSDIAG.JRN"; then
+        sync
+    else
+        rm -f "$temporary" 2>/dev/null || true
+        log "could not persist initrd journal"
+    fi
+}
+
+capture_initrd_journal
+
 backup="$ESP_MOUNT/KERNEL.BAK"
 [[ -f "$backup" ]] || fail "KERNEL.BAK is missing"
 digest=$(sha256sum "$backup") || fail "could not hash KERNEL.BAK"

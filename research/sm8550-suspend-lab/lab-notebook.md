@@ -7644,3 +7644,39 @@ snapshot of the journal to ESP `SUSDIAG.JRN` before it restores the kernel.
 Keep the 120-second timer and PCIe OPP behavior unchanged; inspect those logs
 before any retry or timer extension. Detailed output and recovery commands:
 [`phase-marker recovery receipt`](receipts/2026-09-21-pcie-opp-phase-01-recovery.md).
+
+### 2026-09-21 01:15 UTC — phase-02 image adds bounded initrd journal capture
+
+Because the phase-01 recovery ran but its boot ID did not appear in the
+persistent journal, changed only the candidate recovery helper's diagnostics:
+when the existing 120-second timer fires, it now attempts to persist the last
+500 initrd journal lines to ESP `SUSDIAG.JRN` before restoring the verified
+stock backup. The capture uses a temporary file and sync/rename; failure is
+best-effort and cannot block kernel recovery. The timer and PCIe OPP remain
+unchanged. The initrd already includes `/usr/bin/journalctl` and
+`systemd-journald`; the image now asserts the binary is present.
+
+The mocked recovery test passes both with journal output and with
+`journalctl` failing; both cases restore the stock fixture, and successful
+capture leaves no temporary file. `bash -n` and `git diff --check` also pass.
+Built image
+`localhost/armada-pcie-opp-test-phase:20260921-02` from the cached pinned base,
+reusing the exact prior kernel and Nova DTB and no kernel compile. Manifest
+digest:
+`sha256:b8be5e46ca08c9d03aa7992bd24b9861befd95af5d360a122504cb8685d0e8bd`;
+image ID:
+`0cd625c73f4ec17726d32692a729df34a72c74e62be646d951a9280bfea3743c`.
+Build hash assertions, initrd contents, root marker/drop-in, and
+`systemd-analyze verify` passed. Dracut printed the known nonfatal container
+`/dev/log`/`logger` warning.
+
+Fresh preflight confirms the Nova is clean on stock kernel `7.2.3`, boot ID
+`5263e173-9323-426b-aee2-6fe6f3dc4bfd`, Wi-Fi connected, systemd healthy, no
+RTC alarm, no bootc staged/rollback deployment, and stock hashes on both ESP
+kernel files. Phase-02 remains unstaged at this capture. Build details:
+[`phase-02 journal-capture receipt`](receipts/2026-09-21-pcie-opp-phase-02-build.md).
+
+Next: with ABL recovery available, stage and apply this exact image; check
+`SUSDIAG.LOG`, `SUSDIAG.JRN`, and the root phase log before deciding whether
+the candidate root reached switch-root. Do not run a suspend test unless the
+candidate version/kernel/DTB are all confirmed.

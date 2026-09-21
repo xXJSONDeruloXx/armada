@@ -6,7 +6,7 @@ the chronological record, including failed runs and superseded interpretations.
 Update this page when a checklist item changes; put raw output in a dated
 receipt and explain the result in the notebook.
 
-Status as of 2026-09-21 01:08 UTC. Branch `feat/sm8550-suspend-lab`.
+Status as of 2026-09-21 01:15 UTC. Branch `feat/sm8550-suspend-lab`.
 
 ## Current goal checklist
 
@@ -71,9 +71,15 @@ Status as of 2026-09-21 01:08 UTC. Branch `feat/sm8550-suspend-lab`.
   the stock backup; the candidate-root marker is absent, so no suspend A/B ran.
 - [x] Remove the failed deployment and regenerate the stock ESP kernel. Bootc
   is clean and both ESP kernel files match stock again.
-- [ ] Capture a bounded initrd journal to the ESP when the recovery timer
-  fires. The candidate boot ID is absent from persistent journal; the image's
-  initrd already includes `journalctl` and `systemd-journald`.
+- [x] Add best-effort capture of the last 500 initrd journal lines to
+  `SUSDIAG.JRN` before stock restore. Test both capture success and a failed
+  `journalctl` command without blocking recovery; assert the image includes
+  `journalctl` in its generated initramfs.
+- [x] Build and validate phase-02 candidate with the same kernel/DTB and OPP,
+  plus only the bounded initrd journal capture. It remains unstaged.
+- [ ] Apply phase-02 while ABL recovery is available. Read `SUSDIAG.JRN` and
+  root phase marker before changing the recovery timeout or running the OPP
+  A/B.
 - [ ] Determine why candidate initrd does not reach switch-root before the
   120-second recovery timer. Keep the timer and PCIe OPP unchanged while
   gathering this evidence.
@@ -82,7 +88,7 @@ Status as of 2026-09-21 01:08 UTC. Branch `feat/sm8550-suspend-lab`.
 
 ## Latest device recovery state
 
-As of 2026-09-21 01:08 UTC, the Nova is healthy on stock Armada Linux
+As of 2026-09-21 01:15 UTC, the Nova is healthy on stock Armada Linux
 `20260915.feca679`, kernel `7.2.3`, boot ID
 `5263e173-9323-426b-aee2-6fe6f3dc4bfd`. Wi-Fi is connected, systemd is
 `running` with zero failed units, and no RTC wake alarm is armed. `bootc`
@@ -91,14 +97,15 @@ reports `bootOrder=default`, `rollback=null`, `rollbackQueued=false`, and
 match stock SHA-256
 `0b0d7c03a88e77c480ad31d145a6718916638ba62287ff5a2b427c0f75475000`; the
 active boot-image stamp is stock. Bootc has no staged or rollback deployment.
-The phase-marker candidate is retained in rootful Podman as
-`localhost/armada-pcie-opp-test-phase:20260921-01`, digest
-`sha256:54ab4a31d2669ed6fe4d48f782396f6a44464c239d86ee69b3dabc74424089d5`;
-it is no longer staged. The latest attempt's ESP record says
+The phase-02 diagnostic candidate is built in rootful Podman as
+`localhost/armada-pcie-opp-test-phase:20260921-02`, digest
+`sha256:b8be5e46ca08c9d03aa7992bd24b9861befd95af5d360a122504cb8685d0e8bd`;
+it is not staged. The latest attempt's ESP record says
 `event=stock_kernel_restored boot_id=5debf421-a407-40be-926b-3803174e6291`;
 the candidate-root phase log is absent. See the
-[phase-marker build receipt](receipts/2026-09-21-pcie-opp-phase-01-build.md)
-and [guard execution receipt](receipts/2026-09-21-pcie-opp-phase-01-recovery.md).
+[phase-marker build receipt](receipts/2026-09-21-pcie-opp-phase-01-build.md),
+[guard execution receipt](receipts/2026-09-21-pcie-opp-phase-01-recovery.md),
+and the [journal-capture build receipt](receipts/2026-09-21-pcie-opp-phase-02-build.md).
 
 The 2026-09-21 guarded candidate apply did not yield a confirmed candidate
 userspace, and no suspend A/B ran. The returned stock boot's journal shows
@@ -112,9 +119,9 @@ The phase-marker follow-up confirmed that the initrd recovery timer executed
 and restored `KERNEL.BAK`; the candidate-root marker did not appear. This
 strongly places the stall before candidate switch-root, but no candidate
 journal was persisted, so the cause is still unknown. The deployment and ESP
-were cleaned back to stock without another reboot. Next, persist a bounded
-initrd journal snapshot to the ESP from the recovery helper, then decide
-whether the PCIe OPP A/B can safely proceed.
+were cleaned back to stock without another reboot. Phase-02 adds a bounded
+initrd journal snapshot to the recovery helper; it is built but not yet
+staged. Read that log before extending the timer or retrying the OPP A/B.
 
 Older dated live-state observations below are historical; use the latest
 state above for current device status.
