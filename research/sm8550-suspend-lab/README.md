@@ -248,20 +248,28 @@ On the device, one detached systemd unit performs this sequence:
    `pcie-d3cold` records ICC events for all clients, records device-PM
    callbacks for host `1c00000.pcie`, its `0000:00:00.0` root port, and its
    `0000:01:00.0` Wi-Fi endpoint, and probes each device's D3cold eligibility
-   callback in PCI bus-walk order, including `pci_dev.current_state`. The field
-   read uses the BTF-verified offset and runs only when both the inspected
-   kernel release and BTF hash match; otherwise the profile aborts before
-   suspend. It also records RPMh and system-suspend events.
+   callback in PCI bus-walk order, including `pci_dev.current_state`. It also
+   records filtered `pci_set_power_state()` requests for those Qualcomm
+   devices. Paired with the device-PM callback events and the state later read
+   by the host's D3cold eligibility walk, this distinguishes explicit D-state
+   requests from the PCI core's fallback to `PCI_UNKNOWN`. These probes perform
+   no PCI config or MMIO reads. The field read uses the BTF-verified offset
+   and runs only when both the inspected kernel release and BTF hash match;
+   otherwise the profile aborts before suspend. It also records RPMh and
+   system-suspend events.
    Its before/after runtime-PM snapshot also captures PCI power state, D3cold
    allowance, and negotiated link speed/width when the kernel exposes them.
-   `icc-attribution` records Qualcomm aggregation callbacks for the EBI/LLCC
-   nodes alongside `icc_set_bw` and RPMh SLEEP submissions. It maps callbacks
-   to the fresh `interconnect_summary` client order only if the trace is
-   lossless, node/request/tag order still matches, and no request was added,
-   removed, or retagged before the SLEEP commands. A pinned kernel release and
-   BTF hash guard the `icc_node.name` read; a mismatch aborts before suspend.
-   The report shows Linux's per-client SLEEP-bucket inputs and the TCS words
-   Linux staged. It does not prove firmware acceptance or physical residency.
+   `icc-attribution` records Qualcomm aggregation callbacks for EBI/LLCC, the
+   QUP2 virtual-resource node, and SM8550 SH1 member nodes alongside
+   `icc_set_bw` and RPMh SLEEP submissions. It maps each captured node to the
+   fresh `interconnect_summary` client order only if the trace is lossless,
+   request/tag order still matches,
+   and no request was removed or retagged before SLEEP. Nodes without a full
+   pre-sleep aggregation pass are reported as uncovered; they do not invalidate
+   exact mappings for other nodes. A pinned kernel release and BTF hash guard
+   the `icc_node.name` read; a mismatch aborts before suspend. The report shows
+   Linux's per-client SLEEP-bucket inputs and the TCS words Linux staged. It
+   does not prove firmware acceptance or physical residency.
    The profiles never send firmware commands or change runtime-PM, regulator,
    interconnect, or device power controls.
 9. After resume, captures the matching post snapshot, Armada's exact

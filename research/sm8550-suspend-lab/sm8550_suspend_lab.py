@@ -166,7 +166,25 @@ TRACE_ICC_ATTRIBUTION_REQUIRED_EVENTS = (
     "interconnect:icc_set_bw_end",
     "rpmh:rpmh_send_msg",
 )
-ICC_ATTRIBUTION_NODE_BASES = ("ebi", "llcc_mc", "qns_llcc")
+ICC_ATTRIBUTION_NODE_BASES = (
+    "ebi",
+    "llcc_mc",
+    "qns_llcc",
+    "qup2_core_slave",
+    "alm_gpu_tcu",
+    "alm_sys_tcu",
+    "chm_apps",
+    "qnm_gpu",
+    "qnm_mdsp",
+    "qnm_mnoc_hf",
+    "qnm_mnoc_sf",
+    "qnm_nsp_gemnoc",
+    "qnm_pcie",
+    "qnm_snoc_gc",
+    "qnm_snoc_sf",
+    "qns_gem_noc_cnoc",
+    "qns_pcie",
+)
 ICC_NODE_NAME_OFFSET = 0x8
 ICC_ATTRIBUTION_KERNEL_RELEASE = "7.2.3"
 ICC_ATTRIBUTION_BTF_SHA256 = "fb193ea5c32178ae22d52e30a62986e4bbc2c3db01bfa530f34b257fe94b45a1"
@@ -793,6 +811,7 @@ def parse_icc_aggregate_attribution(
     target_node_addresses: Dict[str, set] = {node: set() for node in registered}
     missing_node_addresses = set()
     unmatched_points = 0
+    unmatched_nodes = set()
     sleep_messages: List[Dict[str, Any]] = []
 
     for line in text.splitlines():
@@ -832,6 +851,7 @@ def parse_icc_aggregate_attribution(
             rows = callbacks.pop((event["pid"], node), [])
             if not rows:
                 unmatched_points += 1
+                unmatched_nodes.add(node)
             batch = {
                 "node": node,
                 "pid": event["pid"],
@@ -871,30 +891,35 @@ def parse_icc_aggregate_attribution(
     mutations_before_sleep = [
         row for row in mutations if sleep_boundary is None or row["timestamp"] <= sleep_boundary
     ]
-    orphan_callbacks = [
+    orphan_rows = [
         row
         for rows in callbacks.values()
         for row in rows
         if sleep_boundary is None or row.get("timestamp", sleep_boundary) <= sleep_boundary
     ]
-    mapping_reasons = []
+    orphan_nodes = {
+        node
+        for (_, node), rows in callbacks.items()
+        if any(sleep_boundary is None or row.get("timestamp", sleep_boundary) <= sleep_boundary for row in rows)
+    }
+    global_mapping_reasons = []
     if baseline.get("target_nodes_match") is not True:
-        mapping_reasons.append("fresh interconnect summary did not match the registered node set")
+        global_mapping_reasons.append("fresh interconnect summary did not match the registered node set")
     if trace_loss.get("lossless") is not True:
-        mapping_reasons.append("trace loss is nonzero or could not be ruled out")
+        global_mapping_reasons.append("trace loss is nonzero or could not be ruled out")
     if sleep_boundary is None:
-        mapping_reasons.append("no Apps-RSC SLEEP submission was captured")
+        global_mapping_reasons.append("no Apps-RSC SLEEP submission was captured")
+    if mutations_before_sleep:
+        global_mapping_reasons.append("an ICC request was removed or retagged before the sleep commands")
+    mapping_reasons = list(global_mapping_reasons)
     if missing_node_addresses:
         mapping_reasons.append("some target-node aggregation callbacks lacked node addresses")
     if any(len(addresses) != 1 for addresses in target_node_addresses.values()):
-        mapping_reasons.append("target-node addresses were missing or inconsistent")
-    if mutations_before_sleep:
-        mapping_reasons.append("an ICC request was removed or retagged before the sleep commands")
-    if orphan_callbacks:
+        mapping_reasons.append("some target-node addresses were missing or inconsistent")
+    if orphan_nodes:
         mapping_reasons.append("some qcom aggregation callbacks had no matching icc_set_bw tracepoint")
     if unmatched_points:
         mapping_reasons.append("some target-node icc_set_bw tracepoints had no matching qcom aggregation callbacks")
-    mapping_stable = not mapping_reasons
 
     latest: List[Dict[str, Any]] = []
     for node in registered:
@@ -905,13 +930,25 @@ def parse_icc_aggregate_attribution(
         batch = max(candidates, key=lambda row: row["timestamp"])
         expected = clients.get(node, [])
         rows = batch["callback_rows"]
-        status = "exact" if mapping_stable else "unresolved"
-        if batch.get("ret") != 0:
+        local_reasons = []
+        if node in missing_node_addresses or len(target_node_addresses[node]) != 1:
+            local_reasons.append("target-node address was missing or inconsistent")
+        if node in orphan_nodes:
+            local_reasons.append("qcom aggregation callback had no matching icc_set_bw tracepoint")
+        if node in unmatched_nodes:
+            local_reasons.append("target-node icc_set_bw tracepoint had no matching qcom aggregation callback")
+
+        status = "unresolved" if global_mapping_reasons or local_reasons else "exact"
+        reason = (global_mapping_reasons or local_reasons or [None])[0]
+        if status == "exact" and batch.get("ret") != 0:
             status = "aggregation-call-did-not-complete-cleanly"
-        elif len(rows) != len(expected):
+            reason = "aggregation call did not return success"
+        elif status == "exact" and len(rows) != len(expected):
             status = "request-count-mismatch"
-        elif [row["tag"] for row in rows] != [row["tag"] for row in expected]:
+            reason = "callback request count differs from the fresh interconnect summary"
+        elif status == "exact" and [row["tag"] for row in rows] != [row["tag"] for row in expected]:
             status = "request-tag-order-mismatch"
+            reason = "callback tag order differs from the fresh interconnect summary"
 
         sum_avg = sum(row["avg_bw"] for row in rows)
         max_peak = max((row["peak_bw"] for row in rows), default=0)
@@ -919,8 +956,10 @@ def parse_icc_aggregate_attribution(
         generic_aggregate_matches = trace_aggregate == {"avg_bw": sum_avg, "peak_bw": max_peak}
         if status == "exact" and trace_aggregate is None:
             status = "aggregate-validation-unavailable"
+            reason = "generic ICC aggregate tracepoint was unavailable"
         elif status == "exact" and not generic_aggregate_matches:
             status = "aggregate-validation-mismatch"
+            reason = "provider aggregate does not match the generic ICC tracepoint"
 
         requests = []
         for index, row in enumerate(rows):
@@ -933,17 +972,7 @@ def parse_icc_aggregate_attribution(
             {
                 "node": node,
                 "status": status,
-                "reason": (
-                    mapping_reasons[0]
-                    if status == "unresolved" and mapping_reasons
-                    else "callback request count differs from the fresh interconnect summary"
-                    if status == "request-count-mismatch"
-                    else "callback tag order differs from the fresh interconnect summary"
-                    if status == "request-tag-order-mismatch"
-                    else "provider aggregate does not match the generic ICC tracepoint"
-                    if status == "aggregate-validation-mismatch"
-                    else None
-                ),
+                "reason": reason,
                 "timestamp": batch["timestamp"],
                 "path": batch.get("path"),
                 "dev": batch.get("dev"),
@@ -962,7 +991,7 @@ def parse_icc_aggregate_attribution(
         )
 
     if any(row.get("status") != "exact" for row in latest):
-        mapping_reasons.append("one or more target-node aggregation passes failed exact request-list validation")
+        mapping_reasons.append("one or more target nodes lacked an exact aggregation pass before sleep")
     mapping_stable = not mapping_reasons
 
     final_sequences: Dict[str, Any] = {}
@@ -985,7 +1014,7 @@ def parse_icc_aggregate_attribution(
         "trace_loss": trace_loss,
         "request_list_mutations_before_sleep": mutations_before_sleep,
         "unmatched_set_bw_points": unmatched_points,
-        "unmatched_aggregate_callbacks": len(orphan_callbacks),
+        "unmatched_aggregate_callbacks": len(orphan_rows),
         "client_mapping_stable": mapping_stable,
         "client_mapping_reasons": mapping_reasons,
         "all_target_nodes_mapped_exact": bool(latest) and all(row.get("status") == "exact" for row in latest),
@@ -1751,6 +1780,154 @@ GENI_PM_PROBE_SPECS = (
 )
 
 
+def pcie_pm_probe_specs() -> Tuple[Tuple[str, str, str, str, Tuple[str, ...], Optional[str]], ...]:
+    fields = pcie_d3cold_probe_fields()
+    device_filter = "pdev_vendor == 6091 && pdev_domain == 0 && (pdev_busnum == 0 || pdev_busnum == 1)"
+    identity_fields = (
+        "pdev_state",
+        "pdev_busnum",
+        "pdev_domain",
+        "pdev_devfn",
+        "pdev_vendor",
+        "pdev_device",
+        "pdev_class",
+    )
+    return (
+        (
+            "pci_prepare_to_sleep_entry",
+            "p",
+            "pci_prepare_to_sleep",
+            fields,
+            identity_fields,
+            device_filter,
+        ),
+        (
+            "pci_prepare_to_sleep_return",
+            "r",
+            "pci_prepare_to_sleep",
+            fields + " retval=$retval:s32",
+            identity_fields + ("retval",),
+            device_filter,
+        ),
+        (
+            "pci_power_state",
+            "p",
+            "pci_set_power_state",
+            fields + " target_state=$arg2:u32",
+            identity_fields + ("target_state",),
+            device_filter,
+        ),
+        (
+            "ath12k_suspend_late_entry",
+            "p",
+            "ath12k_core_suspend_late",
+            "ab=$arg1:x64",
+            ("ab",),
+            None,
+        ),
+        (
+            "ath12k_suspend_late_return",
+            "r",
+            "ath12k_core_suspend_late",
+            "retval=$retval:s32",
+            ("retval",),
+            None,
+        ),
+        (
+            "ath12k_pci_power_down",
+            "p",
+            "ath12k_pci_power_down",
+            "ab=$arg1:x64 is_suspend=$arg2:u32",
+            ("ab", "is_suspend"),
+            "is_suspend == 1",
+        ),
+        (
+            "mhi_power_down_keep_dev",
+            "p",
+            "mhi_power_down_keep_dev",
+            "controller=$arg1:x64 graceful=$arg2:u32",
+            ("controller", "graceful"),
+            "graceful == 1",
+        ),
+        (
+            "rpmh_flush_return",
+            "r",
+            "rpmh_flush",
+            "retval=$retval:s32",
+            ("retval",),
+            None,
+        ),
+    )
+
+
+def trace_prepare_pcie_pm_probes(run: DeviceRun, info: Dict[str, Any]) -> List[Dict[str, Any]]:
+    root = Path(str(info.get("root", "")))
+    release = read_text(Path("/proc/sys/kernel/osrelease"))
+    btf = read_bytes(Path("/sys/kernel/btf/vmlinux"))
+    digest = hashlib.sha256(btf).hexdigest() if btf is not None else None
+    if release != PCIE_CURRENT_STATE_KERNEL_RELEASE or digest not in PCIE_PDEV_BTF_SHA256_ALLOWLIST:
+        raise LabError("refusing PCI state dereference: kernel release/BTF differs from inspected builds")
+
+    available = read_text(root / "available_filter_functions") or ""
+    blacklist = read_text(Path("/sys/kernel/debug/kprobes/blacklist"))
+    if blacklist is None or (read_text(Path("/sys/kernel/debug/kprobes/enabled")) or "").strip() != "1":
+        raise LabError("PCI PM kprobes are unavailable or their blacklist cannot be read")
+    registry = root / "kprobe_events"
+    if read_text(registry) is None:
+        raise LabError("tracefs kprobe_events is unreadable")
+    group = "s2lab_%s" % safe_name(run.run_id).replace("-", "_")
+    info["pcie_pm_probe_btf_sha256"] = digest
+    probes = info.setdefault("dynamic_probes", [])
+    configured_events: List[Dict[str, Any]] = []
+
+    for name, probe_type, function, fields, required_fields, event_filter in pcie_pm_probe_specs():
+        if not re.search(r"(^|\s)%s(\s|$)" % re.escape(function), available, re.MULTILINE):
+            raise LabError("PCI PM probe function is unavailable: %s" % function)
+        if any(line.split() and line.split()[0] == function for line in blacklist.splitlines()):
+            raise LabError("PCI PM probe function is blacklisted: %s" % function)
+        event = "%s:%s" % (group, name)
+        definition = "%s:%s/%s %s %s" % (probe_type, group, name, function, fields)
+        identity = r"^%s[0-9]*:%s/%s\s" % (probe_type, re.escape(group), re.escape(name))
+        before = read_text(registry) or ""
+        if any(re.match(identity, line) for line in before.splitlines()):
+            raise LabError("run-unique PCI PM probe name is already registered: %s" % name)
+        probe: Dict[str, Any] = {
+            "group": group,
+            "name": name,
+            "event": event,
+            "function": function,
+            "definition": definition,
+            "filter": event_filter,
+            "registry": str(registry),
+            "owned": True,
+            "registered": False,
+            "state": "registration-requested",
+        }
+        probes.append(probe)
+        write_json(run.run_dir / "meta" / "trace.json", info)
+        write_kprobe_control(registry, definition + "\n")
+        after = read_text(registry) or ""
+        matching = [line for line in after.splitlines() if re.match(identity, line)]
+        if len(matching) != 1 or not kprobe_definition_matches(matching[0], definition):
+            raise LabError("kernel did not retain PCI PM probe definition: %s" % name)
+        probe["registered"] = True
+        probe["registered_line"] = matching[0]
+
+        event_format = read_text(trace_event_file(Path(str(info["instance"])), event, "format"))
+        if event_format is None:
+            raise LabError("PCI PM probe event format is unreadable: %s" % name)
+        for field in required_fields:
+            if not re.search(r"\b%s\s*;" % re.escape(field), event_format):
+                raise LabError("PCI PM probe event format lacks %s" % field)
+        configured = trace_configure_event(run, info, event, event_filter=event_filter)
+        configured["purpose"] = function
+        info["selected_events"].append(configured)
+        probe["state"] = "enabled-in-private-instance"
+        configured_events.append(configured)
+        write_json(run.run_dir / "meta" / "trace.json", info)
+    return configured_events
+
+
 def trace_prepare_geni_pm_probes(run: DeviceRun, info: Dict[str, Any]) -> List[Dict[str, Any]]:
     root = Path(str(info.get("root", "")))
     available = read_text(root / "available_filter_functions") or ""
@@ -1827,6 +2004,10 @@ def trace_remove_dynamic_probes(run: DeviceRun, info: Dict[str, Any]) -> Dict[st
         "icc_path_put": ("p", "icc_put", ""),
         "icc_set_tag": ("p", "icc_set_tag", ""),
         **{name: (probe_type, function, fields) for name, probe_type, function, fields, _ in GENI_PM_PROBE_SPECS},
+        **{
+            name: (probe_type, function, fields)
+            for name, probe_type, function, fields, _, _ in pcie_pm_probe_specs()
+        },
     }
     owned = [probe for probe in probes if isinstance(probe, dict) and probe.get("owned")]
     if not owned:
@@ -1876,6 +2057,33 @@ def trace_remove_dynamic_probes(run: DeviceRun, info: Dict[str, Any]) -> Dict[st
     )
     write_json(run.run_dir / "meta" / "trace.json", info)
     return {"result": "removed" if complete else "partial", "probes": actions}
+
+
+def trace_remove_owned_probes(run: DeviceRun, info: Dict[str, Any]) -> Dict[str, Any]:
+    components = {}
+    if info.get("dynamic_kprobe"):
+        components["suspend"] = trace_remove_suspend_kretprobe(run, info)
+    if info.get("dynamic_probes"):
+        components["auxiliary"] = trace_remove_dynamic_probes(run, info)
+    if not components:
+        return {"result": "not-owned"}
+    complete = all(item.get("result") in ("removed", "already-absent") for item in components.values())
+    result = "removed" if complete and any(item.get("result") == "removed" for item in components.values()) else (
+        "already-absent" if complete else "partial"
+    )
+    return {"result": result, "components": components}
+
+
+def trace_owned_probe_states_complete(info: Dict[str, Any]) -> bool:
+    probes = []
+    suspend_probe = info.get("dynamic_kprobe")
+    if isinstance(suspend_probe, dict) and suspend_probe.get("owned"):
+        probes.append(suspend_probe)
+    probes.extend(
+        probe for probe in info.get("dynamic_probes", [])
+        if isinstance(probe, dict) and probe.get("owned")
+    )
+    return bool(probes) and all(probe.get("state") in ("removed", "already-absent") for probe in probes)
 
 
 def trace_irq_number_for(name: str) -> Optional[int]:
@@ -2071,6 +2279,8 @@ def trace_prepare(run: DeviceRun, profile: str) -> Dict[str, Any]:
                     trace_configure_event(run, info, event, event_filter=event_filter)
                 )
             trace_prepare_suspend_kretprobe(run, info)
+            if profile == "pcie-d3cold":
+                trace_prepare_pcie_pm_probes(run, info)
         elif profile == "icc-attribution":
             for event in required_events:
                 info["selected_events"].append(trace_configure_event(run, info, event))
@@ -2119,10 +2329,8 @@ def trace_prepare(run: DeviceRun, profile: str) -> Dict[str, Any]:
         write_json(run.run_dir / "meta" / "trace.json", info)
         remove_actions = trace_remove_instance(run, info)
         if any(action.get("result") in ("instance-removed", "already-absent") for action in remove_actions):
-            if info.get("profile") in ("icc-attribution", "geni-uart-pm"):
-                info["prepare_kprobe_cleanup"] = trace_remove_dynamic_probes(run, info)
-            else:
-                info["prepare_kprobe_cleanup"] = trace_remove_suspend_kretprobe(run, info)
+            if info.get("dynamic_kprobe") or info.get("dynamic_probes"):
+                info["prepare_kprobe_cleanup"] = trace_remove_owned_probes(run, info)
         elif info.get("dynamic_kprobe") or info.get("dynamic_probes"):
             info["prepare_kprobe_cleanup"] = {"result": "refused-instance-not-removed", "actions": remove_actions}
         write_json(run.run_dir / "meta" / "trace.json", info)
@@ -2284,16 +2492,7 @@ def trace_cleanup(run: DeviceRun) -> Dict[str, Any]:
         result = {"changed": False, "profile": "none"}
         write_json(run.run_dir / "cleanup" / "trace.json", result)
         return result
-    probe = info.get("dynamic_kprobe")
-    new_probes = info.get("dynamic_probes")
-    if isinstance(probe, dict) and probe.get("state") == "removed":
-        previous = read_phase_json(run, "cleanup", "trace.json", {})
-        if previous.get("kprobe_cleanup", {}).get("result") == "removed":
-            return previous
-    if info.get("profile") in ("icc-attribution", "geni-uart-pm") and isinstance(new_probes, list) and new_probes and all(
-        isinstance(item, dict) and item.get("owned") and item.get("state") in ("removed", "already-absent")
-        for item in new_probes
-    ):
+    if trace_owned_probe_states_complete(info):
         previous = read_phase_json(run, "cleanup", "trace.json", {})
         if previous.get("kprobe_cleanup", {}).get("result") in ("removed", "already-absent"):
             return previous
@@ -2309,14 +2508,9 @@ def trace_cleanup(run: DeviceRun) -> Dict[str, Any]:
         "state": info.get("state"),
         "actions": actions,
     }
-    if info.get("profile") in ("icc-attribution", "geni-uart-pm") and info.get("dynamic_probes"):
+    if info.get("dynamic_kprobe") or info.get("dynamic_probes"):
         if any(action.get("result") in ("instance-removed", "already-absent") for action in actions):
-            result["kprobe_cleanup"] = trace_remove_dynamic_probes(run, info)
-        else:
-            result["kprobe_cleanup"] = {"result": "refused-instance-not-removed"}
-    elif info.get("dynamic_kprobe"):
-        if any(action.get("result") in ("instance-removed", "already-absent") for action in actions):
-            result["kprobe_cleanup"] = trace_remove_suspend_kretprobe(run, info)
+            result["kprobe_cleanup"] = trace_remove_owned_probes(run, info)
         else:
             result["kprobe_cleanup"] = {"result": "refused-instance-not-removed"}
     write_json(run.run_dir / "cleanup" / "trace.json", result)
@@ -4704,13 +4898,22 @@ def device_preflight(args: argparse.Namespace) -> int:
             ],
             30,
         ),
+        (
+            "suspend-contract-kprobe-preflight",
+            [
+                "bash",
+                "-c",
+                "for symbol in ath12k_core_continue_suspend_resume ath12k_core_suspend ath12k_core_suspend_late ath12k_pci_power_down ath12k_mhi_set_state mhi_power_down_keep_dev rpmh_flush; do printf '%s\\n' \"--- $symbol available ---\"; grep -E \"^[[:space:]]*$symbol([[:space:]]|$)\" /sys/kernel/tracing/available_filter_functions || true; printf '%s\\n' \"--- $symbol blacklist ---\"; grep -E \"^$symbol([[:space:]]|$)\" /sys/kernel/debug/kprobes/blacklist || true; done; printf '%s\\n' '--- kprobe enabled ---'; cat /sys/kernel/debug/kprobes/enabled; printf '%s\\n' '--- matching registered probes ---'; grep -E 'ath12k_core_continue_suspend_resume|ath12k_core_suspend_late|ath12k_pci_power_down|ath12k_mhi_set_state|mhi_power_down_keep_dev|rpmh_flush' /sys/kernel/tracing/kprobe_events || true",
+            ],
+            30,
+        ),
         ("psci-firmware-features", ["cat", "/sys/kernel/debug/psci"], 15),
         (
             "psci-system-suspend-preflight",
             [
                 "bash",
                 "-c",
-                "for symbol in psci_system_suspend_enter psci_system_suspend __pci_host_common_d3cold_possible; do printf '%s\\n' \"--- $symbol available ---\"; grep -E \"(^| )$symbol( |$)\" /sys/kernel/tracing/available_filter_functions || true; printf '%s\\n' \"--- $symbol blacklist ---\"; grep -E \"^$symbol([[:space:]]|$)\" /sys/kernel/debug/kprobes/blacklist || true; done",
+                "for symbol in psci_system_suspend_enter psci_system_suspend __pci_host_common_d3cold_possible pci_prepare_to_sleep pci_set_power_state pci_pm_set_unknown_state; do printf '%s\\n' \"--- $symbol available ---\"; grep -E \"(^| )$symbol( |$)\" /sys/kernel/tracing/available_filter_functions || true; printf '%s\\n' \"--- $symbol blacklist ---\"; grep -E \"^$symbol([[:space:]]|$)\" /sys/kernel/debug/kprobes/blacklist || true; done",
             ],
             30,
         ),
@@ -5477,6 +5680,31 @@ def self_test() -> int:
         "pdev_vendor=+0x3c($arg1):u16 pdev_device=+0x3e($arg1):u16 "
         "pdev_class=+0x44($arg1):u32"
     )
+    pcie_pm_specs = pcie_pm_probe_specs()
+    assert [spec[0] for spec in pcie_pm_specs] == [
+        "pci_prepare_to_sleep_entry",
+        "pci_prepare_to_sleep_return",
+        "pci_power_state",
+        "ath12k_suspend_late_entry",
+        "ath12k_suspend_late_return",
+        "ath12k_pci_power_down",
+        "mhi_power_down_keep_dev",
+        "rpmh_flush_return",
+    ]
+    assert pcie_pm_specs[2][0] == "pci_power_state"
+    assert "target_state=$arg2:u32" in pcie_pm_specs[2][3]
+    assert pcie_pm_specs[0][3] == pcie_d3cold_probe_fields()
+    assert "retval=$retval:s32" in pcie_pm_specs[1][3]
+    assert pcie_pm_specs[2][5] == (
+        "pdev_vendor == 6091 && pdev_domain == 0 && (pdev_busnum == 0 || pdev_busnum == 1)"
+    )
+    assert pcie_pm_specs[5][5] == "is_suspend == 1"
+    assert pcie_pm_specs[6][5] == "graceful == 1"
+    assert all(spec[5] is None for spec in (pcie_pm_specs[3], pcie_pm_specs[4], pcie_pm_specs[7]))
+    for name, probe_type, function, fields, _, _ in pcie_pm_specs:
+        definition = "%s:s2lab_test/%s %s %s" % (probe_type, name, function, fields)
+        registered = definition.replace("%s:" % probe_type, "%s12:" % probe_type, 1)
+        assert kprobe_definition_matches(registered, definition)
     assert trace_pcie_event_filter(
         "interconnect:icc_set_bw", "field:__data_loc char[] dev;\n"
     ) is None
@@ -5665,6 +5893,20 @@ def self_test() -> int:
     assert icc_attribution["target_node_addresses"]["ebi@interconnect-1"] == ["0x1000"]
     assert icc_attribution["sleep_command_count"] == 2
     assert next(iter(icc_attribution["sleep_command_sequences"].values()))["contiguous_from_zero"]
+    partial_baseline = {
+        "target_nodes_match": True,
+        "registered_target_nodes": ["ebi@interconnect-1", "qnm_gpu@24100000.interconnect"],
+        "parsed": {
+            "consumers": icc_baseline["parsed"]["consumers"]
+            + [{"parent": "qnm_gpu@24100000.interconnect", "node": "3d00000.gpu", "tag": 7}]
+        },
+    }
+    partial_attribution = parse_icc_aggregate_attribution(
+        icc_trace, partial_baseline, "s2lab_test", {"available": True, "lossless": True}
+    )
+    assert partial_attribution["latest_node_aggregations"][0]["status"] == "exact"
+    assert partial_attribution["latest_node_aggregations"][1]["status"] == "no-complete-aggregation-pass-before-sleep"
+    assert partial_attribution["client_mapping_stable"] is False
     aggregate_mismatch = parse_icc_aggregate_attribution(
         icc_trace.replace("agg_avg=100 agg_peak=800000", "agg_avg=101 agg_peak=800000"),
         icc_baseline,

@@ -8092,3 +8092,289 @@ Source references: Linux v7.2.3
 [`qcom_geni_serial_pm()`](https://github.com/gregkh/linux/blob/v7.2.3/drivers/tty/serial/qcom_geni_serial.c#L1727-L1739),
 [`serdev_device_open()`](https://github.com/gregkh/linux/blob/v7.2.3/drivers/tty/serdev/core.c#L149-L186),
 and [tty serdev controller registration](https://github.com/gregkh/linux/blob/v7.2.3/drivers/tty/serdev/serdev-ttyport.c#L275-L296).
+
+
+### 2026-09-21 06:03 UTC — runtime-PM trace confirms QUP2 GENI callback is skipped
+
+The next unchanged-stock deep observation captured the post-put runtime-PM
+state directly. At 12042.760006 the gamepad UART `89c000.serial` transitions
+ON→OFF through `qcom_geni_serial_pm()`. At 12042.760019, the `rpm_usage`
+tracepoint reports `cnt-1 child-1`; the successful qcom GENI callback ends
+immediately afterward. No UART `rpm_idle` or `rpm_suspend` event appears
+before the final Apps-RSC SLEEP/WAKE submissions. The runtime-suspend probe
+again has no UART hits, so the resource-off and ICC-disable path is skipped.
+After resume, the UART's 1/1 QUP2 request is restored.
+
+This matches the v7.2.3 PM-core source: `device_prepare()` holds a runtime-PM
+usage reference until system resume, and `__pm_runtime_idle()` returns early
+when `pm_runtime_put_sync()` leaves a positive usage count. The visible
+`child-1` is an additional reason to keep the serial/serdev hierarchy in the
+review; it does not change the positive-count early-return evidence.
+
+Source comparison found that current upstream added
+`pm_runtime_force_suspend()` after `uart_suspend_port()` and
+`pm_runtime_force_resume()` before `uart_resume_port()` in
+`qcom_geni_serial_suspend()`/`qcom_geni_serial_resume()` (`d0cd9c8d0fd5`).
+The mainline commit is part of the TTY/serial pull for Linux 7.3-rc1, while the
+Nova's matched 7.2.3 source lacks it. Upstream guards the console suspend path;
+review discussion then identified that force-resume must also be balanced
+when `no_console_suspend` leaves a console active. The gamepad device is the
+non-console path, but any general backport should retain the console handling.
+This gives us a small, upstream-backed candidate for restoring the missing
+QUP2 sleep request. It does not prove QUP2 gates AOSD/CXSD/DDR, and we will
+not run a behavioral A/B until the remaining WCN/PCIe and sleep-request
+producer questions have a defensible single-variable mechanism.
+
+The run reached/resumed direct `deep`, with RTC as the wake source and the
+same boot ID. AOSD, CXSD, and scalar DDR count/duration deltas remained zero;
+detailed DDR ID `0xd0` advanced but is not decoded. Wi-Fi returned with
+carrier, Steam remained available, and trace state/probes were cleaned up.
+No policy or bandwidth changed. Full details are in the [QUP2 runtime-PM
+trace receipt](receipts/2026-09-21-qup2-rpm-trace-confirmation.md); raw run:
+`/Users/danhimebauch/Developer/.external-research/sm8550-suspend-lab-runs/20260921T055601Z-62202a34c194/`.
+
+
+### 2026-09-21 07:56 UTC — PCI state-probe preflight
+
+A fresh read-only preflight confirmed the Nova remains on stock Armada
+`20260915.feca679`, kernel `7.2.3`, boot ID
+`3656b0e7-5671-4b7e-9368-67965daa251a`, with no staged image or queued
+rollback. `pci_set_power_state` is probeable and not blacklisted, but
+`pci_pm_set_unknown_state` is absent from `available_filter_functions`.
+
+The `pcie-d3cold` profile is being extended to record only PCI power-state
+requests for the Qualcomm root and endpoint, using the already BTF-validated
+`pci_dev` offsets and a vendor/domain/bus filter. The existing profile's PCI
+PM callback events and D3cold-walk result provide the before/after context for
+the unprobeable unknown-state helper. In v7.2.3, the no-driver PCI PM branch
+marks a D0 device `PCI_UNKNOWN`; the common D3cold walk rejects active devices
+not in D3hot, DesignWare returns before host link teardown, and Qualcomm keeps
+the unsuspended host's minimum PCIe bandwidth request. This explains the
+software fallback, but not the physical PCIe link state during sleep. See the
+[PCI state-probe preflight](receipts/2026-09-21-pcie-state-probe-preflight.md).
+
+No suspend or behavior-changing A/B has run for this probe change yet.
+
+
+### 2026-09-21 08:00 UTC — stock PCIe state and RPMh SLEEP/WAKE capture
+
+Ran an unchanged-stock, RTC-woken, 15-second direct-deep observation using
+the run-scoped `pci_set_power_state()` probe. It returned on the same boot
+without reset; the observed suspended interval was 13.278 seconds, the RTC
+wake interrupt advanced once, and Wi-Fi returned UP with carrier. The PCIe
+probe had zero hits for the filtered Qualcomm root port and WCN endpoint.
+
+The D3cold walk hit root port `17cb:0113` at software `PCI_UNKNOWN` (state 5)
+and returned `-EOPNOTSUPP`. The actual bound endpoint driver is
+`ath12k_wifi7_pci`. A source check corrected the interpretation of the trace:
+PCI PM events are labelled `late bus` because `pci_pm_suspend_late()` calls
+`pm_generic_suspend_late()`, which dispatches to the driver's late callback.
+That callback ran for about 102 ms and returned success. Its entry reaches
+`ath12k_core_suspend_late()`, but that helper can early-return based on
+hardware state; only the continuing path calls `ath12k_hif_power_down()`. The
+trace therefore corrects the earlier missing-hook interpretation but still
+does not prove that HIF/MHI power-down occurred. It does show that the
+Qualcomm host's D3cold eligibility check is still blocked by the unbound root
+port's software state, and the host's normal DesignWare link shutdown is not
+proven.
+
+The same trace contains six generated Apps-RSC SLEEP commands on TCS 3 and six
+WAKE commands on TCS 5. MC0/SH0 SLEEP values were `0x600001dc` (476). Linux
+source documents that the AP writes the SLEEP/WAKE command slots and enables
+them but does not trigger these TCSes; firmware triggers them at deepest
+low-power entry. The active-TCS `rpmh_tx_done` IRQ is not a sleep/wake
+acknowledgment path. Therefore the capture proves command staging at the RSC
+interface, not firmware acceptance/application. AOSD/CXSD/scalar DDR deltas
+were again zero; detailed DDR ID `0xd0` advanced 308,721,078 raw ticks with
+zero count delta. The RSC snapshot was unavailable.
+
+Do not interpret `PCI_UNKNOWN` as physical endpoint state, or the SLEEP TCS
+trace as a firmware acknowledgment. The run changed no policy, bandwidth,
+regulator, PCI state, or boot image. Both kprobes and the trace instance were
+removed. Full observations and artifact hashes are in the [PCIe state and
+RPMh capture receipt](receipts/2026-09-21-pcie-state-and-rpmh-capture.md); raw
+run: `/Users/danhimebauch/Developer/.external-research/sm8550-suspend-lab-runs/20260921T080019Z-044f01e5858f/`.
+
+
+### 2026-09-21 08:29 UTC — suspend-contract probe preflight
+
+A fresh read-only preflight on the same stock boot found unblacklisted,
+probeable entry points for `ath12k_core_suspend_late()`,
+`ath12k_pci_power_down()`, `mhi_power_down_keep_dev()`, and `rpmh_flush()`.
+Kprobes are enabled and no matching probes are registered. The internal
+continuation guard and `ath12k_mhi_set_state()` are not probeable, so the
+diagnostic will observe the first externally visible call after the guard:
+`ath12k_pci_power_down(ab, true)`. A matching call shows that the late path
+reached HIF power-down; the MHI helper entry confirms its firmware/transport
+shutdown request was issued, but neither establishes PCI D-state or physical
+link state.
+
+The `rpmh_flush()` return probe can distinguish successful Linux TCS slot
+programming from a software flush error. It cannot prove the firmware later
+triggered or applied those SLEEP values. The exact checked symbols and preflight
+hash are in the [suspend-contract probe preflight
+receipt](receipts/2026-09-21-suspend-contract-probe-preflight.md). The harness
+adds these read-only probes to its existing `pcie-d3cold` profile. One short,
+unchanged-stock observation will follow; this is diagnostic instrumentation,
+not a behavioral A/B.
+
+
+### 2026-09-21 08:32 UTC — ath12k/MHI suspend path runs; RPMh flush succeeds
+
+Ran one unchanged-stock 15-second direct-deep observation with the new
+run-scoped probes. The late ath12k path did not early-return: its call to
+`ath12k_pci_power_down()` had `is_suspend=1`, and the MHI core received
+`mhi_power_down_keep_dev(graceful=1)`. The ath12k late callback returned 0.
+This closes the uncertainty about whether Armada skipped its guarded ath12k
+HIF/MHI suspend path. It still does not establish the WCN chip's physical
+state or the PCIe link's electrical state.
+
+The PCI host still made no filtered `pci_set_power_state()` calls. Its D3cold
+walk rejected root port `17cb:0113` at software `PCI_UNKNOWN`, returning
+`-EOPNOTSUPP`. The standard host link shutdown is therefore still not reached
+or proven, even after ath12k's suspend-specific MHI path runs.
+
+The same capture's `rpmh_flush()` return was 0. Together with the six SLEEP
+and six WAKE `rpmh_send_msg` records, this establishes that Linux completed
+its software RSC flush and programmed the configured slots without a reported
+error. It does not tell us whether firmware triggered or applied those
+requests. AOSD/CXSD/scalar DDR stayed at zero; ADSP advanced 277 counts and
+403,659,061 raw duration units. Detailed DDR ID `0xd0` advanced
+406,940,773 raw ticks while its count remained unchanged; its semantics are
+still unknown. The RTC woke the same boot, Wi-Fi returned `UP/LOWER_UP`, and
+all six dynamic probes plus the private trace instance were cleaned up.
+
+The strongest remaining source-supported distinction is no longer “did
+ath12k suspend the WCN MHI device?” It is that Android's connected-DRV path
+also places its Qualcomm PCIe host/ICC path into suspend, while Linux's
+ath12k callback does not perform a PCI D-state transition and the host's
+D3cold check vetoes link teardown. This is still a causal hypothesis for the
+missing residency, not yet proof that it is sufficient. Full values and
+hashes are in the [suspend-contract probe capture
+receipt](receipts/2026-09-21-suspend-contract-probe-capture.md); raw run:
+`/Users/danhimebauch/Developer/.external-research/sm8550-suspend-lab-runs/20260921T083212Z-add6da4cda42/`.
+
+
+### 2026-09-21 09:06 UTC — RPMh SLEEP/WAKE acknowledgment boundary
+
+Audited the exact Armada Linux 7.2.3 RPMh implementation and the newer public
+read/diagnostic work. `rpmh_flush()` writes buffered Sleep/Wake requests into
+RSC TCS slots and returns whether that slot programming succeeded. The RPMh
+RSC binding says firmware triggers the Sleep/Wake TCS after CPUs power off;
+`__tcs_set_trigger()` explicitly says the AP only triggers active-only
+transfers. The completion IRQ handler is also documented for ACTIVE_ONLY
+transfers. Therefore the six SLEEP/six WAKE trace submissions and the
+successful `rpmh_flush()` probe prove Linux staging/flush only. They do not
+prove that AOP triggered the SLEEP set or that the requested resource state
+was applied.
+
+Newer mainline `rpmh_read()` does not close the gap: it creates a
+`RPMH_ACTIVE_ONLY_STATE` read, waits for that active request, and returns the
+current live resource value. After resume that is the awake value, not the
+historical SLEEP bucket. The current Qualcomm RSC diagnostic series only
+prints command/TCS status on a timeout; it is not a successful-path SLEEP
+acknowledgment interface. No supported readback is exposed by target Linux
+7.2.3, and the device's available diagnostics do not expose an AOP query.
+
+This closes the immediate “can we just read the SLEEP TCS ack?” investigation:
+there is no documented, source-backed success acknowledgment path to add to
+the harness. Keep firmware AOSD/CXSD/DDR as the nearest effective-state
+observable, with the caveat that zero counters do not diagnose why the record
+did not advance. Do not read undocumented status registers or AOP memory.
+Full source links and the layer-by-layer distinction are in the [RPMh
+acknowledgment boundary receipt](receipts/2026-09-21-rpmh-ack-boundary.md).
+
+The Nova remains awake on stock Linux 7.2.3. A read-only SSH check at 09:03
+UTC showed root port `0000:00:00.0` (17cb:0113) unbound, and WCN7850
+`0000:01:00.0` bound to `ath12k_wifi7_pci`; both report awake `D0`,
+`d3cold_allowed=1`, and wakeup disabled. This does not establish their
+suspended state. The apparent zero hits from the prior
+`pci_set_power_state()` kprobe cannot settle the endpoint D-state question
+because a same-translation-unit call may be inlined. Next add an entry/return
+probe on `pci_prepare_to_sleep()` (its kretprobe may retain `$arg1`) and record
+the BTF-validated `current_state` before/after, filtered to the root/endpoint.
+That is read-only diagnostic instrumentation and will be preflighted before a
+short RTC-woken direct-deep run. It does not change PCI policy or request
+bandwidth, and it is not a behavioral A/B.
+
+
+### 2026-09-21 09:15 UTC — endpoint D3hot is reached; root port still vetoes host shutdown
+
+Ran one unchanged-stock, 12-second RTC-woken direct-deep diagnostic with
+run-scoped probes on `pci_prepare_to_sleep()` and the existing root-port
+D3cold walk. WCN7850 `0000:01:00.0` (`17cb:1107`) entered the helper in
+software `PCI_D0`, returned with `current_state=PCI_D3hot`, and the helper
+returned 0. Linux's PCI core is therefore doing the endpoint D-state transition;
+the earlier zero-hit `pci_set_power_state()` probe was not enough to conclude
+otherwise.
+
+The enabled Qualcomm root port `0000:00:00.0` (`17cb:0113`) remained
+`PCI_UNKNOWN` and the host's `pci_host_common_d3cold_possible()` returned
+`-EOPNOTSUPP`. In the normal `pcie_ports=compat` configuration, source explains
+that state: the root port is unbound, so generic PCI noirq PM saves config and
+marks a D0 device unknown. DesignWare returns before PME Turn Off, L2 wait,
+link stop, or host deinit. Qualcomm consequently keeps the live host request;
+the final MC0/SH0 SLEEP words remained 476. AOSD/CXSD/scalar DDR deltas were
+zero. Tracked D3hot is software bookkeeping; no PMCSR, WCN power rail, or
+electrical link was read during sleep.
+
+The device returned on the same boot. At 09:21 UTC it was awake in D0, Wi-Fi
+was `UP/LOWER_UP`, and all run-scoped probes had been removed. The post-run
+health snapshot listed `rpm-ostree-countme.service` failed after its repository
+requests failed; this is separate from the successful PCI PM callbacks and
+same-boot resume.
+
+Compared the exact relevant functions from Armada's v7.2.3 build input against
+upstream master commit `93f51579e7df248780214094418f205253383cc5`. The generic
+PCI noirq path, D3cold predicate, DesignWare suspend path, and ath12k suspend
+functions are identical. Qualcomm's current upstream difference is OPP
+plumbing; it preserves the same D3cold gate and host-unsuspended fallback.
+The upstream WCN7850 series implements firmware/MHI suspend, not this Qualcomm
+host controller's link teardown. Thus the next issue is not missing ath12k's
+MHI call or a stale Linux release; it is the root-port/host power-state
+contract and its wake guarantees.
+
+Also mapped the remaining request families against source and saved receipts:
+QUP2's Linux client is `89c000.serial`, whose runtime-suspend is skipped due
+to the system-sleep PM usage reference; Android's awake summary shows
+`89c000.qcom,qup_uart` as its active QUP2 client. SH1 aggregates 13 nodes,
+including PCIe and non-PCIe NoC clients; ACV is an EBI enable-mask aggregate.
+The final Android TCS cannot identify leaf SLEEP-tagged votes. LDOE1 feeds
+DSI1/PCIe/USB HS consumers; LDOE3 feeds DSI/PCIe/UFS/USB HS/USB-DP PHY
+consumers. Armada's RPMh regulator submits ACTIVE_ONLY requests and has no
+standard regulator suspend callbacks, so DTS `regulator-state-mem` alone
+would not reproduce Android contexts. The complete source boundary and wake
+risks are in
+[`2026-09-21-rpmh-client-and-rail-audit.md`](receipts/2026-09-21-rpmh-client-and-rail-audit.md).
+
+No behavior-changing A/B was justified or run. Remaining facts are Android's
+per-client SLEEP-tagged ownership for SH1/ACV/QUP2, a truthful root-port and
+host shutdown sequence with documented wake safety, and required wake behavior
+for shared LDOE consumers. Full capture, exact upstream comparison, and source
+links are in
+[`2026-09-21-pci-endpoint-state-and-upstream-audit.md`](receipts/2026-09-21-pci-endpoint-state-and-upstream-audit.md); raw run:
+`/Users/danhimebauch/Developer/.external-research/sm8550-suspend-lab-runs/20260921T091515Z-5d4b010ecf94/`.
+
+
+### 2026-09-21 09:44 UTC — bound-root-port observation reconciled
+
+Rechecked the Sept. 19 raw trace because the new 09:15 receipt's wording
+collapsed two earlier `pcieport` runs. The first run
+`20260919T181557Z-cb567ba69946` captured the D3cold error without PCI identity.
+The follow-up `20260919T182725Z-0615b49b6039` did capture it: while
+`pcieport` was bound, the root `0000:00:00.0` (`17cb:0113`) returned from the
+host eligibility walk with `current_state=PCI_UNKNOWN`, `-EOPNOTSUPP`. This
+confirms binding did not remove the veto; retain the original 18:30 observation.
+
+The source shows why binding alone does not guarantee D3hot. `pcie_portdrv_pm_ops`
+does not provide `.suspend_noirq`; generic `pci_pm_suspend_noirq()` handles
+the PCI state and only invokes `pci_prepare_to_sleep()` if the state was not
+already saved, `skip_bus_pm` is clear, and `pci_power_manageable()` is true
+(`bridge_d3` for a bridge). It marks a device unknown only if that path leaves
+it in D0. The 18:27 trace did not capture these conditions or the root's
+`pci_prepare_to_sleep()` entry/return, so the exact reason the bound root did
+not finish in D3hot cannot be selected from that receipt. The 09:15 unbound
+case is independently explained by the no-driver path, which skips the power
+transition and marks D0 unknown. No boot argument, PCI state, or power policy
+was changed during this source/raw-evidence review. Updated the current status
+and PCIe audit receipt to distinguish the two older runs.
