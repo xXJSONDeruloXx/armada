@@ -47,6 +47,17 @@ integrated root port is controlled by the host suspend sequence, every
 downstream active function is quiesced, and wake is preserved or intentionally
 disabled.
 
+## Boot-argument provenance
+
+The tracked Armada source contains one occurrence of `pcie_ports=compat`, in
+`system_files/usr/lib/bootc/kargs.d/10-armada.toml`. It was introduced by
+`adbd224c` on 2026-08-07, the initial repository import, whose commit subject
+is `Bump Mesa to drop patch`; that commit gives no reason for this kernel
+argument. This locates its tracked introduction, not the original engineering
+rationale. The current Linux boot still includes the argument. Do not infer
+that it is safe to remove from its undocumented provenance, and do not repeat
+the earlier boot-argument experiment.
+
 ## Bound-root-port gap
 
 The September 19 run with pcieport bound still saw 17cb:0113 at PCI_UNKNOWN.

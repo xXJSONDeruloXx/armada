@@ -6,7 +6,7 @@ the chronological record, including failed runs and superseded interpretations.
 Update this page when a checklist item changes; put raw output in a dated
 receipt and explain the result in the notebook.
 
-Status as of 2026-09-21 10:25 UTC. Branch `feat/sm8550-suspend-lab`.
+Status as of 2026-09-21 10:34 UTC. Branch `feat/sm8550-suspend-lab`.
 
 ## Immediate next checkpoint
 
@@ -80,6 +80,10 @@ Status as of 2026-09-21 10:25 UTC. Branch `feat/sm8550-suspend-lab`.
   leaves its tracked state PCI_UNKNOWN, which vetoes host teardown. The
   upstream helper intentionally checks all active PCI functions, including
   bridges/root ports; do not add a generic endpoint-only filter. See the
+  [root-port eligibility audit](receipts/2026-09-21-root-port-eligibility-audit.md).
+- [x] Trace the tracked origin of `pcie_ports=compat`. It appears in Armada's
+  initial repository import with no rationale in the commit message; this is
+  provenance only and does not justify changing the boot argument. See the
   [root-port eligibility audit](receipts/2026-09-21-root-port-eligibility-audit.md).
 - [x] Audit the RPMh/AOP observability layers against Linux 7.2.3 and current
   upstream. `rpmh_flush()==0` means TCS slot programming succeeded; the AP
@@ -242,6 +246,11 @@ pcieport driver directory is absent. WCN7850 is enabled and bound to
 ath12k_wifi7_pci. Both are awake in D0 with wakeup disabled. No power policy,
 driver binding, or boot setting was changed. See the
 [root-port eligibility audit](receipts/2026-09-21-root-port-eligibility-audit.md).
+
+At 10:34 UTC, a fresh non-invasive SSH check confirmed the same stock boot ID,
+kernel, command line, and unbound root port. The remote account can read the
+live PCI/sysfs state but cannot read tracefs controls; no privilege or boot
+configuration was changed and no suspend was run.
 
 At 09:21 UTC, read-only SSH confirmed the Nova is awake on the same stock
 Linux 7.2.3 boot, with root port and WCN endpoint back in D0 and `wlp1s0`
@@ -990,30 +999,31 @@ PCI D-state, manually change an ICC vote, or infer safe D3 support from
 
 ## Next action
 
-The stock Linux boot is the only deployed boot and the test image is not
-staged. The guarded candidate was applied once, but no candidate userspace or
-sleep test was confirmed. The returned stock system's startup updater wrote
-the still-pending candidate into `/KERNEL`; cleanup removed the pending
-deployment and the updater regenerated stock. The initrd timer may have
-restored the stock kernel before that boot, but there is no persistent receipt
-proving it. The owner is checking whether they manually reset in ABL.
+Do not run a behavior-changing suspend A/B yet. The current stock Linux boot
+still uses `pcie_ports=compat`; its enabled, unbound root port is the source-
+explained D3cold veto. Do not remove that argument, force a PCI state, or
+bypass the common check. The earlier bound-port capture lacks the PCI noirq
+decision fields, and the active host driver does not consume the board's
+declared wake GPIO.
 
-Before another apply, add durable candidate initrd/recovery phase markers and
-confirm the test image can be positively identified before starting suspend.
-The current 120-second initrd timer begins from `sysinit.target.wants` and
-restores the hash-checked stock ESP image if it fires, but it cannot help if
-the kernel or initrd systemd fails before that transaction. Manual ABL
-recovery is available; still keep the stock `KERNEL.BAK` and rootfs verified
-before each apply. The PCIe-MEM OPP A/B remains the best single-variable sleep
-test once boot diagnostics are observable. Do not directly load Android
-modules; port behavior against Linux 7.2.3. For persistent Android Wireless
-debugging, wait until Android is reachable and add a Magisk late-start helper
-rather than editing its unmounted userdata from Linux. Do not select
-**UNINSTALL CFW** in ABL if recovery is needed. See the
-[Android rollback receipt](receipts/2026-09-20-android-esp-rollback.md),
-[ABL access notes](receipts/2026-09-20-post-apply-device-reachability.md), and
-completed MC4/SH5 receipt:
-[`rpmh-dcvs-pair-ab.md`](receipts/2026-09-20-rpmh-dcvs-pair-ab.md).
+The remaining evidence needed before selecting a test is:
+
+1. A naturally available bound-root-port run that records `state_saved`,
+   `skip_bus_pm`, `bridge_d3`, `pci_prepare_to_sleep()` result, downstream
+   states, and the host's `pci->suspended` result. Do not recreate it by
+   changing `pcie_ports`.
+2. A source-backed Linux WCN/PCIe wake contract, including whether Wi-Fi wake
+   is required and which PME or sideband route is actually armed.
+3. Android per-client ownership for the remaining SH1/ACV/QUP2 SLEEP votes,
+   or the matching vendor source, plus required-wake evidence for shared
+   LDOE1/LDOE3 consumers.
+
+The RPMh flush path has no supported Linux-side success acknowledgment for
+firmware-triggered SLEEP/WAKE; AOSD/CXSD/DDR residency remains the closest
+effective-state observable. Once the listed gaps justify one truthful,
+reversible mechanism, use the already validated phase-03 matching-kernel,
+bootc, and rollback workflow. Do not repeat the closed stats-offset work or
+the insufficient PCIe-floor and MC4/SH5 experiments.
 
 The archived Linux trace and host reanalysis remain under
 `.external-research/sm8550-suspend-lab-runs/`; do not edit their raw data.

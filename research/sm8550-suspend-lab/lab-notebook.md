@@ -8445,3 +8445,32 @@ ported safely as simple regulator disables.
 No behavior A/B or device configuration change was made. The source path,
 consumer map, wake gap, and exact trace needed next are recorded in the
 [WCN/PCIe wake contract audit](receipts/2026-09-21-wcn-pcie-wake-contract-audit.md).
+
+
+### 2026-09-21 10:34 UTC — boot-argument provenance checked; no new A/B
+
+Fetched `origin/feat/sm8550-suspend-lab` and confirmed it was current at
+`b2920b5`; reread the status checklist and latest notebook corrections before
+continuing. In the Armada source checkout, `pcie_ports=compat` occurs only in
+`system_files/usr/lib/bootc/kargs.d/10-armada.toml`. `git blame` and the
+introducing commit show it arrived with initial import `adbd224c` on
+2026-08-07, subject `Bump Mesa to drop patch`, with no explanation of the
+argument. The current device still boots with it. This explains tracked
+provenance but not why it was originally selected, and is not evidence that
+removing it is safe.
+
+Read-only SSH confirms the Nova remains on stock Linux 7.2.3 and boot ID
+`3656b0e7-5671-4b7e-9368-67965daa251a`, with `pcie_ports=compat` and the root
+port unbound. The SSH account cannot access root-owned tracefs controls, so no
+new PCI PM trace was attempted. No boot setting, driver, request, or power
+state was changed; no suspend or behavioral A/B was run.
+
+The immediate decision is unchanged: do not force the root port through the
+D3cold veto. The historical bound-root run did not retain the noirq decision
+fields, and the current configuration cannot reproduce it without changing
+the prohibited boot policy. A truthful host/WCN shutdown also needs an actual
+wake contract; the declared board `wake-gpios` is not consumed by the active
+QCOM host driver. Android leaf ownership for SH1/ACV/QUP2 and wake safety for
+shared LDOE1/LDOE3 remain unresolved. The status page's `Next action` now
+lists these exact prerequisites and removes the stale phase-02/03 recovery
+instructions.
