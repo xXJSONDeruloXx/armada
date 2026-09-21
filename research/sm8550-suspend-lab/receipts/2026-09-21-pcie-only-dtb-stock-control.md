@@ -25,7 +25,7 @@ The host-generated top-level `result.md` still contains a stale generic claim
 that the Armada dispatcher ran. The device-side result and command receipts
 show direct `systemd-sleep`; no raw data was edited.
 
-Prepared, but not yet deployed, candidate:
+Candidate 03 build and rollback details:
 
 - Image: `localhost/armada-sm8550-pcie-only-test:20260921-03`.
 - OCI image ID: `34d660ae6cb51f36a62e95e263dc09a40963551250cf6d8ad49384448f31fed7`.
@@ -52,6 +52,22 @@ Immediately before staging, root readback confirmed `/boot/efi/KERNEL` and
 the ESP UUID `81DC-CB41` matches the initrd recovery script. Bootc still showed
 stock booted and no staged deployment.
 
-No candidate deployment or reboot has occurred yet. The device remains on
-stock, with no staged bootc deployment. This test removes the PCIe host from
-boot and will not test WCN/PCIe resume.
+Candidate tag `20260921-03` was applied once. Its local service reached
+userspace, then aborted before reading the DTB status or starting the harness:
+the script required the Python agent to be executable, while the image copied
+it as a readable non-executable file. The service immediately invoked
+`bootc rollback --apply`. No candidate suspend, QCOM counter, or DTB-status
+observation was produced. The recovered device is stock
+`20260915.feca679`, boot ID `a601457c-4b80-469b-8c1b-afd08edbd71a`, Wi-Fi is
+back, and bootc reports no staged image with tag `20260921-03` in the rollback
+slot.
+
+The failure receipt is outside Git at
+`/Users/danhimebauch/Developer/.external-research/sm8550-suspend-lab-runs/20260921T1553Z-pcie-only-runner-fail/`.
+The controller log SHA-256 is
+`1aa33cd1961a899f4155194b0b33ee1221b86280cc687abab51a2fae09ca8d85`.
+The corrected wrapper was built and run as candidate `20260921-04`; it calls
+the agent through `/usr/bin/python3` and uses a fresh run ID and marker. Its
+completed negative residency result, successful RTC wake, evidence archive,
+and automatic rollback are documented in the
+[candidate test receipt](2026-09-21-pcie-only-dtb-candidate-test.md).

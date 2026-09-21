@@ -6,9 +6,10 @@ the chronological record, including failed runs and superseded interpretations.
 Update this page when a checklist item changes; put raw output in a dated
 receipt and explain the result in the notebook.
 
-Status as of 2026-09-21 15:48 UTC. Branch `feat/sm8550-suspend-lab`.
-Fresh preflight and stock control are recorded below. No candidate is staged;
-the device remains on stock Linux 7.2.3.
+Status as of 2026-09-21 16:16 UTC. Branch `feat/sm8550-suspend-lab`.
+The PCIe-only DTB candidate completed one RTC-woken direct-deep run and
+automatically rolled back. The Nova is back on stock Linux 7.2.3 with Wi-Fi
+available and no staged deployment. See the [candidate test receipt](receipts/2026-09-21-pcie-only-dtb-candidate-test.md).
 
 ## Immediate next checkpoint
 
@@ -18,15 +19,18 @@ the device remains on stock Linux 7.2.3.
 - [x] Run a matched 15-second stock direct-deep control. RTC wake returned to
   the same boot ID after 13.381 seconds of real suspend; AOSD/CXSD/scalar DDR
   deltas stayed zero. See the [control receipt](receipts/2026-09-21-pcie-only-dtb-stock-control.md).
-- [x] Build and inspect a PCIe-only disabled-DTB candidate with local capture,
-  timed rollback, and initrd recovery. Corrected run ID
-  `20260921T154600Z-1ee9acefc15a` passed local validation; tag
-  `localhost/armada-sm8550-pcie-only-test:20260921-03` is prepared but not staged.
+- [x] Fix the candidate wrapper after the first boot's pre-test failure,
+  rebuild as `20260921-04`, verify the DTB, runner, systemd units, and rollback
+  guard, then complete the one PCIe-only direct-deep run. See the
+  [candidate test receipt](receipts/2026-09-21-pcie-only-dtb-candidate-test.md).
 - [x] Verify the live ESP recovery inputs match the candidate guard: stock
   `KERNEL` and `KERNEL.BAK` hashes match, stock image ID matches, and UUID
   `81DC-CB41` resolves to the expected ESP.
-- [ ] Stage the one-variable PCIe-only candidate, let its local service run
-  one RTC direct-deep cycle and roll back, then retrieve results over SSH.
+- [x] Stage the candidate, complete one 15-second RTC direct-deep cycle,
+  automatically roll back, and retrieve the full evidence archive. Checksum
+  verification passed for 3,739 files with zero mismatches.
+- [x] Stop device testing for this turn as requested; push the completed
+  candidate result, research notes, and recipe.
 
 - [x] Correct the phase-03 QUP2 trace timeline: the QUP2 ICC update at
   304.104 seconds is post-resume. The final SLEEP batch has no QUP2 command;
@@ -257,21 +261,20 @@ the device remains on stock Linux 7.2.3.
   firmware-triggered sleep set. `rpmh_send_msg` and the flush result prove
   software submission only; named AOSD/CXSD/DDR residency counters remain the
   nearest trustworthy firmware outcome. See the [source audit and capture](receipts/2026-09-21-suspend-contract-probe-capture.md).
-- [ ] Do not run another behavioral A/B until the Linux PCIe/WCN wake contract
-  and remaining Android SLEEP request owners are better understood. Linux
-  transitions the WCN endpoint's *tracked* state D0→D3hot successfully, but
-  root port `17cb:0113` remains PCI_UNKNOWN and vetoes host teardown. The
-  physical WCN/link state is unobserved. Lowering the PCIe vote to 1 kB/s
-  reduced MC0/SH0 but did not enable residency; zeroing it while the host
-  remains unsuspended risks resume failure. Disabling shared LDOE rails still
-  has unverified PCIe, UFS, USB and display wake consequences. A peer's
-  positive-control proposal disables PCIe and `89c000.serial` from boot in a
-  test DTB, then uses RTC-only wake. This was not tested; it removes Wi-Fi for
-  the whole candidate boot and does not validate WCN resume. Do not stage it
-  until a local one-shot capture and rollback are proven. A zero-counter result
-  would not isolate LDOE rails because USB/DP and other domain blockers remain.
+- [x] Run the peer-suggested PCIe-only disabled-DTB positive control with local
+  capture and rollback. PCIe host absence from boot still left AOSD/CXSD/scalar
+  DDR at zero, while APSS and DDR LPM `0xd0` advanced during a confirmed
+  14.166-second deep suspend. This narrows the PCIe floor as an insufficient
+  cause; it does not prove a particular SLEEP TCS was applied or isolate the
+  remaining QUP2/ACV/regulator/power-domain hypotheses. No further A/B was run.
 
 ## Latest device recovery state
+
+At 16:07 UTC, SSH confirmed candidate 04 had automatically rolled back to
+stock `20260915.feca679`, Wi-Fi `wlp1s0` was UP at `192.168.0.20`, bootc had no
+staged deployment, and the test image remained only in the rollback slot. The
+result and artifact hashes are in the
+[PCIe-only candidate receipt](receipts/2026-09-21-pcie-only-dtb-candidate-test.md).
 
 At 10:14 UTC, read-only SSH confirmed the device is still on stock Linux
 7.2.3 and the same boot ID. The default command line includes
@@ -1013,12 +1016,10 @@ PCI D-state, manually change an ICC vote, or infer safe D3 support from
 
 ## Safety and continuity constraints
 
-- The current OS is stock Armada Linux 7.2.3 with a clean bootc default order,
-  no staged/pending deployment, and verified stock `KERNEL`/`KERNEL.BAK`.
-  The guarded candidate was applied once, but SSH returned on stock and no
-  suspend test ran. `rpm-ostree cleanup --pending` plus Armada's updater
-  restored the clean state without another reboot. Do not retry until the
-  initrd/ABL return path is observable; manual ABL recovery is available.
+- The current OS is stock Armada Linux 7.2.3 with no staged deployment and no
+  rollback queued. The completed PCIe-only candidate is in bootc's rollback
+  slot; its runner requested rollback after capturing the run. Wi-Fi/SSH
+  returned. No more test runs are being started in this turn.
 - Do not force PCI D3hot, bypass `pci_host_common_d3cold_possible()`, change
   `pcie_ports` again, manually alter ICC votes, blindly disable shared rails,
   send AOSS/QMP commands, or access guessed MMIO/AOP memory.
@@ -1033,22 +1034,18 @@ PCI D-state, manually change an ICC vote, or infer safe D3 support from
 
 ## Next action
 
-Run the prepared PCIe-only DTB positive control once. It changes the DTB status
-for `/soc@0/pcie@1c00000` to `disabled` from boot and leaves QUP2, regulators,
-ICC settings, and `pcie_ports=compat` unchanged. The local service verifies the
-DTB status, runs one 15-second direct-deep capture, writes results under
-`/var/home/armada`, and requests bootc rollback. Its independent six-minute
-timer and inherited initrd guard cover a stalled userspace or initrd. Wi-Fi
-will be absent for the candidate boot; this is a positive control and does not
-test WCN/PCIe resume. Do not add the UART disable until the PCIe-only result is
-collected.
+No additional device test is being run now, per the user's instruction. The
+PCIe-only candidate result is captured and the source/docs are being pushed.
+The result rejects PCIe host presence or its large bandwidth floor as a
+sufficient standalone explanation, but the run did not record a complete
+firmware SLEEP-command acknowledgment.
 
 Do not force a PCI state, bypass the common D3cold check, alter ICC votes, or
 change `pcie_ports`. Product-fix design still needs the earlier PCI noirq/wake
 contract evidence, Android ownership for SH1/ACV/QUP2, and wake-safety evidence
 for shared LDOE1/LDOE3 consumers.
 
-The remaining evidence needed before selecting a test is:
+The remaining investigation gaps, for analysis before any later test, are:
 
 1. A naturally available bound-root-port run that records `state_saved`,
    `skip_bus_pm`, `bridge_d3`, `pci_prepare_to_sleep()` result, downstream

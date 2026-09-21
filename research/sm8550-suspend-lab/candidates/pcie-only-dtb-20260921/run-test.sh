@@ -3,14 +3,14 @@ set -uo pipefail
 
 STATE=/var/lib/sm8550-suspend-lab
 RUN_ROOT=/var/home/armada/sm8550-suspend-lab-candidates
-RUN_ID=20260921T154600Z-1ee9acefc15a
+RUN_ID=20260921T155600Z-b9511ca007d6
 AGENT=/usr/libexec/armada/sm8550_suspend_lab.py
 LOG=/var/home/armada/sm8550-pcie-only-controller.log
 
 exec >>"$LOG" 2>&1
 printf 'started=%s\n' "$(date --iso-8601=seconds)"
 mkdir -p "$STATE"
-touch "$STATE/pcie-only-test-started"
+touch "$STATE/pcie-only-test-started-02"
 
 rollback() {
     printf 'rollback=%s reason=%s\n' "$(date --iso-8601=seconds)" "$1"
@@ -22,7 +22,7 @@ rollback() {
     /usr/bin/bootc rollback --apply
 }
 
-if [[ ! -x "$AGENT" ]]; then
+if [[ ! -r "$AGENT" ]]; then
     rollback agent_missing
     exit 1
 fi
@@ -31,12 +31,12 @@ image_version=$(cat /usr/lib/armada/version 2>/dev/null || true)
 dt_status=$(tr -d '\000' < /sys/firmware/devicetree/base/soc@0/pcie@1c00000/status 2>/dev/null || true)
 printf 'image_version=%s pcie_dtb_status=%s boot_id=%s\n' \
     "$image_version" "$dt_status" "$(cat /proc/sys/kernel/random/boot_id)"
-if [[ "$image_version" != 20260921.pcie-only-dtb-1546 || "$dt_status" != disabled ]]; then
+if [[ "$image_version" != 20260921.pcie-only-dtb-1556 || "$dt_status" != disabled ]]; then
     rollback candidate_verification_failed
     exit 1
 fi
 
-"$AGENT" device start \
+/usr/bin/python3 "$AGENT" device start \
     --root "$RUN_ROOT" \
     --run-id "$RUN_ID" \
     --label 'PCIe host disabled from boot, QUP2 unchanged' \

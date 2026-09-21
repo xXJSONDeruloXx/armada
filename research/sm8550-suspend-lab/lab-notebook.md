@@ -8586,11 +8586,56 @@ to `0b0d7c03a88e77c480ad31d145a6718916638ba62287ff5a2b427c0f75475000`,
 `d7755f13ac5a1224fef222e2d104192045fd01d61924f9b1ae31e941b73f049b`, and ESP
 UUID `81DC-CB41` matches. Bootc remained on stock with no staged image.
 
-The candidate is not deployed yet. Current stock is booted, bootc has no
-staged deployment, and the current SSH route is Wi-Fi through the PCIe/WCN
-path. The test will lose SSH during its candidate boot, so its local capture
-and rollback must complete before reconnecting. It is a PCIe positive-control
-test only; PCIe/WCN resume is intentionally not exercised. The host-level
-`result.md` for the stock control contains a stale generic sentence claiming
-the Armada dispatcher ran; raw command receipts show the actual direct
-`systemd-sleep` path and were left unchanged.
+The first deployment of tag `20260921-03` rebooted the device and reached its
+candidate userspace service, but no suspend test ran. The wrapper incorrectly
+required its copied Python agent to have the executable bit and invoked it
+directly. It logged `reason=agent_missing`, then `bootc rollback --apply`
+returned the device to stock with Wi-Fi/SSH restored. The controller log and
+post-rollback bootc status are preserved outside Git at
+`20260921T1553Z-pcie-only-runner-fail`; no candidate DTB status or sleep
+counters were captured, so this is plumbing failure, not an A/B result. The
+runner is corrected to use `/usr/bin/python3`, with a new valid run ID and
+one-shot marker before a unique rebuild. The host-level `result.md` for the
+stock control still contains a stale generic sentence claiming the Armada
+dispatcher ran; raw command receipts show direct `systemd-sleep`.
+
+### 2026-09-21 16:16 UTC — PCIe-only disabled-DTB test completed; no named residency
+
+Rebuilt the wrapper as candidate `20260921-04` after candidate 03's
+pre-test-only failure. The corrected runner calls the readable agent through
+`/usr/bin/python3`, uses a fresh marker/run ID, and verifies candidate version
+plus live DT status before suspending. The candidate image ID is
+`8b2d24e8f313a59f19e39f3f938c2d88baa0711516bc27ff1432c73da19e7140`, manifest
+`sha256:1d0e7f5e46e9c33b84b5b402f426e1ffde93eb53038e92923a340589d0111c05`;
+its only DTB change is
+`/soc@0/pcie@1c00000/status = "disabled"` (DTB hash
+`522e15cc530964db5d6527a271e5c0d50c330017b9fdc4381aa0bdae008796b6`).
+The local runner and three systemd units passed checks before staging.
+
+Run `20260921T155600Z-b9511ca007d6` booted candidate version
+`20260921.pcie-only-dtb-1556` at 16:06 UTC, verified the live PCIe status was
+`disabled`, and kept the same boot ID through a successful RTC-woken direct
+`deep` cycle. `systemd-sleep suspend` returned 0; RTC0 IRQ 209 woke it after
+14.166 seconds of suspend. AOSD, CXSD, and scalar DDR remained zero. APSS
+advanced one entry by 271,917,554 raw ticks, and detailed DDR LPM `0xd0`
+advanced 302,609,056 raw ticks. `0x11`, `0xd3`, and `0xd4` did not advance.
+This was not a failed/no-op suspend. The complete 3,739-file run archive was
+retrieved and checksum-verified with zero mismatches under
+`.external-research/sm8550-suspend-lab-runs/20260921T155600Z-b9511ca007d6/`.
+
+At 16:06:53 UTC the local runner requested `bootc rollback --apply`; the Nova
+returned to stock `20260915.feca679`, with Wi-Fi/SSH restored and no staged
+deployment. The candidate is now only in bootc's rollback slot. No PCIe/WCN
+resume was tested, and no full Apps-RSC firmware acknowledgment was captured
+(`rpmh_rsc_snapshots.available=false`).
+
+Interpretation: removing the PCIe host from the device tree from boot still
+does not produce the target AOSD/CXSD/scalar-DDR records. Together with phase
+03's reduced PCIe bandwidth test, this makes PCIe host presence or its large
+vote insufficient as a standalone explanation. This run did not capture the
+final MC0/SH0 SLEEP words or a complete Apps-RSC acknowledgment, so it does not
+prove the resulting floor was zero or what RPMh/AOP applied. It does not
+identify the remaining blocker. The result does not justify blindly disabling
+shared rails or changing ICC votes. The user asked for no more test runs in
+this turn; the receipt is
+[here](receipts/2026-09-21-pcie-only-dtb-candidate-test.md).

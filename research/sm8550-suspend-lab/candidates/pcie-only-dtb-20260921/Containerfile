@@ -8,7 +8,7 @@ RUN fdtput -t s /tmp/nova.dtb /soc@0/pcie@1c00000 status disabled && \
     sha256sum /tmp/nova.dtb
 
 FROM testbase AS candidate
-LABEL org.opencontainers.image.version="20260921.pcie-only-dtb-1546"
+LABEL org.opencontainers.image.version="20260921.pcie-only-dtb-1556"
 LABEL org.opencontainers.image.description="Temporary SM8550 PCIe-host-disabled suspend positive control"
 
 COPY --from=dtb-tools /tmp/nova.dtb /usr/lib/modules/7.2.3/dtb/qcom/qcs8550-retroidpocket-rpnova.dtb
@@ -20,7 +20,7 @@ COPY candidates/pcie-only-dtb-20260921/rollback.timer /usr/lib/systemd/system/sm
 COPY candidates/pcie-only-dtb-20260921/marker /usr/lib/armada/suspend-lab/pcie-host-disabled-test
 
 RUN set -eu; \
-    printf '%s\n' '20260921.pcie-only-dtb-1546' > /usr/lib/armada/version; \
+    printf '%s\n' '20260921.pcie-only-dtb-1556' > /usr/lib/armada/version; \
     chmod 0755 /usr/libexec/armada/sm8550-pcie-only-test; \
     rm -f /usr/lib/systemd/system/timers.target.wants/sm8550-pcie-opp-test-rollback.timer; \
     install -d /usr/lib/systemd/system/multi-user.target.wants /usr/lib/systemd/system/timers.target.wants; \
