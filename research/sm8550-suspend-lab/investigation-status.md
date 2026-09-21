@@ -6,11 +6,24 @@ the chronological record, including failed runs and superseded interpretations.
 Update this page when a checklist item changes; put raw output in a dated
 receipt and explain the result in the notebook.
 
-Status as of 2026-09-21 14:55 UTC. Branch `feat/sm8550-suspend-lab`.
-No device check or A/B ran during the 14:55 source review; the recovery state
-below remains the 10:34 read-only device snapshot.
+Status as of 2026-09-21 15:48 UTC. Branch `feat/sm8550-suspend-lab`.
+Fresh preflight and stock control are recorded below. No candidate is staged;
+the device remains on stock Linux 7.2.3.
 
 ## Immediate next checkpoint
+
+- [x] Recheck live Nova routing and power state: Wi-Fi `wlp1s0` is the only
+  network path; PCIe `1c00000.pcie` holds 500000 kB/s peak on LLCC/EBI, and
+  `89c000.serial` retains QUP2 avg/peak 1.
+- [x] Run a matched 15-second stock direct-deep control. RTC wake returned to
+  the same boot ID after 13.381 seconds of real suspend; AOSD/CXSD/scalar DDR
+  deltas stayed zero. See the [control receipt](receipts/2026-09-21-pcie-only-dtb-stock-control.md).
+- [x] Build and inspect a PCIe-only disabled-DTB candidate with local capture,
+  timed rollback, and initrd recovery. Corrected run ID
+  `20260921T154600Z-1ee9acefc15a` passed local validation; tag
+  `localhost/armada-sm8550-pcie-only-test:20260921-03` is prepared but not staged.
+- [ ] Stage the one-variable PCIe-only candidate, let its local service run
+  one RTC direct-deep cycle and roll back, then retrieve results over SSH.
 
 - [x] Correct the phase-03 QUP2 trace timeline: the QUP2 ICC update at
   304.104 seconds is post-resume. The final SLEEP batch has no QUP2 command;
@@ -1017,12 +1030,20 @@ PCI D-state, manually change an ICC vote, or infer safe D3 support from
 
 ## Next action
 
-Do not run a behavior-changing suspend A/B yet. The current stock Linux boot
-still uses `pcie_ports=compat`; its enabled, unbound root port is the source-
-explained D3cold veto. Do not remove that argument, force a PCI state, or
-bypass the common check. The earlier bound-port capture lacks the PCI noirq
-decision fields, and the active host driver does not consume the board's
-declared wake GPIO.
+Run the prepared PCIe-only DTB positive control once. It changes the DTB status
+for `/soc@0/pcie@1c00000` to `disabled` from boot and leaves QUP2, regulators,
+ICC settings, and `pcie_ports=compat` unchanged. The local service verifies the
+DTB status, runs one 15-second direct-deep capture, writes results under
+`/var/home/armada`, and requests bootc rollback. Its independent six-minute
+timer and inherited initrd guard cover a stalled userspace or initrd. Wi-Fi
+will be absent for the candidate boot; this is a positive control and does not
+test WCN/PCIe resume. Do not add the UART disable until the PCIe-only result is
+collected.
+
+Do not force a PCI state, bypass the common D3cold check, alter ICC votes, or
+change `pcie_ports`. Product-fix design still needs the earlier PCI noirq/wake
+contract evidence, Android ownership for SH1/ACV/QUP2, and wake-safety evidence
+for shared LDOE1/LDOE3 consumers.
 
 The remaining evidence needed before selecting a test is:
 

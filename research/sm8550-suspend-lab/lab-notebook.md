@@ -8548,3 +8548,42 @@ results, and automatic rollback before booting without wireless access. Even
 if counters stay zero, that would not point directly to LDOE1/LDOE3: the
 USB/DP combo PHY and other power-domain or firmware blockers remain possible
 ([DWC3/PHY result](dwc3-skip-phy-ab.md)). No candidate was built or run here.
+
+### 2026-09-21 15:41 UTC — stock control and PCIe-only DTB candidate prepared
+
+The user asked to run the community-suggested tests immediately. I first
+captured a fresh stock preflight and one 15-second direct-deep control. The
+Nova was on stock `20260915.feca679` / Linux `7.2.3`, with only `wlp1s0` as a
+network path. Before suspend, the PCIe client held 500000 kB/s peak on the
+LLCC/EBI paths; `89c000.serial` retained QUP2 avg/peak 1 and CNOC avg/peak
+115. The direct `systemd-sleep suspend` call returned 0 after RTC wake, with
+the boot ID unchanged and 13.381 seconds of real suspend. AOSD, CXSD, and
+scalar DDR remained zero; APSS advanced by one entry and DDR `0xd0` by
+301125714 raw ticks. See the [control receipt](receipts/2026-09-21-pcie-only-dtb-stock-control.md)
+and raw run `20260921T152415Z-d9d4375f7b23` outside Git.
+
+Prepared candidate `localhost/armada-sm8550-pcie-only-test:20260921-03`
+from the retained phase-03 candidate image. It changes only the Nova DTB
+status for `/soc@0/pcie@1c00000` to `disabled`; QUP2 stays enabled. The
+modified DTB SHA-256 is
+`522e15cc530964db5d6527a271e5c0d50c330017b9fdc4381aa0bdae008796b6`; the
+OCI image ID is
+`34d660ae6cb51f36a62e95e263dc09a40963551250cf6d8ad49384448f31fed7` and its
+manifest digest is
+`sha256:cdf6959b7d8a1072915206b09615473f9376b62557d535efa80470085f6dec08`.
+Build-time `fdtget` verified the disabled status. The image includes a local
+one-cycle harness service, a six-minute rollback timer, and the previously
+used initrd recovery guard. New units passed `systemd-analyze verify`. The
+runner publishes `/var/home` results to the SSH account before rollback and
+uses valid run ID `20260921T154600Z-1ee9acefc15a`. Pre-deploy validation
+caught an invalid run ID in the first local build before it was staged; the
+runner was corrected and rebuilt under unique tag `20260921-03`.
+
+The candidate is not deployed yet. Current stock is booted, bootc has no
+staged deployment, and the current SSH route is Wi-Fi through the PCIe/WCN
+path. The test will lose SSH during its candidate boot, so its local capture
+and rollback must complete before reconnecting. It is a PCIe positive-control
+test only; PCIe/WCN resume is intentionally not exercised. The host-level
+`result.md` for the stock control contains a stale generic sentence claiming
+the Armada dispatcher ran; raw command receipts show the actual direct
+`systemd-sleep` path and were left unchanged.

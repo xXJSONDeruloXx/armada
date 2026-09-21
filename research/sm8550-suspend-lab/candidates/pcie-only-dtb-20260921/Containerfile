@@ -1,0 +1,28 @@
+FROM localhost/armada-pcie-opp-test-phase:20260921-03 AS testbase
+
+FROM registry.fedoraproject.org/fedora@sha256:0c6072366ebf8ea1c8c0f3a118aad3e9a9247d3065d499e54d62968f69351966 AS dtb-tools
+RUN dnf -q -y install dtc && dnf clean all
+COPY --from=testbase /usr/lib/modules/7.2.3/dtb/qcom/qcs8550-retroidpocket-rpnova.dtb /tmp/nova.dtb
+RUN fdtput -t s /tmp/nova.dtb /soc@0/pcie@1c00000 status disabled && \
+    test "$(fdtget -t s /tmp/nova.dtb /soc@0/pcie@1c00000 status)" = disabled && \
+    sha256sum /tmp/nova.dtb
+
+FROM testbase AS candidate
+LABEL org.opencontainers.image.version="20260921.pcie-only-dtb-1546"
+LABEL org.opencontainers.image.description="Temporary SM8550 PCIe-host-disabled suspend positive control"
+
+COPY --from=dtb-tools /tmp/nova.dtb /usr/lib/modules/7.2.3/dtb/qcom/qcs8550-retroidpocket-rpnova.dtb
+COPY sm8550_suspend_lab.py /usr/libexec/armada/sm8550_suspend_lab.py
+COPY candidates/pcie-only-dtb-20260921/run-test.sh /usr/libexec/armada/sm8550-pcie-only-test
+COPY candidates/pcie-only-dtb-20260921/run.service /usr/lib/systemd/system/sm8550-pcie-only-run.service
+COPY candidates/pcie-only-dtb-20260921/rollback.service /usr/lib/systemd/system/sm8550-pcie-only-rollback.service
+COPY candidates/pcie-only-dtb-20260921/rollback.timer /usr/lib/systemd/system/sm8550-pcie-only-rollback.timer
+COPY candidates/pcie-only-dtb-20260921/marker /usr/lib/armada/suspend-lab/pcie-host-disabled-test
+
+RUN set -eu; \
+    printf '%s\n' '20260921.pcie-only-dtb-1546' > /usr/lib/armada/version; \
+    chmod 0755 /usr/libexec/armada/sm8550-pcie-only-test; \
+    rm -f /usr/lib/systemd/system/timers.target.wants/sm8550-pcie-opp-test-rollback.timer; \
+    install -d /usr/lib/systemd/system/multi-user.target.wants /usr/lib/systemd/system/timers.target.wants; \
+    ln -s ../sm8550-pcie-only-run.service /usr/lib/systemd/system/multi-user.target.wants/sm8550-pcie-only-run.service; \
+    ln -s ../sm8550-pcie-only-rollback.timer /usr/lib/systemd/system/timers.target.wants/sm8550-pcie-only-rollback.timer

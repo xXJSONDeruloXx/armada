@@ -1,0 +1,10 @@
+[Unit]
+Description=Restore the stock Nova deployment after the PCIe-only suspend test
+ConditionPathExists=/usr/lib/armada/suspend-lab/pcie-host-disabled-test
+ConditionPathExists=!/var/lib/sm8550-suspend-lab/pcie-only-rollback-fired
+
+[Service]
+Type=oneshot
+ExecStartPre=/usr/bin/touch /var/lib/sm8550-suspend-lab/pcie-only-rollback-fired
+ExecStart=/usr/bin/bootc rollback --apply
+TimeoutStartSec=180

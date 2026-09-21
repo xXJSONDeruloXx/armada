@@ -1,0 +1,10 @@
+[Unit]
+Description=Run one local RTC suspend test with the SM8550 PCIe host disabled
+After=multi-user.target
+ConditionPathExists=/usr/lib/armada/suspend-lab/pcie-host-disabled-test
+ConditionPathExists=!/var/lib/sm8550-suspend-lab/pcie-only-test-started
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/armada/sm8550-pcie-only-test
+TimeoutStartSec=infinity
