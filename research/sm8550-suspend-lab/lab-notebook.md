@@ -8499,3 +8499,52 @@ already captured across the 13:01 build plan, 13:45 corrected ABI check, and
 clear that the design receipt's planned test was superseded by that completed
 result. No new device observation or device change occurred, and no other
 uncited receipt or missing research conclusion surfaced in this pass.
+
+### 2026-09-21 14:55 UTC — community review connects the positive floor to ACV
+
+Reviewed a peer's [attachment in `#sleep-testing`](https://discord.com/channels/1514293984095375490/1534718786618392636/1551585940382687242)
+and the follow-up. It proposes that the phase-03 positive PCIe floor kept ACV
+enabled, and suggests a test-only DTB with PCIe and the `89c000.serial` UART
+disabled for an RTC-only positive control. The downloaded attachment's SHA-256
+was `8512307eac4772b35329b592b3546f72ab8e6ad52af9f2e7008dddf2f535e17a`.
+
+I checked the mechanism against the exact Linux 7.2.3 source. `bcm_acv` has
+`enable_mask=0x8` over the EBI node; `bcm_aggregate_mask()` keeps it enabled
+for any nonzero average or peak in a bucket. `qcom_icc_bcm_voter_commit()` only
+stages WAKE and SLEEP commands when those two aggregate values differ. Thus a
+positive EBI SLEEP request can leave ACV enabled with no ACV SLEEP command.
+`bcm_div()` also preserves small nonzero votes as one unit. This is consistent
+with phase 03: MC0/SH0 changed to one unit at 1 kB/s, but the trace had no ACV
+command. The correct comparison is WAKE versus SLEEP buckets, not a blanket
+comparison to the ACTIVE/awake vote. Sources: [BCM aggregation](https://github.com/gregkh/linux/blob/v7.2.3/drivers/interconnect/qcom/bcm-voter.c#L50-L88),
+[WAKE/SLEEP difference check](https://github.com/gregkh/linux/blob/v7.2.3/drivers/interconnect/qcom/bcm-voter.c#L325-L357),
+and the [SM8550 ACV definition](https://github.com/gregkh/linux/blob/v7.2.3/drivers/interconnect/qcom/sm8550.c#L1302-L1307).
+
+This explains why phase 03 did not test an exact-zero EBI/ACV transition; it
+does not prove ACV is a residency gate or that AOP applied the staged set. The
+phase-03 trace did not record ACV's computed bucket values. The prior Wi-Fi-off
+run also left the host's PCIe vote in place, and the QUP2 trace only established
+that the UART request persisted, not that it blocks residency. No run has
+disabled PCIe and the UART together through a test DTB.
+
+The attachment's request for `pm_genpd_summary`, `clk_summary`, and
+`regulator_summary` is already covered by the harness's pre/post snapshots;
+the [phase-03 receipt](receipts/2026-09-21-pcie-opp-phase-03-candidate-test.md)
+has all three. That run's awake `pm_genpd_summary` showed `cx` and `mmcx` on
+at performance 64, with the PCIe host, UFS, display controller, and USB/DP PHY
+active. These are awake snapshots, not a read of which CX/MX requests remain
+during suspend. The missing observable is the per-bucket request/consumer state
+at the suspend transition, especially ACV, not another generic summary file.
+
+The proposed test is a positive control, not a production fix. Disabling the
+PCIe node from boot would avoid a PCIe suspend/reinit callback on RTC resume
+because the host/WCN would remain absent throughout that candidate boot; it
+would also mean no Wi-Fi for the run and would not validate normal WCN resume.
+The user flagged the normal strip-and-reinitialize concern, and the author
+agreed ([user's reply](https://discord.com/channels/1514293984095375490/1534718786618392636/1551605053289406636),
+[author's response](https://discord.com/channels/1514293984095375490/1534718786618392636/1551605143126941898)).
+Any such diagnostic needs a pre-validated local one-shot capture, persistent
+results, and automatic rollback before booting without wireless access. Even
+if counters stay zero, that would not point directly to LDOE1/LDOE3: the
+USB/DP combo PHY and other power-domain or firmware blockers remain possible
+([DWC3/PHY result](dwc3-skip-phy-ab.md)). No candidate was built or run here.

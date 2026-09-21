@@ -6,7 +6,9 @@ the chronological record, including failed runs and superseded interpretations.
 Update this page when a checklist item changes; put raw output in a dated
 receipt and explain the result in the notebook.
 
-Status as of 2026-09-21 10:34 UTC. Branch `feat/sm8550-suspend-lab`.
+Status as of 2026-09-21 14:55 UTC. Branch `feat/sm8550-suspend-lab`.
+No device check or A/B ran during the 14:55 source review; the recovery state
+below remains the 10:34 read-only device snapshot.
 
 ## Immediate next checkpoint
 
@@ -96,6 +98,17 @@ Status as of 2026-09-21 10:34 UTC. Branch `feat/sm8550-suspend-lab`.
   context support, and board consumers of LDOE1/LDOE3. Exact context-specific
   Android leaf votes for SH1/ACV/QUP2 and rail wake safety remain unavailable.
   See the [request and rail audit](receipts/2026-09-21-rpmh-client-and-rail-audit.md).
+- [x] Check the external positive-floor/ACV hypothesis against Linux 7.2.3.
+  `bcm_acv` is an EBI enable-mask, nonzero bucket demand keeps it enabled, and
+  the BCM voter stages WAKE/SLEEP only when those aggregates differ. Phase 03's
+  1 kB/s request left a one-unit MC0/SH0 floor, so it did not test ACV turning
+  off. This is a source-backed request-generation explanation, not proof that
+  ACV gates residency or that AOP applied the request. See the latest notebook
+  entry, [BCM aggregation](https://github.com/gregkh/linux/blob/v7.2.3/drivers/interconnect/qcom/bcm-voter.c#L50-L88),
+  and the [WAKE/SLEEP difference check](https://github.com/gregkh/linux/blob/v7.2.3/drivers/interconnect/qcom/bcm-voter.c#L325-L357).
+  The harness already saves `pm_genpd_summary`, `clk_summary`, and
+  `regulator_summary` pre/post; the missing view is per-bucket state at the
+  suspend transition, not another generic summary file.
 - [ ] Obtain Android per-client SLEEP-tagged request ownership for SH1/ACV/
   QUP2, or matching vendor source. The saved TCS is aggregate and the
   `interconnect_summary` is an awake snapshot, so neither identifies all
@@ -235,7 +248,12 @@ Status as of 2026-09-21 10:34 UTC. Branch `feat/sm8550-suspend-lab`.
   physical WCN/link state is unobserved. Lowering the PCIe vote to 1 kB/s
   reduced MC0/SH0 but did not enable residency; zeroing it while the host
   remains unsuspended risks resume failure. Disabling shared LDOE rails still
-  has unverified PCIe, UFS, USB and display wake consequences.
+  has unverified PCIe, UFS, USB and display wake consequences. A peer's
+  positive-control proposal disables PCIe and `89c000.serial` from boot in a
+  test DTB, then uses RTC-only wake. This was not tested; it removes Wi-Fi for
+  the whole candidate boot and does not validate WCN resume. Do not stage it
+  until a local one-shot capture and rollback are proven. A zero-counter result
+  would not isolate LDOE rails because USB/DP and other domain blockers remain.
 
 ## Latest device recovery state
 
