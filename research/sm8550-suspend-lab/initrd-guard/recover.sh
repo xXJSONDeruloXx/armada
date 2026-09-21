@@ -54,6 +54,24 @@ cleanup() {
 }
 trap cleanup EXIT
 
+record_phase() {
+    local phase="$1" boot_id=unknown marker="$ESP_MOUNT/SUSDIAG.LOG"
+    local temporary="$ESP_MOUNT/SUSDIAG.TMP"
+    if [[ -r /proc/sys/kernel/random/boot_id ]]; then
+        IFS= read -r boot_id < /proc/sys/kernel/random/boot_id || true
+    fi
+    if printf 'event=%s boot_id=%s\n' "$phase" "$boot_id" > "$temporary" &&
+        sync "$temporary" &&
+        mv -f "$temporary" "$marker"; then
+        sync
+    else
+        rm -f "$temporary" 2>/dev/null || true
+        log "could not persist phase=$phase boot_id=$boot_id"
+    fi
+}
+
+record_phase initrd_recovery_started
+
 backup="$ESP_MOUNT/KERNEL.BAK"
 [[ -f "$backup" ]] || fail "KERNEL.BAK is missing"
 digest=$(sha256sum "$backup") || fail "could not hash KERNEL.BAK"
@@ -80,6 +98,8 @@ else
     rm -f "$stamp_tmp" 2>/dev/null || true
     log "restored KERNEL but could not update its image ID stamp"
 fi
+
+record_phase stock_kernel_restored
 
 log "restored stock KERNEL after initrd timeout; requesting reboot"
 systemctl reboot --force

@@ -109,6 +109,7 @@ cmp -s "$esp/KERNEL" "$esp/KERNEL.BAK" || fail 'stock KERNEL was not restored'
 [[ $(cat "$esp/.armada-bootimg.id") == known-stock-id ]] || fail 'active ID was not repaired'
 [[ $(cat "$esp/.armada-bootimg.prev.id") == stale-previous-id ]] || fail 'previous ID was changed'
 grep -qx 'reboot --force' "$case_dir/reboots" || fail 'reboot was not requested'
+grep -q '^event=stock_kernel_restored boot_id=' "$esp/SUSDIAG.LOG" || fail 'successful recovery phase was not persisted'
 
 new_case wrong_hash
 EXPECTED_HASH=deadbeef
@@ -117,6 +118,8 @@ unset EXPECTED_HASH
 grep -q 'candidate boot image' "$esp/KERNEL" || fail 'wrong-hash case changed KERNEL'
 grep -q 'candidate-id' "$esp/.armada-bootimg.id" || fail 'wrong-hash case changed stamp'
 [[ ! -s "$case_dir/reboots" ]] || fail 'wrong-hash case requested reboot'
+grep -q '^event=initrd_recovery_started boot_id=' "$esp/SUSDIAG.LOG" || fail 'recovery start phase was not persisted'
+if grep -q '^event=stock_kernel_restored ' "$esp/SUSDIAG.LOG"; then fail 'wrong-hash case recorded a restore'; fi
 
 new_case missing_marker
 rm "$case_dir/marker"
@@ -137,5 +140,15 @@ if run_guard; then fail 'read-only ESP was accepted'; fi
 unset MOCK_ROOT_FSTYPE MOCK_ROOT_OPTIONS
 grep -q 'candidate boot image' "$esp/KERNEL" || fail 'read-only case changed KERNEL'
 [[ ! -s "$case_dir/reboots" ]] || fail 'read-only case requested reboot'
+
+state_file="$tmp/root-marker/boot-phases.log"
+version_file="$tmp/root-marker/version"
+mkdir -p "${state_file%/*}"
+printf '%s\n' '20260921.pcie-opp-test-phase-01' > "$version_file"
+ARMADA_PCIE_TEST_STATE_FILE="$state_file" \
+ARMADA_PCIE_TEST_VERSION_FILE="$version_file" \
+    "$ROOT/root-phase/mark-root.sh"
+grep -q '^root boot_id=.* version=20260921.pcie-opp-test-phase-01$' "$state_file" ||
+    fail 'candidate root phase was not persisted'
 
 printf '%s\n' 'initrd recovery tests passed'
