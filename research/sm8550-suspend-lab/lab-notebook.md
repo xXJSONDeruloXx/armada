@@ -7979,3 +7979,116 @@ callback returns successfully without a QUP2 ICC disable, add a focused
 function probe to distinguish serial PM-state handling from runtime resource
 shutdown. Full source and trace references are in the
 [QUP2 trace-correction receipt](receipts/2026-09-21-qup2-pm-trace-correction.md).
+
+
+### 2026-09-21 05:22 UTC — UART suspend callback succeeds but QUP2 vote remains
+
+Ran unchanged stock Linux 7.2.3 for a 15-second direct-deep observation with
+filtered `device_pm_callback_start/end`, ICC, and RPMh events. The `89c000.serial`
+GENI callback returned `err=0` at 9679.281178 and its bus callback returned
+`err=0` at 9679.351593. Both system and driver callbacks for the `serial1-0`
+rsinput child also returned `err=0`.
+
+The final Apps-RSC WAKE/SLEEP batch was submitted at 9679.5426 and contained no
+QUP2 command for address `0x5004c`. Before that batch, the only QUP2-core ICC
+updates name sibling `890000.i2c` (at 9679.325149 and 9679.492689); no
+suspend-window update names `89c000.serial`. The UART's first traced QUP2 ICC
+update is on resume at 9693.971511, followed by active write `0x5004c =
+0x60004001`. This corroborates that its QUP2 request was not removed before
+BCM sleep/wake batching, despite the successful high-level suspend callback.
+
+The callback trace alone cannot show whether `uart_suspend_port()` took its
+wakeup early return, whether serial-core changed `pm_state` to OFF, or whether
+the ensuing runtime suspend/resource-off path ran. In the matching source,
+`qcom_geni_serial_pm()` only calls `pm_runtime_put_sync()` on ON-to-OFF;
+`geni_serial_resources_off()` disables GENI ICC only after hardware resources
+turn off; `geni_icc_disable()` calls `icc_disable()`, which reaches
+`icc_set_bw()`. A missing UART `icc_set_bw` event before the final batch points
+to locating the break among those steps. It is not evidence that AOP applied
+or rejected the TCS, and it does not establish this request as the AOSD/CXSD/
+DDR residency gate.
+
+The 15-second run woke from the RTC and returned without reset. AOSD/CXSD/
+scalar DDR deltas remained zero; DDR ID `0xd0` advanced 307,070,525 raw ticks.
+The trace captured 337 PSCI domain idle enter/exit events for `0x40000004`,
+without a SYSTEM_SUSPEND kretprobe. Immediate network health showed Wi-Fi
+temporarily `NO-CARRIER`; a direct SSH check at 05:21 UTC found it UP with
+carrier and systemd had no failed units.
+
+Next diagnostic: add a private, run-scoped probe for the serial PM old/new
+state and the GENI runtime/resource-off path, after verifying each symbol is
+available and not blacklisted on the running kernel. Keep it observation-only
+and leave the request unchanged. Full receipt and raw evidence paths are in
+the [QUP2 PM callback observation](receipts/2026-09-21-qup2-pm-callback-observation.md).
+
+
+### 2026-09-21 05:39 UTC — serial PM transitions OFF but runtime suspend is skipped
+
+Added a `geni-uart-pm` trace profile with four private dynamic probes. On the
+unchanged stock kernel, the new serial-state probe recorded
+`qcom_geni_serial_pm(port=0xffff000804c97480, new_state=3, old_state=0)` at
+10882.208776, inside the `89c000.serial` bus suspend callback. Linux's UART PM
+enum defines 0 as ON and 3 as OFF, so serial-core did change this UART from ON
+to OFF.
+
+The kretprobe count for `qcom_geni_serial_runtime_suspend()` was zero. The six
+`geni_se_resources_off()` and six `geni_icc_disable()` events all show
+`geni_i2c_runtime_suspend()` as their caller; none was from the UART. Thus the
+UART's `pm_runtime_put_sync()` did not lead to its runtime-suspend callback
+before the SLEEP batch. The high-level driver callback still returns success
+because `qcom_geni_serial_pm()` is `void` and ignores that put's return value.
+
+This is the first direct observation of the missing transition, rather than
+only inferring it from a missing ICC update. It still does not identify why
+runtime suspend was skipped. Next inspect runtime-PM usage/reference accounting
+and device-PM system-sleep semantics, then determine the smallest legitimate
+way to release or suspend the UART without breaking the gamepad serial path.
+Do not change bandwidth or run a behavioral A/B yet.
+
+The observation also re-confirms that the final Apps-RSC SLEEP set contains no
+QUP2 `0x5004c` command and that AOSD/CXSD/scalar DDR counters remain zero. The
+run woke on RTC, kept the same boot ID, restored Wi-Fi, and successfully removed
+all four run-scoped kprobes and its trace instance. Raw run:
+`/Users/danhimebauch/Developer/.external-research/sm8550-suspend-lab-runs/20260921T053640Z-9f9e6fb592c9/`.
+
+
+### 2026-09-21 05:49 UTC — system-sleep runtime-PM reference explains GENI callback gap
+
+The matching Linux 7.2.3 PM-core source explains why the UART's ON-to-OFF
+transition did not invoke its runtime-suspend callback. During
+`device_prepare()`, PM core calls `pm_runtime_get_noresume(dev)` for each
+device and holds that reference through suspend; `device_complete()` drops it
+after resume. The GENI system-sleep callback reaches serial-core's
+`uart_suspend_port()`, whose OFF transition calls
+`qcom_geni_serial_pm()`; that callback only calls
+`pm_runtime_put_sync(uport->dev)` and ignores the return value.
+`__pm_runtime_idle()` decrements the count and, if it remains positive, emits
+`rpm_usage` and returns success without calling `rpm_idle()` or the GENI
+runtime-suspend callback. Thus the system-PM reference is sufficient to explain
+the zero `qcom_geni_serial_runtime_suspend()` hits: the PM-state transition is
+not equivalent to resource shutdown in this system-sleep path.
+
+The device's runtime-PM sysfs directory does not expose `runtime_usage` or
+`runtime_active_kids`; its config lacks `CONFIG_PM_ADVANCED_DEBUG`. The
+read-only snapshot showed the platform UART and serial descendants active with
+zero runtime-suspended time. The serdev route is an additional accounting path:
+`serdev_device_open()` takes a runtime reference on its controller, and the
+tty-backed serdev controller is created below the serial port device. Its
+reference should be captured separately rather than conflated with the PM-core
+reference on `89c000.serial`.
+
+This closes the source-level explanation for why the resource-off callback is
+skipped; it does not prove that QUP2 is a gate for AOSD/CXSD/DDR residency. The
+next observation adds only filtered runtime-PM tracepoints for the UART,
+serial-core devices, and serdev controller. The expected decisive evidence is
+the post-put usage count and whether `rpm_idle`/`rpm_suspend` are entered.
+No ICC vote, PM policy, kernel, or device setting has changed.
+
+Source references: Linux v7.2.3
+[`device_prepare()`](https://github.com/gregkh/linux/blob/v7.2.3/drivers/base/power/main.c#L2188-L2198),
+[`device_complete()`](https://github.com/gregkh/linux/blob/v7.2.3/drivers/base/power/main.c#L1295-L1305),
+[`__pm_runtime_idle()`](https://github.com/gregkh/linux/blob/v7.2.3/drivers/base/power/runtime.c#L1111-L1133),
+[`uart_suspend_port()`](https://github.com/gregkh/linux/blob/v7.2.3/drivers/tty/serial/serial_core.c#L2296-L2369),
+[`qcom_geni_serial_pm()`](https://github.com/gregkh/linux/blob/v7.2.3/drivers/tty/serial/qcom_geni_serial.c#L1727-L1739),
+[`serdev_device_open()`](https://github.com/gregkh/linux/blob/v7.2.3/drivers/tty/serdev/core.c#L149-L186),
+and [tty serdev controller registration](https://github.com/gregkh/linux/blob/v7.2.3/drivers/tty/serdev/serdev-ttyport.c#L275-L296).

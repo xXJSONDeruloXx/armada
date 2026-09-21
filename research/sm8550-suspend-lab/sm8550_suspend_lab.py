@@ -126,9 +126,9 @@ TRACEFS_DIRS = (
     "/sys/kernel/tracing",
     "/sys/kernel/debug/tracing",
 )
-TRACE_PROFILE_CHOICES = ("none", "ufs-irq", "rpmh-aoss", "rsc-success", "psci-kretprobe", "pcie-d3cold", "icc-attribution")
+TRACE_PROFILE_CHOICES = ("none", "ufs-irq", "rpmh-aoss", "rsc-success", "psci-kretprobe", "pcie-d3cold", "icc-attribution", "geni-uart-pm")
 TRACE_KRETPROBE_PROFILES = ("psci-kretprobe", "pcie-d3cold")
-TRACE_DYNAMIC_PROBE_PROFILES = TRACE_KRETPROBE_PROFILES + ("icc-attribution",)
+TRACE_DYNAMIC_PROBE_PROFILES = TRACE_KRETPROBE_PROFILES + ("icc-attribution", "geni-uart-pm")
 TRACE_REQUIRED_EVENTS = (
     "irq:irq_handler_entry",
     "irq:irq_handler_exit",
@@ -138,6 +138,14 @@ TRACE_RPMH_REQUIRED_EVENTS = (
     "rpmh:rpmh_tx_done",
     "qcom_aoss:aoss_send",
     "qcom_aoss:aoss_send_done",
+)
+TRACE_GENI_RUNTIME_PM_EVENTS = (
+    "rpm:rpm_usage",
+    "rpm:rpm_idle",
+    "rpm:rpm_suspend",
+    "rpm:rpm_resume",
+    "rpm:rpm_return_int",
+    "rpm:rpm_status",
 )
 TRACE_RPMH_SUCCESS_REQUIRED_EVENTS = TRACE_RPMH_REQUIRED_EVENTS + (
     "rpmh:rpmh_rsc_snapshot",
@@ -180,7 +188,21 @@ TRACE_QUP2_PM_EVENTS = (
     "power:device_pm_callback_start",
     "power:device_pm_callback_end",
 )
-TRACE_QUP2_PM_DEVICES = ("89c000.serial", "serial1-0", "890000.i2c")
+TRACE_QUP2_PM_DEVICES = (
+    "89c000.serial",
+    "serial1-0",
+    "898000.serial",
+    "serial0-0",
+    "a9c000.serial",
+    "890000.i2c",
+)
+TRACE_GENI_PM_DEVICES = (
+    "89c000.serial",
+    "89c000.serial:0",
+    "89c000.serial:0.0",
+    "serial1",
+    "serial1-0",
+)
 TRACE_PM_EVENTS = (
     "power:device_pm_callback_start",
     "power:device_pm_callback_end",
@@ -1108,6 +1130,18 @@ def trace_qup2_pm_filter(format_text: Optional[str]) -> str:
     )
 
 
+def trace_geni_runtime_pm_filter(format_text: Optional[str]) -> str:
+    if not format_text or not re.search(
+        r"^\s*field:__data_loc char\[\] name;",
+        format_text,
+        re.MULTILINE,
+    ):
+        raise LabError("runtime-PM trace event lacks the expected name field")
+    return " || ".join(
+        'name == "%s"' % device for device in TRACE_GENI_PM_DEVICES
+    )
+
+
 def trace_pcie_event_filter(event: str, format_text: Optional[str]) -> Optional[str]:
     field = (
         "dev"
@@ -1703,15 +1737,96 @@ def trace_prepare_icc_attribution_probes(run: DeviceRun, info: Dict[str, Any]) -
     return configured_events
 
 
-def trace_remove_icc_attribution_probes(run: DeviceRun, info: Dict[str, Any]) -> Dict[str, Any]:
+GENI_PM_PROBE_SPECS = (
+    (
+        "geni_uart_pm_state",
+        "p",
+        "qcom_geni_serial_pm",
+        "port_addr=$arg1:x64 new_state=$arg2:u32 old_state=$arg3:u32",
+        ("port_addr", "new_state", "old_state"),
+    ),
+    ("geni_runtime_suspend", "r", "qcom_geni_serial_runtime_suspend", "retval=$retval:s32", ("retval",)),
+    ("geni_se_resources_off", "r", "geni_se_resources_off", "retval=$retval:s32", ("retval",)),
+    ("geni_icc_disable", "r", "geni_icc_disable", "retval=$retval:s32", ("retval",)),
+)
+
+
+def trace_prepare_geni_pm_probes(run: DeviceRun, info: Dict[str, Any]) -> List[Dict[str, Any]]:
+    root = Path(str(info.get("root", "")))
+    available = read_text(root / "available_filter_functions") or ""
+    blacklist = read_text(Path("/sys/kernel/debug/kprobes/blacklist"))
+    if blacklist is None or (read_text(Path("/sys/kernel/debug/kprobes/enabled")) or "").strip() != "1":
+        raise LabError("GENI PM kprobes are unavailable or their blacklist cannot be read")
+    for _, _, function, _, _ in GENI_PM_PROBE_SPECS:
+        if not re.search(r"(^|\s)%s(\s|$)" % re.escape(function), available, re.MULTILINE):
+            raise LabError("GENI PM probe function is unavailable: %s" % function)
+        if any(line.split() and line.split()[0] == function for line in blacklist.splitlines()):
+            raise LabError("GENI PM probe function is blacklisted: %s" % function)
+
+    registry = root / "kprobe_events"
+    before = read_text(registry)
+    if before is None:
+        raise LabError("tracefs kprobe_events is unreadable")
+    trace_capture_file(run, "kprobe_events.before.txt", registry)
+    group = "s2lab_%s" % safe_name(run.run_id).replace("-", "_")
+    info["dynamic_probes"] = []
+    configured_events: List[Dict[str, Any]] = []
+
+    for name, probe_type, function, fields, required_fields in GENI_PM_PROBE_SPECS:
+        event = "%s:%s" % (group, name)
+        definition = "%s:%s/%s %s %s" % (probe_type, group, name, function, fields)
+        identity = r"^[pr][0-9]*:%s/%s\s" % (re.escape(group), re.escape(name))
+        if any(re.match(identity, line) for line in before.splitlines()):
+            raise LabError("run-unique GENI PM probe name is already registered: %s" % name)
+        probe: Dict[str, Any] = {
+            "group": group,
+            "name": name,
+            "event": event,
+            "function": function,
+            "definition": definition,
+            "filter": None,
+            "registry": str(registry),
+            "owned": True,
+            "registered": False,
+            "state": "registration-requested",
+        }
+        info["dynamic_probes"].append(probe)
+        write_json(run.run_dir / "meta" / "trace.json", info)
+        write_kprobe_control(registry, definition + "\n")
+        after = read_text(registry) or ""
+        matching = [line for line in after.splitlines() if re.match(identity, line)]
+        if len(matching) != 1 or not kprobe_definition_matches(matching[0], definition):
+            raise LabError("kernel did not retain GENI PM probe definition: %s" % name)
+        probe["registered"] = True
+        probe["registered_line"] = matching[0]
+
+        event_format = read_text(trace_event_file(Path(str(info["instance"])), event, "format"))
+        if event_format is None:
+            raise LabError("GENI PM probe event format is unreadable: %s" % name)
+        for field in required_fields:
+            if not re.search(r"\b%s\s*;" % re.escape(field), event_format):
+                raise LabError("GENI PM probe event format lacks %s" % field)
+        configured = trace_configure_event(run, info, event)
+        configured["purpose"] = function
+        info["selected_events"].append(configured)
+        probe["state"] = "enabled-in-private-instance"
+        configured_events.append(configured)
+        write_json(run.run_dir / "meta" / "trace.json", info)
+
+    trace_capture_file(run, "kprobe_events.registered.txt", registry)
+    return configured_events
+
+
+def trace_remove_dynamic_probes(run: DeviceRun, info: Dict[str, Any]) -> Dict[str, Any]:
     probes = info.get("dynamic_probes", [])
     if not isinstance(probes, list) or not probes:
         return {"result": "not-owned"}
     functions = {
-        "icc_aggregate": ("qcom_icc_aggregate", icc_aggregate_probe_fields()),
-        "icc_path_init": ("path_init", "dst_addr=$arg2:x64 num_nodes=$arg3:s64"),
-        "icc_path_put": ("icc_put", ""),
-        "icc_set_tag": ("icc_set_tag", ""),
+        "icc_aggregate": ("p", "qcom_icc_aggregate", icc_aggregate_probe_fields()),
+        "icc_path_init": ("p", "path_init", "dst_addr=$arg2:x64 num_nodes=$arg3:s64"),
+        "icc_path_put": ("p", "icc_put", ""),
+        "icc_set_tag": ("p", "icc_set_tag", ""),
+        **{name: (probe_type, function, fields) for name, probe_type, function, fields, _ in GENI_PM_PROBE_SPECS},
     }
     owned = [probe for probe in probes if isinstance(probe, dict) and probe.get("owned")]
     if not owned:
@@ -1724,8 +1839,8 @@ def trace_remove_icc_attribution_probes(run: DeviceRun, info: Dict[str, Any]) ->
         if not isinstance(group, str) or not re.fullmatch(r"s2lab_[A-Za-z0-9_]+", group) or name not in functions:
             actions.append({"event": probe.get("event"), "result": "refused-invalid-metadata"})
             continue
-        function, fields = functions[name]
-        expected = "p:%s/%s %s%s" % (group, name, function, (" " + fields) if fields else "")
+        probe_type, function, fields = functions[name]
+        expected = "%s:%s/%s %s%s" % (probe_type, group, name, function, (" " + fields) if fields else "")
         registry_value = probe.get("registry")
         if probe.get("function") != function or probe.get("definition") != expected or not isinstance(registry_value, str):
             actions.append({"event": probe.get("event"), "result": "refused-definition-changed"})
@@ -1738,7 +1853,7 @@ def trace_remove_icc_attribution_probes(run: DeviceRun, info: Dict[str, Any]) ->
         if current is None:
             actions.append({"event": probe.get("event"), "result": "unreadable-registry"})
             continue
-        identity = r"^p[0-9]*:%s/%s\s" % (re.escape(group), re.escape(name))
+        identity = r"^%s[0-9]*:%s/%s\s" % (probe_type, re.escape(group), re.escape(name))
         matching = [line for line in current.splitlines() if re.match(identity, line)]
         registered_line = probe.get("registered_line")
         if not matching:
@@ -1818,9 +1933,11 @@ def trace_prepare(run: DeviceRun, profile: str) -> Dict[str, Any]:
         else TRACE_PSCI_KRETPROBE_REQUIRED_EVENTS
         if profile in TRACE_KRETPROBE_PROFILES
         else TRACE_RPMH_REQUIRED_EVENTS
-        if profile == "rpmh-aoss"
+        if profile in ("rpmh-aoss", "geni-uart-pm")
         else ()
     )
+    if profile == "geni-uart-pm":
+        required_events = required_events + TRACE_GENI_RUNTIME_PM_EVENTS
     missing = [event for event in required_events if event not in available]
     instance = root / "instances" / ("sm8550-suspend-lab-%s" % run.run_id)
     info: Dict[str, Any] = {
@@ -1970,13 +2087,19 @@ def trace_prepare(run: DeviceRun, profile: str) -> Dict[str, Any]:
                     event_filter = (
                         trace_qup2_pm_filter(event_format)
                         if event in TRACE_QUP2_PM_EVENTS
+                        else trace_geni_runtime_pm_filter(event_format)
+                        if event in TRACE_GENI_RUNTIME_PM_EVENTS
                         else None
                     )
                     configured = trace_configure_event(
                         run, info, event, event_filter=event_filter
                     )
                     if event_filter:
-                        configured["focus_note"] = "filtered to QUP2 gamepad UART, serdev child, and sibling I2C"
+                        configured["focus_note"] = (
+                            "filtered to GENI serial ports, serdev descendants, and sibling QUP2 I2C"
+                            if event in TRACE_QUP2_PM_EVENTS
+                            else "filtered to GENI UART, serial-core, and serdev runtime-PM device names"
+                        )
                     info["selected_events"].append(configured)
                 except BaseException as exc:
                     if event in required_events:
@@ -1984,6 +2107,8 @@ def trace_prepare(run: DeviceRun, profile: str) -> Dict[str, Any]:
                     trace_optional_event_error(info, event, exc)
                     with contextlib.suppress(OSError):
                         write_kernel_control(trace_event_file(instance, event, "enable"), "0\n")
+            if profile == "geni-uart-pm":
+                trace_prepare_geni_pm_probes(run, info)
         info["state"] = "ready"
         write_json(run.run_dir / "meta" / "trace.json", info)
         return info
@@ -1994,8 +2119,8 @@ def trace_prepare(run: DeviceRun, profile: str) -> Dict[str, Any]:
         write_json(run.run_dir / "meta" / "trace.json", info)
         remove_actions = trace_remove_instance(run, info)
         if any(action.get("result") in ("instance-removed", "already-absent") for action in remove_actions):
-            if info.get("profile") == "icc-attribution":
-                info["prepare_kprobe_cleanup"] = trace_remove_icc_attribution_probes(run, info)
+            if info.get("profile") in ("icc-attribution", "geni-uart-pm"):
+                info["prepare_kprobe_cleanup"] = trace_remove_dynamic_probes(run, info)
             else:
                 info["prepare_kprobe_cleanup"] = trace_remove_suspend_kretprobe(run, info)
         elif info.get("dynamic_kprobe") or info.get("dynamic_probes"):
@@ -2165,7 +2290,7 @@ def trace_cleanup(run: DeviceRun) -> Dict[str, Any]:
         previous = read_phase_json(run, "cleanup", "trace.json", {})
         if previous.get("kprobe_cleanup", {}).get("result") == "removed":
             return previous
-    if info.get("profile") == "icc-attribution" and isinstance(new_probes, list) and new_probes and all(
+    if info.get("profile") in ("icc-attribution", "geni-uart-pm") and isinstance(new_probes, list) and new_probes and all(
         isinstance(item, dict) and item.get("owned") and item.get("state") in ("removed", "already-absent")
         for item in new_probes
     ):
@@ -2184,9 +2309,9 @@ def trace_cleanup(run: DeviceRun) -> Dict[str, Any]:
         "state": info.get("state"),
         "actions": actions,
     }
-    if info.get("profile") == "icc-attribution" and info.get("dynamic_probes"):
+    if info.get("profile") in ("icc-attribution", "geni-uart-pm") and info.get("dynamic_probes"):
         if any(action.get("result") in ("instance-removed", "already-absent") for action in actions):
-            result["kprobe_cleanup"] = trace_remove_icc_attribution_probes(run, info)
+            result["kprobe_cleanup"] = trace_remove_dynamic_probes(run, info)
         else:
             result["kprobe_cleanup"] = {"result": "refused-instance-not-removed"}
     elif info.get("dynamic_kprobe"):
@@ -4570,6 +4695,15 @@ def device_preflight(args: argparse.Namespace) -> int:
             ],
             30,
         ),
+        (
+            "geni-pm-kprobe-preflight",
+            [
+                "bash",
+                "-c",
+                "for symbol in qcom_geni_serial_pm qcom_geni_serial_runtime_suspend geni_serial_resources_off geni_se_resources_off geni_icc_disable icc_disable; do printf '%s\\n' \"--- $symbol available ---\"; grep -E \"^[[:space:]]*$symbol([[:space:]]|$)\" /sys/kernel/tracing/available_filter_functions || true; printf '%s\\n' \"--- $symbol blacklist ---\"; grep -E \"^$symbol([[:space:]]|$)\" /sys/kernel/debug/kprobes/blacklist || true; done; printf '%s\\n' '--- registered GENI probes ---'; grep -E 'qcom_geni_serial_pm|qcom_geni_serial_runtime_suspend|geni_serial_resources_off|geni_se_resources_off|geni_icc_disable|icc_disable' /sys/kernel/tracing/kprobe_events || true; printf '%s\\n' '--- kprobe enabled ---'; cat /sys/kernel/debug/kprobes/enabled; printf '%s\\n' '--- available tracers ---'; cat /sys/kernel/tracing/available_tracers",
+            ],
+            30,
+        ),
         ("psci-firmware-features", ["cat", "/sys/kernel/debug/psci"], 15),
         (
             "psci-system-suspend-preflight",
@@ -5351,7 +5485,27 @@ def self_test() -> int:
     ) == 'device == "1c00000.pcie" || device == "0000:00:00.0" || device == "0000:01:00.0"'
     assert trace_qup2_pm_filter(
         "field:__data_loc char[] device;\n"
-    ) == 'device == "89c000.serial" || device == "serial1-0" || device == "890000.i2c"'
+    ) == (
+        'device == "89c000.serial" || device == "serial1-0" || '
+        'device == "898000.serial" || device == "serial0-0" || '
+        'device == "a9c000.serial" || device == "890000.i2c"'
+    )
+    assert trace_geni_runtime_pm_filter(
+        "field:__data_loc char[] name;\n"
+    ) == (
+        'name == "89c000.serial" || name == "89c000.serial:0" || '
+        'name == "89c000.serial:0.0" || name == "serial1" || name == "serial1-0"'
+    )
+    assert kprobe_definition_matches(
+        "p12:s2lab_test/geni_uart_pm_state "
+        "qcom_geni_serial_pm port_addr=$arg1:x64 new_state=$arg2:u32 old_state=$arg3:u32",
+        "p:s2lab_test/geni_uart_pm_state "
+        "qcom_geni_serial_pm port_addr=$arg1:x64 new_state=$arg2:u32 old_state=$arg3:u32",
+    )
+    assert kprobe_definition_matches(
+        "r13:s2lab_test/geni_icc_disable geni_icc_disable retval=$retval:s32",
+        "r:s2lab_test/geni_icc_disable geni_icc_disable retval=$retval:s32",
+    )
     assert trace_pcie_event_filter("rpmh:rpmh_send_msg", "") is None
     try:
         trace_pcie_event_filter("interconnect:icc_set_bw", "field:u32 avg_bw;\n")

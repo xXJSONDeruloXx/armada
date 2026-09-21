@@ -6,7 +6,7 @@ the chronological record, including failed runs and superseded interpretations.
 Update this page when a checklist item changes; put raw output in a dated
 receipt and explain the result in the notebook.
 
-Status as of 2026-09-21 05:02 UTC. Branch `feat/sm8550-suspend-lab`.
+Status as of 2026-09-21 05:54 UTC. Branch `feat/sm8550-suspend-lab`.
 
 ## Immediate next checkpoint
 
@@ -17,10 +17,29 @@ Status as of 2026-09-21 05:02 UTC. Branch `feat/sm8550-suspend-lab`.
 - [x] Add filtered GENI/serdev/sibling-I2C device-PM callback events to the
   existing `rpmh-aoss` trace profile. This changes only run-scoped diagnostic
   capture, not device behavior.
-- [ ] Run one unchanged-stock, 15-second direct-deep observation with those
-  callback events and existing ICC/RPMh tracepoints. Use its evidence to
-  decide whether the UART suspend callback or runtime-PM transition is
-  missing. This is a read-only diagnostic control, not a behavioral A/B.
+- [x] Run one unchanged-stock, 15-second direct-deep observation with the new
+  callback events and existing ICC/RPMh tracepoints. Both UART and rsinput
+  callbacks return success, but no `89c000.serial` ICC update appears before
+  the SLEEP batch; QUP2 remains absent from that batch. This narrows the
+  missing transition but does not identify why. See the [QUP2 PM callback
+  observation](receipts/2026-09-21-qup2-pm-callback-observation.md).
+- [x] Add run-scoped probes for UART PM state and GENI runtime/resource
+  shutdown. The UART transitions ON→OFF, but its runtime-suspend callback has
+  zero hits; all observed GENI resource/ICC shutdowns are for I²C clients. The
+  helper `geni_serial_resources_off()` was optimized away, so its callers are
+  observed through `geni_se_resources_off()` and `geni_icc_disable()`. See the
+  [QUP2 PM callback observation](receipts/2026-09-21-qup2-pm-callback-observation.md).
+- [x] Source-trace the missing GENI transition through runtime PM. The system
+  PM core holds a runtime-PM usage reference from `device_prepare()` through
+  device completion; GENI's system-sleep callback merely calls
+  `pm_runtime_put_sync()`. With a remaining usage reference,
+  `__pm_runtime_idle()` exits before invoking idle/runtime suspend. This is a
+  concrete explanation for the missing resource-off callback, but the live
+  count at that point is not yet captured.
+- [ ] Capture the filtered `rpm:rpm_usage`, `rpm:rpm_idle`,
+  `rpm:rpm_suspend`, and `rpm:rpm_return_int` events for the UART and its
+  serial/serdev descendants in one unchanged-stock trace. Do not change ICC
+  requests or PM policy.
 - [ ] Finish source ownership for SH1 and ACV, and complete the QUP2 callback
   attribution before choosing any behavior-changing test.
 
@@ -139,6 +158,26 @@ Status as of 2026-09-21 05:02 UTC. Branch `feat/sm8550-suspend-lab`.
   missing condition is not yet isolated.
 
 ## Latest device recovery state
+
+As of 2026-09-21 05:54 UTC, a fresh root preflight confirms the device is still
+on stock Armada Linux 20260915.feca679, kernel 7.2.3, boot ID
+3656b0e7-5671-4b7e-9368-67965daa251a. Bootc reports the stock image booted,
+the phase-03 candidate in the rollback slot, no staged image, and
+`rollbackQueued=false`. The event inventory includes the six runtime-PM
+tracepoints needed for the next observation. Preflight receipt:
+`/Users/danhimebauch/Developer/.external-research/sm8550-suspend-lab-runs/preflight-geni-runtime-pm-20260921/preflight-20260921T055400Z-e75711113580.json`.
+
+As of 2026-09-21 05:37 UTC, the second run-scoped PM-probe observation returned
+to the same stock boot ID without reset. `wlp1s0` is UP with carrier; no failed
+systemd units were reported. The private trace instance and all four dynamic
+kprobes were removed successfully. See the [QUP2 PM callback observation](receipts/2026-09-21-qup2-pm-callback-observation.md).
+
+As of 2026-09-21 05:21 UTC, the latest unchanged-stock observation completed
+and the Nova returned to Linux without reset. Wi-Fi briefly showed `NO-CARRIER`
+in the immediate run snapshot but was UP with carrier on a direct SSH check;
+kernel is 7.2.3 and systemd reports no failed units. The run changed only
+run-scoped trace instrumentation, which the harness cleaned up. See the
+[QUP2 PM callback observation](receipts/2026-09-21-qup2-pm-callback-observation.md).
 
 As of 2026-09-21 05:02 UTC, the Nova is back on stock Armada Linux
 20260915.feca679, kernel 7.2.3, boot ID
