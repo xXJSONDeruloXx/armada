@@ -7604,3 +7604,43 @@ download-only, verify its digest, and apply. On return, inspect ESP
 DTB. Do not issue the suspend A/B until the candidate root is positively
 identified. If stock returns again, these markers should tell whether the
 initrd recovery path actually ran; otherwise the phase remains unresolved.
+
+### 2026-09-21 01:08 UTC — initrd recovery ran; candidate root was not recorded
+
+Applied the phase-marker candidate digest
+`sha256:54ab4a31d2669ed6fe4d48f782396f6a44464c239d86ee69b3dabc74424089d5`.
+SSH and ping were unavailable for about two minutes, then SSH returned on
+stock boot ID `5263e173-9323-426b-aee2-6fe6f3dc4bfd`, image
+`20260915.feca679`, kernel `7.2.3`.
+
+The ESP now has
+`event=stock_kernel_restored boot_id=5debf421-a407-40be-926b-3803174e6291`.
+This positively establishes that the candidate initrd recovery helper ran on
+boot `5debf421-a407-40be-926b-3803174e6291`, accepted the exact stock
+`KERNEL.BAK` hash, restored stock `KERNEL` and stamp, then requested a reboot.
+The candidate-root phase log is absent. The candidate boot ID is not in
+`journalctl --list-boots`, so the initrd journal did not persist into the
+stock root. No suspend command was issued.
+
+The best-supported interpretation is that candidate boot remained in initrd
+past its 120-second recovery timer and did not finish switch-root. The exact
+failure within initrd remains unknown. The stock boot's boot-image sync then
+wrote a candidate-derived kernel bundle back to ESP `KERNEL` while bootc still
+had the failed candidate queued: before cleanup, `KERNEL` hashed to
+`b45365f5d3e2729907b18b0a31bde17fcdeaf5ba95fafe480a103c2993b9712c`, while
+`KERNEL.BAK` remained the stock hash. The current boot-sync journal recorded
+the write. This confirms the earlier BLS/updater interaction.
+
+Removed the queued deployment using `rpm-ostree cleanup --pending`, then ran
+Armada's `armada-bootimg-update`. Cleanup removed one deployment and pruned
+137 layers (114.2 MB). Bootc now has no staged or rollback deployment, both
+ESP kernel files match the stock hash, and both stamps match the stock image
+ID. The device is healthy on stock with Wi-Fi connected, zero failed units,
+and no RTC wakealarm.
+
+The image already embeds `journalctl` and `systemd-journald`. The smallest
+next diagnostic is to have the initrd recovery helper persist a bounded
+snapshot of the journal to ESP `SUSDIAG.JRN` before it restores the kernel.
+Keep the 120-second timer and PCIe OPP behavior unchanged; inspect those logs
+before any retry or timer extension. Detailed output and recovery commands:
+[`phase-marker recovery receipt`](receipts/2026-09-21-pcie-opp-phase-01-recovery.md).

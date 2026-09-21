@@ -6,7 +6,7 @@ the chronological record, including failed runs and superseded interpretations.
 Update this page when a checklist item changes; put raw output in a dated
 receipt and explain the result in the notebook.
 
-Status as of 2026-09-21 00:53 UTC. Branch `feat/sm8550-suspend-lab`.
+Status as of 2026-09-21 01:08 UTC. Branch `feat/sm8550-suspend-lab`.
 
 ## Current goal checklist
 
@@ -66,31 +66,39 @@ Status as of 2026-09-21 00:53 UTC. Branch `feat/sm8550-suspend-lab`.
   SYSTEM_SUSPEND kretprobe. The wrapper returned 0 once while AOSD/CXSD/
   scalar-DDR remained zero; this confirms the call path, not physical
   residency. See the [PSCI return receipt](receipts/2026-09-20-stock-deep-psci-return.md).
-- [ ] Identify what caused the first 2026-09-21 return to stock; its phase was
-  not persisted. The new markers should distinguish initrd recovery from a
-  candidate-root boot on the next attempt.
-- [ ] Apply the phase-marker candidate while ABL recovery is available. Check
-  `SUSDIAG.LOG`, the persistent root phase log, bootc state, and candidate
-  version before any suspend command.
+- [x] Apply the phase-marker candidate and retrieve both boot markers. The
+  initrd helper ran on boot `5debf421-a407-40be-926b-3803174e6291` and restored
+  the stock backup; the candidate-root marker is absent, so no suspend A/B ran.
+- [x] Remove the failed deployment and regenerate the stock ESP kernel. Bootc
+  is clean and both ESP kernel files match stock again.
+- [ ] Capture a bounded initrd journal to the ESP when the recovery timer
+  fires. The candidate boot ID is absent from persistent journal; the image's
+  initrd already includes `journalctl` and `systemd-journald`.
+- [ ] Determine why candidate initrd does not reach switch-root before the
+  120-second recovery timer. Keep the timer and PCIe OPP unchanged while
+  gathering this evidence.
 - [ ] Run the PCIe OPP direct-deep A/B only after candidate kernel/DTB and root
-  are positively identified. The prior attempt did not run a suspend test.
+  are positively identified. Neither candidate attempt has run a suspend test.
 
 ## Latest device recovery state
 
-As of 2026-09-21 00:53 UTC, the Nova is healthy on stock Armada Linux
+As of 2026-09-21 01:08 UTC, the Nova is healthy on stock Armada Linux
 `20260915.feca679`, kernel `7.2.3`, boot ID
-`ef966ac2-4fb6-4222-b573-fb84d474e295`. Wi-Fi is connected, systemd is
+`5263e173-9323-426b-aee2-6fe6f3dc4bfd`. Wi-Fi is connected, systemd is
 `running` with zero failed units, and no RTC wake alarm is armed. `bootc`
 reports `bootOrder=default`, `rollback=null`, `rollbackQueued=false`, and
 `staged=null`; OSTree lists only the stock deployment. Both ESP kernel files
 match stock SHA-256
 `0b0d7c03a88e77c480ad31d145a6718916638ba62287ff5a2b427c0f75475000`; the
 active boot-image stamp is stock. Bootc has no staged or rollback deployment.
-The new phase-marker candidate is built in rootful Podman as
+The phase-marker candidate is retained in rootful Podman as
 `localhost/armada-pcie-opp-test-phase:20260921-01`, digest
 `sha256:54ab4a31d2669ed6fe4d48f782396f6a44464c239d86ee69b3dabc74424089d5`;
-it has not been staged or applied. Build and preflight details are in the
-[phase-marker build receipt](receipts/2026-09-21-pcie-opp-phase-01-build.md).
+it is no longer staged. The latest attempt's ESP record says
+`event=stock_kernel_restored boot_id=5debf421-a407-40be-926b-3803174e6291`;
+the candidate-root phase log is absent. See the
+[phase-marker build receipt](receipts/2026-09-21-pcie-opp-phase-01-build.md)
+and [guard execution receipt](receipts/2026-09-21-pcie-opp-phase-01-recovery.md).
 
 The 2026-09-21 guarded candidate apply did not yield a confirmed candidate
 userspace, and no suspend A/B ran. The returned stock boot's journal shows
@@ -100,13 +108,13 @@ removed and Armada's updater regenerated the stock image. Whether the initrd
 guard, ABL/firmware, or a manual reset returned the device to stock remains
 unresolved.
 
-The phase-marker follow-up image preserves the same test kernel/DTB and PCIe
-OPP behavior while adding two observability points. If its initrd recovery
-helper runs, it atomically writes the phase and boot ID to ESP `SUSDIAG.LOG`;
-if candidate root reaches Armada's boot-image sync, a service pre-command
-appends candidate boot ID/version to `/var/lib/sm8550-pcie-opp-test/boot-phases.log`.
-This image is built and verified but remains unstaged pending the attended
-reboot.
+The phase-marker follow-up confirmed that the initrd recovery timer executed
+and restored `KERNEL.BAK`; the candidate-root marker did not appear. This
+strongly places the stall before candidate switch-root, but no candidate
+journal was persisted, so the cause is still unknown. The deployment and ESP
+were cleaned back to stock without another reboot. Next, persist a bounded
+initrd journal snapshot to the ESP from the recovery helper, then decide
+whether the PCIe OPP A/B can safely proceed.
 
 Older dated live-state observations below are historical; use the latest
 state above for current device status.
