@@ -8579,6 +8579,13 @@ uses valid run ID `20260921T154600Z-1ee9acefc15a`. Pre-deploy validation
 caught an invalid run ID in the first local build before it was staged; the
 runner was corrected and rebuilt under unique tag `20260921-03`.
 
+Immediately before staging, root readback confirmed the stock ESP recovery
+inputs match the candidate initrd guard: `KERNEL` and `KERNEL.BAK` both hash
+to `0b0d7c03a88e77c480ad31d145a6718916638ba62287ff5a2b427c0f75475000`,
+`.armada-bootimg.id` is
+`d7755f13ac5a1224fef222e2d104192045fd01d61924f9b1ae31e941b73f049b`, and ESP
+UUID `81DC-CB41` matches. Bootc remained on stock with no staged image.
+
 The candidate is not deployed yet. Current stock is booted, bootc has no
 staged deployment, and the current SSH route is Wi-Fi through the PCIe/WCN
 path. The test will lose SSH during its candidate boot, so its local capture

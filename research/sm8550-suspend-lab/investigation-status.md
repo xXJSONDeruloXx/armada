@@ -22,6 +22,9 @@ the device remains on stock Linux 7.2.3.
   timed rollback, and initrd recovery. Corrected run ID
   `20260921T154600Z-1ee9acefc15a` passed local validation; tag
   `localhost/armada-sm8550-pcie-only-test:20260921-03` is prepared but not staged.
+- [x] Verify the live ESP recovery inputs match the candidate guard: stock
+  `KERNEL` and `KERNEL.BAK` hashes match, stock image ID matches, and UUID
+  `81DC-CB41` resolves to the expected ESP.
 - [ ] Stage the one-variable PCIe-only candidate, let its local service run
   one RTC direct-deep cycle and roll back, then retrieve results over SSH.
 

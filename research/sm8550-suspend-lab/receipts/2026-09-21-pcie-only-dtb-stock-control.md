@@ -44,6 +44,14 @@ Prepared, but not yet deployed, candidate:
   invalid run ID before reboot; tag `20260921-03` has the corrected
   `20260921T154600Z-1ee9acefc15a` ID. The embedded runner hash matches source.
 
+Immediately before staging, root readback confirmed `/boot/efi/KERNEL` and
+`KERNEL.BAK` both hash to the guard's expected
+`0b0d7c03a88e77c480ad31d145a6718916638ba62287ff5a2b427c0f75475000`,
+`.armada-bootimg.id` is the expected stock ID
+`d7755f13ac5a1224fef222e2d104192045fd01d61924f9b1ae31e941b73f049b`, and
+the ESP UUID `81DC-CB41` matches the initrd recovery script. Bootc still showed
+stock booted and no staged deployment.
+
 No candidate deployment or reboot has occurred yet. The device remains on
 stock, with no staged bootc deployment. This test removes the PCIe host from
 boot and will not test WCN/PCIe resume.
