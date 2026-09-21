@@ -7563,3 +7563,44 @@ candidate image remains in Podman storage. We cannot tell whether the initrd
 timer, ABL/firmware fallback, or a manual reset caused the return; the owner
 was asked to clarify. Do not count this as a sleep result. See the
 [`guarded apply receipt`](receipts/2026-09-21-pcie-opp-guarded-apply.md).
+
+### 2026-09-21 00:53 UTC — phase-marker candidate built and preflighted
+
+Read the current checklist and the most recent notebook entry before
+continuing. The first guarded apply still has no durable phase evidence, so its
+cause remains unresolved. Do not infer that the initrd recovery timer fired or
+that candidate root was reached. The corrected next attempt needs to make
+those two outcomes observable.
+
+Copied the current lab-only recovery directory, boot-sync drop-in, root phase
+marker, and recipe into `/var/home/armada/sm8550-suspend-lab/pcie-opp-20260921-phase-01`.
+The scratch kernel and Nova DTB still match the pinned hashes from the prior
+candidate. Built image
+`localhost/armada-pcie-opp-test-phase:20260921-01` in rootful Podman using the
+cached pinned Armada base, `--pull=never`, and no kernel compile. Its manifest
+digest is
+`sha256:54ab4a31d2669ed6fe4d48f782396f6a44464c239d86ee69b3dabc74424089d5`;
+its image ID is
+`aee66458720bc40482586cb9a55fbf3ea49ad0b609d8d9acf0467a089c16c969`.
+
+The image build rechecked the kernel/DTB hashes, embedded the sysinit-ordered
+initrd timer and recovery helper, and verified the root marker/drop-in. A
+follow-up `systemd-analyze verify` returned 0 for the rollback and boot-image
+sync units. Local shell syntax, mocked VFAT recovery tests, and `git diff
+--check` pass. Dracut printed the known nonfatal `/dev/log`/`logger` warning;
+the build and content assertions exited successfully.
+
+Fresh read-only device checks confirm stock `20260915.feca679` / kernel
+`7.2.3`, boot ID `ef966ac2-4fb6-4222-b573-fb84d474e295`, healthy systemd,
+zero failed units, connected Wi-Fi, and no RTC wakealarm. `bootc status`
+shows no staged or rollback deployment. Both ESP `KERNEL` and `KERNEL.BAK`
+still hash to the verified stock image. The candidate image is built but not
+staged. Full commands, validation, and image metadata are in
+[`phase-marker candidate build receipt`](receipts/2026-09-21-pcie-opp-phase-01-build.md).
+
+Next: with the owner available for ABL recovery, stage the exact local image
+download-only, verify its digest, and apply. On return, inspect ESP
+`SUSDIAG.LOG`, the candidate root boot-phase log, bootc state, version, and
+DTB. Do not issue the suspend A/B until the candidate root is positively
+identified. If stock returns again, these markers should tell whether the
+initrd recovery path actually ran; otherwise the phase remains unresolved.

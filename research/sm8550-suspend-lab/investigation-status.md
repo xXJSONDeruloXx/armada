@@ -6,7 +6,7 @@ the chronological record, including failed runs and superseded interpretations.
 Update this page when a checklist item changes; put raw output in a dated
 receipt and explain the result in the notebook.
 
-Status as of 2026-09-21 00:23 UTC. Branch `feat/sm8550-suspend-lab`.
+Status as of 2026-09-21 00:53 UTC. Branch `feat/sm8550-suspend-lab`.
 
 ## Current goal checklist
 
@@ -47,6 +47,11 @@ Status as of 2026-09-21 00:23 UTC. Branch `feat/sm8550-suspend-lab`.
   `KERNEL.BAK` hash before restoring it, and exercise fail-closed cases.
 - [x] Build an un-staged candidate with the guard in its generated initramfs;
   verify required files/tools, systemd units, and the existing root rollback.
+- [x] Add durable candidate-only boot-phase markers: the initrd recovery helper
+  records its start and stock-kernel restore on the ESP; the candidate root
+  records its boot ID/version before Armada's boot-image sync.
+- [x] Build and validate the phase-marker image from the cached base, kernel,
+  and DTB. It is still unstaged. No kernel rebuild was needed.
 - [x] Exercise the exact generated initrd helper on a scratch loop-backed
   VFAT image, with reboot stubbed; success and wrong-hash fail-closed checks
   pass. The real ESP and bootc deployment were not touched.
@@ -61,20 +66,18 @@ Status as of 2026-09-21 00:23 UTC. Branch `feat/sm8550-suspend-lab`.
   SYSTEM_SUSPEND kretprobe. The wrapper returned 0 once while AOSD/CXSD/
   scalar-DDR remained zero; this confirms the call path, not physical
   residency. See the [PSCI return receipt](receipts/2026-09-20-stock-deep-psci-return.md).
-- [ ] Determine whether the 2026-09-21 return to stock was caused by the initrd
-  guard, ABL/firmware fallback, or a manual reset. There is no candidate-root
-  journal or pstore record; the owner was asked whether they used ABL.
-- [ ] Add a durable initrd/recovery phase receipt before retrying the OPP
-  candidate. The stock startup updater rewrote the pending candidate into
-  `/KERNEL` after the stock root returned, so any fallback test must also
-  account for the bootc pending deployment and Armada's BLS-based updater.
-- [ ] Run the PCIe OPP direct-deep A/B only after the candidate version/DTB is
-  positively identified on the running device. No suspend command was issued
-  during the failed-to-launch attempt.
+- [ ] Identify what caused the first 2026-09-21 return to stock; its phase was
+  not persisted. The new markers should distinguish initrd recovery from a
+  candidate-root boot on the next attempt.
+- [ ] Apply the phase-marker candidate while ABL recovery is available. Check
+  `SUSDIAG.LOG`, the persistent root phase log, bootc state, and candidate
+  version before any suspend command.
+- [ ] Run the PCIe OPP direct-deep A/B only after candidate kernel/DTB and root
+  are positively identified. The prior attempt did not run a suspend test.
 
 ## Latest device recovery state
 
-As of 2026-09-21 00:22 UTC, the Nova is healthy on stock Armada Linux
+As of 2026-09-21 00:53 UTC, the Nova is healthy on stock Armada Linux
 `20260915.feca679`, kernel `7.2.3`, boot ID
 `ef966ac2-4fb6-4222-b573-fb84d474e295`. Wi-Fi is connected, systemd is
 `running` with zero failed units, and no RTC wake alarm is armed. `bootc`
@@ -82,8 +85,12 @@ reports `bootOrder=default`, `rollback=null`, `rollbackQueued=false`, and
 `staged=null`; OSTree lists only the stock deployment. Both ESP kernel files
 match stock SHA-256
 `0b0d7c03a88e77c480ad31d145a6718916638ba62287ff5a2b427c0f75475000`; the
-active boot-image stamp is stock. The guarded candidate remains only in local
-rootful Podman storage. See the [guarded apply receipt](receipts/2026-09-21-pcie-opp-guarded-apply.md).
+active boot-image stamp is stock. Bootc has no staged or rollback deployment.
+The new phase-marker candidate is built in rootful Podman as
+`localhost/armada-pcie-opp-test-phase:20260921-01`, digest
+`sha256:54ab4a31d2669ed6fe4d48f782396f6a44464c239d86ee69b3dabc74424089d5`;
+it has not been staged or applied. Build and preflight details are in the
+[phase-marker build receipt](receipts/2026-09-21-pcie-opp-phase-01-build.md).
 
 The 2026-09-21 guarded candidate apply did not yield a confirmed candidate
 userspace, and no suspend A/B ran. The returned stock boot's journal shows
@@ -92,6 +99,14 @@ that Armada's BLS-based startup updater wrote the still-pending candidate into
 removed and Armada's updater regenerated the stock image. Whether the initrd
 guard, ABL/firmware, or a manual reset returned the device to stock remains
 unresolved.
+
+The phase-marker follow-up image preserves the same test kernel/DTB and PCIe
+OPP behavior while adding two observability points. If its initrd recovery
+helper runs, it atomically writes the phase and boot ID to ESP `SUSDIAG.LOG`;
+if candidate root reaches Armada's boot-image sync, a service pre-command
+appends candidate boot ID/version to `/var/lib/sm8550-pcie-opp-test/boot-phases.log`.
+This image is built and verified but remains unstaged pending the attended
+reboot.
 
 Older dated live-state observations below are historical; use the latest
 state above for current device status.
