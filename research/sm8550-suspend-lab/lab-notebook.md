@@ -7897,3 +7897,85 @@ staged RPMh words from firmware-applied policy. A future upstream-quality
 regulator fix would need real suspend regulator ops that issue RPMh SLEEP/WAKE
 requests; a DTS `regulator-state-mem` node alone cannot do that with the current
 driver.
+
+
+### 2026-09-21 04:42 UTC — phase-03 QUP2 client attribution refined
+
+Re-read the saved phase-03 pre/post interconnect summaries alongside the
+reparsed aggregation receipt. The QUP2 core master and slave list
+`89c000.serial` with tag 7 and a 1/1 request; the sibling `890000.i2c` request
+is 0/0. In the separately aggregated QUP2-to-EBI path, the only sleep-bucket
+nonzero client is `1c00000.pcie` at 500,000 kB/s; `890000.i2c` is 0/0 and
+`89c000.serial` is not a client on that path. The six recorded Apps-RSC SLEEP
+commands still contain no QUP2 BCM command.
+
+The matching 7.2.3 GENI UART suspend function disables the IRQ and calls
+`uart_suspend_port()` for non-console UARTs, but changes the ICC tag to
+ACTIVE_ONLY only for the console UART. On this board the gamepad UART is
+`89c000.serial`, while the console is `tty0` and the exposed `ttyMSM0` maps to
+`a9c000.serial`; therefore the gamepad UART's default `ALWAYS` tag and its
+small request can remain in the SLEEP bucket. This is a concrete Linux-vs-
+Android QUP2 client difference to account for. It is not yet evidence that the
+request is material to firmware residency: the staged Apps-RSC set has no QUP2
+command, and no mechanism has been established that turns the observed 1/1
+core request into an AOSD/CXSD/DDR veto. No request was changed and no suspend
+test was run.
+
+Next source check: trace QUP2's `1/1` request through the SM8550 BCM voter and
+resource mapping to explain why it does not appear in the captured Apps-RSC
+SLEEP batch; keep it separate from the PCIe-to-EBI request. Inspect the exact
+GENI and `rsinput` suspend/wake ordering before considering any device-scoped
+quiesce change. Receipt sources:
+`20260921T023438Z-9d42e275c2f9/device/{pre,post}/files/sys/kernel/debug/interconnect/interconnect_summary`,
+`20260920T020326Z-96e366a5fe0a/host-analysis/icc-aggregate-attribution-reparsed.json`,
+and `/Volumes/NovaKernelBuild/work/linux-7.2.3/drivers/tty/serial/qcom_geni_serial.c`.
+
+
+### 2026-09-21 05:02 UTC — QUP2 trace ordering corrected; PM callback trace added
+
+Corrected the previous QUP2 reading against the saved `boot`-clock trace. The
+final Apps-RSC WAKE/SLEEP batch was submitted at 289.167 seconds. The first
+clear post-resume activity begins at 303.483 seconds. The `89c000.serial`
+`icc_set_bw` and active `0x5004c` TCS update at 304.104 seconds are on resume,
+not suspend; they do not show whether its SLEEP vote was removed.
+
+At 289.129 seconds the trace instead records an ICC update for sibling
+`890000.i2c`, followed by active QUP2 address `0x5004c` data
+`0x60004001`. The final WAKE and SLEEP batches contain no QUP2 command. The
+awake pre/post summaries show `89c000.serial` as the only persistent nonzero
+QUP2 core client (tag 7, 1/1); `890000.i2c` is 0/0. Since the trace does not
+record ICC request `enabled`, the temporary 289.129 aggregate cannot by itself
+be attributed to either client. The durable serial request and absence of a
+pre-sleep ICC update for it support, but do not prove, that its ALWAYS-tagged
+vote was still included when the SLEEP/WAKE sets were compared.
+
+The source explains the expected contrast: `bcm_qup2.keepalive` sets AMC and
+WAKE to 1 when the active request is empty, but does not set SLEEP. If the
+gamepad UART's tag-7 1/1 request remains enabled, WAKE and SLEEP both equal 1,
+so `bcm-voter` omits QUP2. If `geni_icc_disable()` runs, WAKE=1/SLEEP=0 should
+produce a QUP2 command. The non-console GENI suspend callback calls
+`uart_suspend_port()` but only retags the console; serial-core changes the PM
+state to OFF, and the driver's PM callback calls `pm_runtime_put_sync()` only
+for ON→OFF. Runtime suspend disables GENI ICC only after GENI resource shutdown
+succeeds. The saved trace omitted device-PM callback events, so it cannot tell
+which transition was skipped or whether resource shutdown failed. These are
+Linux-staged vote semantics, not proof of what AOP applied.
+
+The `rpmh-aoss` trace profile now captures filtered
+`power:device_pm_callback_start/end` events for `89c000.serial`, its
+`serial1-0` serdev child, and sibling `890000.i2c`, alongside the existing ICC
+and RPMh events. Local self-test, Python compile, and `git diff --check` pass.
+No device suspend run or behavioral A/B has been made with the new profile.
+
+Read-only live checks still show stock Linux 7.2.3, boot ID
+`3656b0e7-5671-4b7e-9368-67965daa251a`, `[s2idle] deep`, and systemd running.
+While awake, `89c000.serial` is `power/control=auto`, runtime active, with zero
+runtime-suspended time; that does not establish its state during system sleep.
+
+Next: run one unchanged-stock, 15-second direct-deep **observation** with the
+new callback events enabled. This does not change a bandwidth request, kernel,
+or PM policy and is separate from a behavior-changing A/B. If the GENI system
+callback returns successfully without a QUP2 ICC disable, add a focused
+function probe to distinguish serial PM-state handling from runtime resource
+shutdown. Full source and trace references are in the
+[QUP2 trace-correction receipt](receipts/2026-09-21-qup2-pm-trace-correction.md).

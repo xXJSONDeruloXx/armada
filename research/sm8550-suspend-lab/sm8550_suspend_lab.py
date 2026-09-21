@@ -173,7 +173,14 @@ TRACE_RPMH_OPTIONAL_EVENTS = (
     "interconnect:icc_set_bw_end",
     "power:psci_domain_idle_enter",
     "power:psci_domain_idle_exit",
+    "power:device_pm_callback_start",
+    "power:device_pm_callback_end",
 )
+TRACE_QUP2_PM_EVENTS = (
+    "power:device_pm_callback_start",
+    "power:device_pm_callback_end",
+)
+TRACE_QUP2_PM_DEVICES = ("89c000.serial", "serial1-0", "890000.i2c")
 TRACE_PM_EVENTS = (
     "power:device_pm_callback_start",
     "power:device_pm_callback_end",
@@ -1089,6 +1096,18 @@ def trace_pm_filter(format_text: Optional[str]) -> Optional[str]:
     return 'device ~ ".*ufs.*"'
 
 
+def trace_qup2_pm_filter(format_text: Optional[str]) -> str:
+    if not format_text or not re.search(
+        r"^\s*field:__data_loc char\[\] device;",
+        format_text,
+        re.MULTILINE,
+    ):
+        raise LabError("QUP2 PM trace event lacks the expected device field")
+    return " || ".join(
+        'device == "%s"' % device for device in TRACE_QUP2_PM_DEVICES
+    )
+
+
 def trace_pcie_event_filter(event: str, format_text: Optional[str]) -> Optional[str]:
     field = (
         "dev"
@@ -1947,7 +1966,18 @@ def trace_prepare(run: DeviceRun, profile: str) -> Dict[str, Any]:
                     info.setdefault("optional_unavailable_events", []).append(event)
                     continue
                 try:
-                    info["selected_events"].append(trace_configure_event(run, info, event))
+                    event_format = read_text(trace_event_file(instance, event, "format"))
+                    event_filter = (
+                        trace_qup2_pm_filter(event_format)
+                        if event in TRACE_QUP2_PM_EVENTS
+                        else None
+                    )
+                    configured = trace_configure_event(
+                        run, info, event, event_filter=event_filter
+                    )
+                    if event_filter:
+                        configured["focus_note"] = "filtered to QUP2 gamepad UART, serdev child, and sibling I2C"
+                    info["selected_events"].append(configured)
                 except BaseException as exc:
                     if event in required_events:
                         raise
@@ -5319,6 +5349,9 @@ def self_test() -> int:
     assert trace_pcie_event_filter(
         "power:device_pm_callback_start", "field:__data_loc char[] device;\n"
     ) == 'device == "1c00000.pcie" || device == "0000:00:00.0" || device == "0000:01:00.0"'
+    assert trace_qup2_pm_filter(
+        "field:__data_loc char[] device;\n"
+    ) == 'device == "89c000.serial" || device == "serial1-0" || device == "890000.i2c"'
     assert trace_pcie_event_filter("rpmh:rpmh_send_msg", "") is None
     try:
         trace_pcie_event_filter("interconnect:icc_set_bw", "field:u32 avg_bw;\n")

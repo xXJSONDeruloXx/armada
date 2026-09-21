@@ -6,7 +6,23 @@ the chronological record, including failed runs and superseded interpretations.
 Update this page when a checklist item changes; put raw output in a dated
 receipt and explain the result in the notebook.
 
-Status as of 2026-09-21 02:59 UTC. Branch `feat/sm8550-suspend-lab`.
+Status as of 2026-09-21 05:02 UTC. Branch `feat/sm8550-suspend-lab`.
+
+## Immediate next checkpoint
+
+- [x] Correct the phase-03 QUP2 trace timeline: the QUP2 ICC update at
+  304.104 seconds is post-resume. The final SLEEP batch has no QUP2 command;
+  the awake summary's persistent client is `89c000.serial`. See the
+  [QUP2 trace correction](receipts/2026-09-21-qup2-pm-trace-correction.md).
+- [x] Add filtered GENI/serdev/sibling-I2C device-PM callback events to the
+  existing `rpmh-aoss` trace profile. This changes only run-scoped diagnostic
+  capture, not device behavior.
+- [ ] Run one unchanged-stock, 15-second direct-deep observation with those
+  callback events and existing ICC/RPMh tracepoints. Use its evidence to
+  decide whether the UART suspend callback or runtime-PM transition is
+  missing. This is a read-only diagnostic control, not a behavioral A/B.
+- [ ] Finish source ownership for SH1 and ACV, and complete the QUP2 callback
+  attribution before choosing any behavior-changing test.
 
 ## Current goal checklist
 
@@ -124,7 +140,7 @@ Status as of 2026-09-21 02:59 UTC. Branch `feat/sm8550-suspend-lab`.
 
 ## Latest device recovery state
 
-As of 2026-09-21 02:59 UTC, the Nova is back on stock Armada Linux
+As of 2026-09-21 05:02 UTC, the Nova is back on stock Armada Linux
 20260915.feca679, kernel 7.2.3, boot ID
 3656b0e7-5671-4b7e-9368-67965daa251a. Wi-Fi is connected, systemd has zero
 failed units, and bootc has stock booted with no staged deployment or queued
