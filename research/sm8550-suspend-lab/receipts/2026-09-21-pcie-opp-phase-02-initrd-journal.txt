@@ -1,0 +1,500 @@
+[    0.831332] fedora kernel: arm-smmu 3da0000.iommu:         stream matching with 24 register groups
+[    0.831434] fedora kernel: arm-smmu 3da0000.iommu:         22 context banks (0 stage-2 only)
+[    0.831538] fedora kernel: arm-smmu 3da0000.iommu:         Supported page sizes: 0x61311000
+[    0.831636] fedora kernel: arm-smmu 3da0000.iommu:         Stage-1: 48-bit VA -> 36-bit IPA
+[    0.831733] fedora kernel: arm-smmu 3da0000.iommu:         preserved 0 boot mappings
+[    0.831740] fedora kernel: vreg_l15b_1p8: Setting 1800000-1800000uV
+[    0.831746] fedora kernel: vreg_l16b_2p8: Setting 2800000-2800000uV
+[    0.831751] fedora kernel: vreg_l17b_2p5: Setting 2504000-2504000uV
+[    0.831757] fedora kernel: vreg_s5e_1p08: Setting 1012000-1120000uV
+[    0.831762] fedora kernel: vreg_l1e_0p88: Setting 880000-912000uV
+[    0.831770] fedora kernel: vreg_l2e_0p9: Setting 872000-968000uV
+[    0.831877] fedora kernel: platform 3d00000.gpu: Adding to iommu group 0
+[    0.831985] fedora kernel: platform 3d6a000.gmu: Adding to iommu group 1
+[    0.831993] fedora kernel: vreg_l3e_1p2: Setting 1200000-1200000uV
+[    0.832207] fedora kernel: arm-smmu 15000000.iommu: probing hardware configuration...
+[    0.832321] fedora kernel: arm-smmu 15000000.iommu: SMMUv2 with:
+[    0.832428] fedora kernel: arm-smmu 15000000.iommu:         stage 1 translation
+[    0.832534] fedora kernel: arm-smmu 15000000.iommu:         coherent table walk
+[    0.832646] fedora kernel: arm-smmu 15000000.iommu:         stream matching with 105 register groups
+[    0.832754] fedora kernel: arm-smmu 15000000.iommu:         70 context banks (0 stage-2 only)
+[    0.832860] fedora kernel: arm-smmu 15000000.iommu:         Supported page sizes: 0x61311000
+[    0.832968] fedora kernel: arm-smmu 15000000.iommu:         Stage-1: 36-bit VA -> 36-bit IPA
+[    0.833073] fedora kernel: arm-smmu 15000000.iommu:         preserved 0 boot mappings
+[    0.833194] fedora kernel: platform 800000.dma-controller: Adding to iommu group 2
+[    0.833308] fedora kernel: platform 8c0000.geniqup: Adding to iommu group 3
+[    0.833432] fedora kernel: platform a00000.dma-controller: Adding to iommu group 4
+[    0.833607] fedora kernel: platform ac0000.geniqup: Adding to iommu group 5
+[    0.833718] fedora kernel: platform 1dc4000.dma-controller: Adding to iommu group 6
+[    0.833823] fedora kernel: platform 1dfa000.crypto: Adding to iommu group 6
+[    0.833931] fedora kernel: platform 1d84000.ufshc: Adding to iommu group 7
+[    0.834039] fedora kernel: platform 8804000.mmc: Adding to iommu group 8
+[    0.834143] fedora kernel: platform aa00000.video-codec: Adding to iommu group 9
+[    0.834250] fedora kernel: platform ae00000.display-subsystem: Adding to iommu group 10
+[    0.834352] fedora kernel: platform a600000.usb: Adding to iommu group 11
+[    0.834360] fedora kernel: /soc@0/display-subsystem@ae00000/display-controller@ae01000: Fixed dependency cycle(s) with /soc@0/display-subsystem@ae00000/displayport-controller@ae90000
+[    0.834366] fedora kernel: /soc@0/display-subsystem@ae00000/display-controller@ae01000: Fixed dependency cycle(s) with /soc@0/display-subsystem@ae00000/dsi@ae94000
+[    0.834373] fedora kernel: /soc@0/phy@88e8000: Fixed dependency cycle(s) with /soc@0/display-subsystem@ae00000/displayport-controller@ae90000
+[    0.834378] fedora kernel: /soc@0/display-subsystem@ae00000/displayport-controller@ae90000: Fixed dependency cycle(s) with /soc@0/phy@88e8000
+[    0.834384] fedora kernel: /soc@0/display-subsystem@ae00000/dsi@ae94000: Fixed dependency cycle(s) with /soc@0/display-subsystem@ae00000/dsi@ae94000/panel@0
+[    0.834392] fedora kernel: /soc@0/display-subsystem@ae00000/dsi@ae94000/panel@0: Fixed dependency cycle(s) with /soc@0/display-subsystem@ae00000/dsi@ae94000
+[    0.834488] fedora kernel: pwrseq-qcom_wcn wcn7850-pmu: supply vddio1p2 not found, using dummy regulator
+[    0.834585] fedora kernel: sdhci_msm 8804000.mmc: Got CD GPIO
+[    0.834687] fedora kernel: ufshcd-qcom 1d84000.ufshc: freq-table-hz property not specified
+[    0.834786] fedora kernel: ufshcd-qcom 1d84000.ufshc: ufshcd_populate_vreg: Unable to find vccq2-supply regulator, assuming enabled
+[    0.834904] fedora kernel: cpu cpu0: EM: OPP:307200 is inefficient
+[    0.835004] fedora kernel: cpu cpu0: EM: created perf domain
+[    0.835115] fedora kernel: cpu cpu3: EM: created perf domain
+[    0.835219] fedora kernel: cpu cpu7: EM: created perf domain
+[    0.835226] fedora kernel: energy_model: updating cpu0 cpu_cap=222 old capacity=326
+[    0.835321] fedora kernel: cpu cpu0: EM: OPP:307200 is inefficient
+[    0.835329] fedora kernel: energy_model: updating cpu3 cpu_cap=657 old capacity=693
+[    0.835334] fedora kernel: Freeing initrd memory: 48908K
+[    0.835434] fedora kernel: qcom-pcie 1c00000.pcie: supply vdda not found, using dummy regulator
+[    0.835533] fedora kernel: qcom-pcie 1c00000.pcie: supply vddpe-3v3 not found, using dummy regulator
+[    0.835625] fedora kernel: qcom-pcie 1c00000.pcie: host bridge /soc@0/pcie@1c00000 ranges:
+[    0.835716] fedora kernel: qcom-pcie 1c00000.pcie:       IO 0x0060200000..0x00602fffff -> 0x0000000000
+[    0.835805] fedora kernel: qcom-pcie 1c00000.pcie:      MEM 0x0060300000..0x0063ffffff -> 0x0060300000
+[    0.835813] fedora kernel: 898000.serial: ttyHS1 at MMIO 0x898000 (irq = 186, base_baud = 0) is a MSM
+[    0.835941] fedora kernel: serial serial0: tty port ttyHS1 registered
+[    0.835950] fedora kernel: 89c000.serial: ttyHS2 at MMIO 0x89c000 (irq = 187, base_baud = 0) is a MSM
+[    0.836168] fedora kernel: serial serial1: tty port ttyHS2 registered
+[    0.836184] fedora kernel: mmc0: SDHCI controller on 8804000.mmc [8804000.mmc] using ADMA 64-bit
+[    0.836190] fedora kernel: a9c000.serial: ttyMSM0 at MMIO 0xa9c000 (irq = 191, base_baud = 0) is a MSM
+[    0.836197] fedora kernel: vreg_l1d_0p88: Setting 880000-920000uV
+[    0.836204] fedora kernel: vreg_l3c_0p9: Setting 880000-912000uV
+[    0.836210] fedora kernel: vreg_s4f_0p5: Setting 300000-700000uV
+[    0.836216] fedora kernel: vreg_l1f_0p9: Setting 880000-912000uV
+[    0.836222] fedora kernel: vreg_l2f_0p88: Setting 880000-912000uV
+[    0.836229] fedora kernel: vreg_l3f_0p88: Setting 880000-912000uV
+[    0.836236] fedora kernel: /soc@0/display-subsystem@ae00000/dsi@ae94000: Fixed dependency cycle(s) with /soc@0/display-subsystem@ae00000/dsi@ae94000/panel@0
+[    0.836243] fedora kernel: /soc@0/display-subsystem@ae00000/dsi@ae94000/panel@0: Fixed dependency cycle(s) with /soc@0/display-subsystem@ae00000/dsi@ae94000
+[    0.836384] fedora kernel: panel-ilitek-il97680a ae94000.dsi.0: supply vdd not found, using dummy regulator
+[    0.836497] fedora kernel: panel-ilitek-il97680a ae94000.dsi.0: supply vci not found, using dummy regulator
+[    0.836606] fedora kernel: panel-ilitek-il97680a ae94000.dsi.0: supply vdd18 not found, using dummy regulator
+[    0.836713] fedora kernel: panel-ilitek-il97680a ae94000.dsi.0: supply vdd28 not found, using dummy regulator
+[    0.836819] fedora kernel: ufshcd-qcom 1d84000.ufshc: freq-table-hz property not specified
+[    0.836921] fedora kernel: ufshcd-qcom 1d84000.ufshc: ufshcd_populate_vreg: Unable to find vccq2-supply regulator, assuming enabled
+[    0.837033] fedora kernel: qcom_pmic_glink pmic-glink: Failed to create device link (0x180) with supplier 88e8000.phy for /pmic-glink/connector@0
+[    0.837132] fedora kernel: qcom-pcie 1c00000.pcie: supply vdda not found, using dummy regulator
+[    0.837230] fedora kernel: qcom-pcie 1c00000.pcie: supply vddpe-3v3 not found, using dummy regulator
+[    0.837326] fedora kernel: qcom-pcie 1c00000.pcie: host bridge /soc@0/pcie@1c00000 ranges:
+[    0.837421] fedora kernel: qcom-pcie 1c00000.pcie:       IO 0x0060200000..0x00602fffff -> 0x0000000000
+[    0.837516] fedora kernel: qcom-pcie 1c00000.pcie:      MEM 0x0060300000..0x0063ffffff -> 0x0060300000
+[    0.837523] fedora kernel: mmc0: new UHS-I speed SDR104 SDXC card at address 59b4
+[    0.837529] fedora kernel: mmcblk0: mmc0:59b4  464 GiB
+[    0.837535] fedora kernel:  mmcblk0: p1
+[    0.837632] fedora kernel: qcom_pmic_glink pmic-glink: Failed to create device link (0x180) with supplier a600000.usb for /pmic-glink/connector@0
+[    0.837732] fedora kernel: ufshcd-qcom 1d84000.ufshc: freq-table-hz property not specified
+[    0.837831] fedora kernel: ufshcd-qcom 1d84000.ufshc: ufshcd_populate_vreg: Unable to find vccq2-supply regulator, assuming enabled
+[    0.837946] fedora kernel: scsi host0: ufshcd
+[    0.838066] fedora kernel: scsi 0:0:0:49488: Well-known LUN    KIOXIA   THGJFJT0E25BAIPC 0300 PQ: 0 ANSI: 6
+[    0.838164] fedora kernel: qcom-pcie 1c00000.pcie: supply vdda not found, using dummy regulator
+[    0.838279] fedora kernel: scsi 0:0:0:49476: Well-known LUN    KIOXIA   THGJFJT0E25BAIPC 0300 PQ: 0 ANSI: 6
+[    0.838430] fedora kernel: qcom-pcie 1c00000.pcie: supply vddpe-3v3 not found, using dummy regulator
+[    0.838524] fedora kernel: qcom-pcie 1c00000.pcie: host bridge /soc@0/pcie@1c00000 ranges:
+[    0.838615] fedora kernel: qcom-pcie 1c00000.pcie:       IO 0x0060200000..0x00602fffff -> 0x0000000000
+[    0.838707] fedora kernel: qcom-pcie 1c00000.pcie:      MEM 0x0060300000..0x0063ffffff -> 0x0060300000
+[    0.838818] fedora kernel: scsi 0:0:0:49456: Well-known LUN    KIOXIA   THGJFJT0E25BAIPC 0300 PQ: 0 ANSI: 6
+[    0.838927] fedora kernel: scsi 0:0:0:0: Direct-Access     KIOXIA   THGJFJT0E25BAIPC 0300 PQ: 0 ANSI: 6
+[    0.838936] fedora kernel: irq: IRQ196: trimming hierarchy from :soc@0:interrupt-controller@b220000-8
+[    0.838942] fedora kernel: irq: IRQ197: trimming hierarchy from :soc@0:interrupt-controller@b220000-8
+[    0.838950] fedora kernel: input: gpio-keys as /devices/platform/gpio-keys/input/input2
+[    0.838956] fedora kernel: clk: Disabling unused clocks
+[    0.838962] fedora kernel: PM: genpd: Disabling unused power domains
+[    0.839063] fedora kernel: sd 0:0:0:0: [sda] 30150656 4096-byte logical blocks: (123 GB/115 GiB)
+[    0.839179] fedora kernel: scsi 0:0:0:1: Direct-Access     KIOXIA   THGJFJT0E25BAIPC 0300 PQ: 0 ANSI: 6
+[    0.839281] fedora kernel: sd 0:0:0:0: [sda] Write Protect is off
+[    0.839379] fedora kernel: sd 0:0:0:0: [sda] Mode Sense: 00 32 00 10
+[    0.839476] fedora kernel: sd 0:0:0:0: [sda] Write cache: enabled, read cache: enabled, supports DPO and FUA
+[    0.839577] fedora kernel: sd 0:0:0:0: [sda] Preferred minimum I/O size 4096 bytes
+[    0.839675] fedora kernel: sd 0:0:0:0: [sda] Optimal transfer size 524288 bytes
+[    0.839785] fedora kernel: scsi 0:0:0:2: Direct-Access     KIOXIA   THGJFJT0E25BAIPC 0300 PQ: 0 ANSI: 6
+[    0.839886] fedora kernel: sd 0:0:0:1: [sdb] 5120 4096-byte logical blocks: (21.0 MB/20.0 MiB)
+[    0.839984] fedora kernel: sd 0:0:0:2: [sdc] 5120 4096-byte logical blocks: (21.0 MB/20.0 MiB)
+[    0.840166] fedora kernel: scsi 0:0:0:3: Direct-Access     KIOXIA   THGJFJT0E25BAIPC 0300 PQ: 0 ANSI: 6
+[    0.840280] fedora kernel: sd 0:0:0:2: [sdc] Write Protect is off
+[    0.840383] fedora kernel: sd 0:0:0:2: [sdc] Mode Sense: 00 32 00 10
+[    0.840486] fedora kernel: sd 0:0:0:2: [sdc] Write cache: disabled, read cache: enabled, supports DPO and FUA
+[    0.840588] fedora kernel: sd 0:0:0:2: [sdc] Preferred minimum I/O size 4096 bytes
+[    0.840691] fedora kernel: sd 0:0:0:2: [sdc] Optimal transfer size 524288 bytes
+[    0.840794] fedora kernel: sd 0:0:0:1: [sdb] Write Protect is off
+[    0.840899] fedora kernel: sd 0:0:0:1: [sdb] Mode Sense: 00 32 00 10
+[    0.841001] fedora kernel: sd 0:0:0:1: [sdb] Write cache: disabled, read cache: enabled, supports DPO and FUA
+[    0.841108] fedora kernel: sd 0:0:0:1: [sdb] Preferred minimum I/O size 4096 bytes
+[    0.841215] fedora kernel: sd 0:0:0:1: [sdb] Optimal transfer size 524288 bytes
+[    0.841318] fedora kernel: sd 0:0:0:3: [sdd] 8192 4096-byte logical blocks: (33.6 MB/32.0 MiB)
+[    0.841431] fedora kernel: scsi 0:0:0:4: Direct-Access     KIOXIA   THGJFJT0E25BAIPC 0300 PQ: 0 ANSI: 6
+[    0.841535] fedora kernel: sd 0:0:0:3: [sdd] Write Protect is off
+[    0.841637] fedora kernel: sd 0:0:0:3: [sdd] Mode Sense: 00 32 00 10
+[    0.841742] fedora kernel: sd 0:0:0:3: [sdd] Write cache: enabled, read cache: enabled, supports DPO and FUA
+[    0.841844] fedora kernel: sd 0:0:0:3: [sdd] Preferred minimum I/O size 4096 bytes
+[    0.841951] fedora kernel: sd 0:0:0:3: [sdd] Optimal transfer size 524288 bytes
+[    0.842061] fedora kernel: scsi 0:0:0:5: Direct-Access     KIOXIA   THGJFJT0E25BAIPC 0300 PQ: 0 ANSI: 6
+[    0.842166] fedora kernel: sd 0:0:0:4: [sde] 1048576 4096-byte logical blocks: (4.29 GB/4.00 GiB)
+[    0.842270] fedora kernel: sd 0:0:0:4: [sde] Write Protect is off
+[    0.842373] fedora kernel: sd 0:0:0:4: [sde] Mode Sense: 00 32 00 10
+[    0.842475] fedora kernel: sd 0:0:0:4: [sde] Write cache: enabled, read cache: enabled, supports DPO and FUA
+[    0.842576] fedora kernel: sd 0:0:0:4: [sde] Preferred minimum I/O size 4096 bytes
+[    0.842676] fedora kernel: sd 0:0:0:4: [sde] Optimal transfer size 524288 bytes
+[    0.842781] fedora kernel: sd 0:0:0:5: [sdf] 8192 4096-byte logical blocks: (33.6 MB/32.0 MiB)
+[    0.842883] fedora kernel: sd 0:0:0:5: [sdf] Write Protect is off
+[    0.842984] fedora kernel: sd 0:0:0:5: [sdf] Mode Sense: 00 32 00 10
+[    0.843088] fedora kernel: sd 0:0:0:5: [sdf] Write cache: enabled, read cache: enabled, supports DPO and FUA
+[    0.843264] fedora kernel: sd 0:0:0:5: [sdf] Preferred minimum I/O size 4096 bytes
+[    0.843369] fedora kernel: sd 0:0:0:5: [sdf] Optimal transfer size 524288 bytes
+[    0.843465] fedora kernel: qcom-pcie 1c00000.pcie: supply vdda not found, using dummy regulator
+[    0.843561] fedora kernel: qcom-pcie 1c00000.pcie: supply vddpe-3v3 not found, using dummy regulator
+[    0.843655] fedora kernel: qcom-pcie 1c00000.pcie: host bridge /soc@0/pcie@1c00000 ranges:
+[    0.843747] fedora kernel: qcom-pcie 1c00000.pcie:       IO 0x0060200000..0x00602fffff -> 0x0000000000
+[    0.843838] fedora kernel: qcom-pcie 1c00000.pcie:      MEM 0x0060300000..0x0063ffffff -> 0x0060300000
+[    0.843846] fedora kernel:  sda: sda1 sda2 sda3 sda4 sda5 sda6 sda7 sda8 sda9 sda10 sda11 sda12 sda13 sda14 sda15 sda16 sda17 sda18 sda19 sda20
+[    0.843946] fedora kernel: sd 0:0:0:0: [sda] Attached SCSI disk
+[    0.843953] fedora kernel:  sdc: sdc1 sdc2 sdc3 sdc4 sdc5
+[    0.843959] fedora kernel:  sdf: sdf1 sdf2 sdf3 sdf4 sdf5
+[    0.843965] fedora kernel:  sdd: sdd1 sdd2 sdd3
+[    0.843971] fedora kernel:  sdb: sdb1 sdb2 sdb3 sdb4 sdb5
+[    0.844081] fedora kernel: qcom-pcie 1c00000.pcie: supply vdda not found, using dummy regulator
+[    0.844176] fedora kernel: qcom-pcie 1c00000.pcie: supply vddpe-3v3 not found, using dummy regulator
+[    0.844268] fedora kernel: qcom-pcie 1c00000.pcie: host bridge /soc@0/pcie@1c00000 ranges:
+[    0.844369] fedora kernel: sd 0:0:0:3: [sdd] Attached SCSI disk
+[    0.844461] fedora kernel: qcom-pcie 1c00000.pcie:       IO 0x0060200000..0x00602fffff -> 0x0000000000
+[    0.844551] fedora kernel: qcom-pcie 1c00000.pcie:      MEM 0x0060300000..0x0063ffffff -> 0x0060300000
+[    0.844649] fedora kernel: sd 0:0:0:1: [sdb] Attached SCSI disk
+[    0.844747] fedora kernel: sd 0:0:0:5: [sdf] Attached SCSI disk
+[    0.844850] fedora kernel: sd 0:0:0:2: [sdc] Attached SCSI disk
+[    0.844858] fedora kernel:  sde: sde1 sde2 sde3 sde4 sde5 sde6 sde7 sde8 sde9 sde10 sde11 sde12 sde13 sde14 sde15 sde16 sde17 sde18 sde19 sde20 sde21 sde22 sde23 sde24 sde25 sde26 sde27 sde28 sde29 sde30 sde31 sde32 sde33 sde34 sde35 sde36 sde37 sde38 sde39 sde40 sde41 sde42 sde43 sde44 sde45 sde46 sde47 sde48 sde49 sde50 sde51 sde52 sde53 sde54 sde55 sde56 sde57 sde58 sde59 sde60 sde61 sde62 sde63 sde64 sde65 sde66 sde67 sde68 sde69 sde70 sde71 sde72 sde73 sde74 sde75 sde76 sde77 sde78 sde79 sde80
+[    0.844962] fedora kernel: sd 0:0:0:4: [sde] Attached SCSI disk
+[    0.845055] fedora kernel: qcom-pcie 1c00000.pcie: supply vdda not found, using dummy regulator
+[    0.845145] fedora kernel: qcom-pcie 1c00000.pcie: supply vddpe-3v3 not found, using dummy regulator
+[    0.845236] fedora kernel: qcom-pcie 1c00000.pcie: host bridge /soc@0/pcie@1c00000 ranges:
+[    0.845326] fedora kernel: qcom-pcie 1c00000.pcie:       IO 0x0060200000..0x00602fffff -> 0x0000000000
+[    0.845415] fedora kernel: qcom-pcie 1c00000.pcie:      MEM 0x0060300000..0x0063ffffff -> 0x0060300000
+[    0.845423] fedora kernel: input: generic ft5x06 (8d) as /devices/platform/soc@0/9c0000.geniqup/98c000.i2c/i2c-1/1-0038/input/input3
+[    0.845512] fedora kernel: qcom-pcie 1c00000.pcie: supply vdda not found, using dummy regulator
+[    0.845602] fedora kernel: qcom-pcie 1c00000.pcie: supply vddpe-3v3 not found, using dummy regulator
+[    0.845697] fedora kernel: qcom-pcie 1c00000.pcie: host bridge /soc@0/pcie@1c00000 ranges:
+[    0.845787] fedora kernel: qcom-pcie 1c00000.pcie:       IO 0x0060200000..0x00602fffff -> 0x0000000000
+[    0.845875] fedora kernel: qcom-pcie 1c00000.pcie:      MEM 0x0060300000..0x0063ffffff -> 0x0060300000
+[    0.845902] fedora kernel: Freeing unused kernel memory: 4480K
+[    0.845909] fedora kernel: Run /init as init process
+[    0.845930] fedora kernel:   with arguments:
+[    0.845938] fedora kernel:     /init
+[    0.845954] fedora kernel:   with environment:
+[    0.845968] fedora kernel:     HOME=/
+[    0.845986] fedora kernel:     TERM=linux
+[    0.846001] fedora kernel:     ostree=/ostree/boot.1/default/6a72aa7da1328e0a329eec0cdcad18fc80b24c3a61d5978ec5b653ad5033891c/0
+[    0.846009] fedora kernel:     boot=UUID=774e975f-87d4-4d7c-811f-ee7df06a14f9
+[    0.846019] fedora systemd[1]: System time advanced to built-in epoch: Sat 2026-07-25 00:00:00 UTC
+[    0.846030] fedora systemd[1]: Successfully made /usr/ read-only.
+[    0.846041] fedora systemd[1]: systemd 259.8-1.fc44 running in system mode (+PAM +AUDIT +SELINUX -APPARMOR +IMA +IPE +SMACK +SECCOMP -GCRYPT +GNUTLS +OPENSSL +ACL +BLKID +CURL +ELFUTILS +FIDO2 +IDN2 -IDN +KMOD +LIBCRYPTSETUP +LIBCRYPTSETUP_PLUGINS +LIBFDISK +PCRE2 +PWQUALITY +P11KIT +QRENCODE +TPM2 +BZIP2 +LZ4 +XZ +ZLIB +ZSTD +BPF_FRAMEWORK +BTF +XKBCOMMON +UTMP +SYSVINIT +LIBARCHIVE)
+[    0.846050] fedora systemd[1]: Detected architecture arm64.
+[    0.846059] fedora systemd[1]: Running in initrd.
+[    0.846069] fedora systemd[1]: Initializing machine ID from random generator.
+[    0.846078] fedora systemd[1]: No hostname configured, using default hostname.
+[    0.846087] fedora systemd[1]: Hostname set to <fedora>.
+[    0.846095] fedora systemd[1]: bpf-restrict-fs: BPF LSM hook not enabled in the kernel, BPF LSM not supported.
+[    0.846104] fedora systemd[1]: /usr/lib/systemd/system/systemd-udevd.service:56: System call bpf cannot be resolved as libseccomp is not available, ignoring: Operation not supported
+[    0.846113] fedora systemd[1]: /usr/lib/systemd/system/armada-splash-initrd.service:13: Unit uses KillMode=none. This is unsafe, as it disables systemd's process lifecycle management for the service. Please update the service to use a safer KillMode=, such as 'mixed' or 'control-group'. Support for KillMode=none is deprecated and will eventually be removed.
+[    0.846122] fedora systemd[1]: Queued start job for default target initrd.target.
+[    0.846131] fedora systemd[1]: Started clevis-luks-askpass.path - Forward Password Requests to Clevis Directory Watch.
+[    0.846141] fedora systemd[1]: Started systemd-ask-password-console.path - Dispatch Password Requests to Console Directory Watch.
+[    0.846150] fedora systemd[1]: Started sm8550-pcie-opp-initrd-recover.timer - Initrd recovery timer for the temporary Nova PCIe OPP test.
+[    0.846160] fedora systemd[1]: Expecting device dev-disk-by\x2duuid-c8f19552\x2d6d5f\x2d4d2e\x2dbe10\x2d17b11c3d9d15.device - /dev/disk/by-uuid/c8f19552-6d5f-4d2e-be10-17b11c3d9d15...
+[    0.846169] fedora systemd[1]: Reached target initrd-usr-fs.target - Initrd /usr File System.
+[    0.846177] fedora systemd[1]: Reached target paths.target - Path Units.
+[    0.846186] fedora systemd[1]: Reached target slices.target - Slice Units.
+[    0.846194] fedora systemd[1]: Reached target swap.target - Swaps.
+[    0.846204] fedora systemd[1]: Reached target timers.target - Timer Units.
+[    0.846212] fedora systemd[1]: Listening on dbus.socket - D-Bus System Message Bus Socket.
+[    0.846221] fedora systemd[1]: Listening on systemd-journald-dev-log.socket - Journal Socket (/dev/log).
+[    0.846230] fedora systemd[1]: Listening on systemd-journald.socket - Journal Sockets.
+[    0.846238] fedora systemd[1]: Listening on systemd-udevd-control.socket - udev Control Socket.
+[    0.846246] fedora systemd[1]: Listening on systemd-udevd-kernel.socket - udev Kernel Socket.
+[    0.846255] fedora systemd[1]: Reached target sockets.target - Socket Units.
+[    0.846263] fedora systemd[1]: Starting kmod-static-nodes.service - Create List of Static Device Nodes...
+[    0.846272] fedora systemd[1]: memstrack.service - Memstrack Anylazing Service skipped, no trigger condition checks were met.
+[    0.846282] fedora systemd[1]: systemd-battery-check.service - Early Battery Level Check skipped, unmet condition check ConditionDirectoryNotEmpty=/sys/class/power_supply
+[    0.846291] fedora systemd[1]: Starting systemd-journald.service - Journal Service...
+[    0.846299] fedora systemd[1]: Starting systemd-modules-load.service - Load Kernel Modules...
+[    0.846308] fedora systemd[1]: systemd-pcrphase-initrd.service - TPM PCR Barrier (initrd) skipped, unmet condition check ConditionSecurity=measured-uki
+[    0.846317] fedora systemd[1]: Reached target cryptsetup-pre.target - Local Encrypted Volumes (Pre).
+[    0.846325] fedora systemd[1]: Reached target cryptsetup.target - Local Encrypted Volumes.
+[    0.846334] fedora systemd[1]: Starting systemd-vconsole-setup.service - Virtual Console Setup...
+[    0.846342] fedora systemd[1]: Finished kmod-static-nodes.service - Create List of Static Device Nodes.
+[    0.846353] fedora systemd[1]: Starting systemd-tmpfiles-setup-dev-early.service - Create Static Device Nodes in /dev gracefully...
+[    0.846360] fedora kernel: ------------[ cut here ]------------
+[    0.846368] fedora kernel: WARNING: mm/shrinker.c:212 at set_shrinker_bit+0xbc/0xd0, CPU#0: systemd-modules/226
+[    0.846376] fedora kernel: Modules linked in:
+[    0.846384] fedora kernel: CPU: 0 UID: 0 PID: 226 Comm: systemd-modules Tainted: G S      W           7.2.3 #2 PREEMPT 
+[    0.846391] fedora kernel: Tainted: [S]=CPU_OUT_OF_SPEC, [W]=WARN
+[    0.846399] fedora kernel: Hardware name: Retroid Pocket Nova (DT)
+[    0.846406] fedora kernel: pstate: 634000c5 (nZCv daIF +PAN -UAO +TCO +DIT -SSBS BTYPE=--)
+[    0.846414] fedora kernel: pc : set_shrinker_bit+0xbc/0xd0
+[    0.846423] fedora kernel: lr : set_shrinker_bit+0x3c/0xd0
+[    0.846431] fedora kernel: sp : ffff8000827dbb40
+[    0.846438] fedora kernel: x29: ffff8000827dbb40 x28: ffff00080edfa280 x27: 0000000000000000
+[    0.846446] fedora kernel: x26: 0000000000000000 x25: 0000000000000002 x24: 0000ffff7c000000
+[    0.846454] fedora kernel: x23: fffffdffe0430000 x22: ffff000809685f00 x21: fffffdffe0430000
+[    0.846461] fedora kernel: x20: 0000000000000000 x19: 0000000000000000 x18: 0000000000000000
+[    0.846469] fedora kernel: x17: 0000000000000000 x16: 0000000000000000 x15: 0000000000000200
+[    0.846477] fedora kernel: x14: ffff000a7e7f2540 x13: 0000000000000002 x12: 0000000000000000
+[    0.846484] fedora kernel: x11: ffff00080f677388 x10: 0000000000000000 x9 : ffffa25fa0a4ed44
+[    0.846493] fedora kernel: x8 : 0000000000000000 x7 : ffff000801631000 x6 : ffffa25fa43b5670
+[    0.846501] fedora kernel: x5 : 0000000000000001 x4 : ffff00080f3e6800 x3 : ffff00080091c780
+[    0.846508] fedora kernel: x2 : 0000000000000000 x1 : ffff0008012f9900 x0 : 0000000000000000
+[    0.846515] fedora kernel: Call trace:
+[    0.846523] fedora kernel:  set_shrinker_bit+0xbc/0xd0 (P)
+[    0.846531] fedora kernel:  __list_lru_add.part.0+0xa4/0xb8
+[    0.846538] fedora kernel:  __list_lru_add+0x2c/0x48
+[    0.846546] fedora kernel:  deferred_split_folio+0x254/0x308
+[    0.846553] fedora kernel:  map_anon_folio_pmd_nopf+0xb4/0xe0
+[    0.846562] fedora kernel:  map_anon_folio_pmd_pf+0x20/0x138
+[    0.846570] fedora kernel:  do_huge_pmd_anonymous_page+0x188/0x5c0
+[    0.846578] fedora kernel:  __handle_mm_fault+0x6a0/0x1858
+[    0.846585] fedora kernel:  handle_mm_fault+0xe4/0x310
+[    0.846593] fedora kernel:  do_page_fault+0x438/0x7b0
+[    0.846600] fedora kernel:  do_translation_fault+0x5c/0x90
+[    0.846608] fedora kernel:  do_mem_abort+0x48/0xa0
+[    0.846615] fedora kernel:  el0_da+0x38/0xd0
+[    0.846623] fedora kernel:  el0t_64_sync_handler+0xd0/0xe8
+[    0.846632] fedora kernel:  el0t_64_sync+0x198/0x1a0
+[    0.846639] fedora kernel: ---[ end trace 0000000000000000 ]---
+[    0.846648] fedora kernel: BPF:          type_id=24788 bits_offset=640
+[    0.846655] fedora kernel: BPF:  
+[    0.846663] fedora kernel: BPF: Invalid name
+[    0.846671] fedora kernel: BPF: 
+[    0.846678] fedora kernel: failed to validate module [hid_steam] BTF: -22
+[    0.846686] fedora kernel: BPF:          type_id=181444 bits_offset=20208
+[    0.846694] fedora kernel: BPF:  
+[    0.846703] fedora kernel: BPF: Invalid name
+[    0.846710] fedora kernel: BPF: 
+[    0.846718] fedora kernel: failed to validate module [hid_nintendo] BTF: -22
+[    0.846725] fedora kernel: BPF: [189183] FUNC  
+[    0.846733] fedora kernel: BPF: type_id=54852
+[    0.846740] fedora kernel: BPF:  
+[    0.846747] fedora kernel: BPF: Invalid name
+[    0.846755] fedora kernel: BPF: 
+[    0.846762] fedora kernel: failed to validate module [hid_sony] BTF: -22
+[    0.846770] fedora kernel: BPF:          type_id=24788 bits_offset=1408
+[    0.846779] fedora kernel: BPF:  
+[    0.846786] fedora kernel: BPF: Invalid name
+[    0.846793] fedora kernel: BPF: 
+[    0.846800] fedora kernel: failed to validate module [hid_playstation] BTF: -22
+[    0.846807] fedora kernel: BPF:          type_id=19468 bits_offset=64
+[    0.846815] fedora kernel: BPF:  
+[    0.846822] fedora kernel: BPF: Invalid name
+[    0.846829] fedora kernel: BPF: 
+[    0.846837] fedora kernel: failed to validate module [retroid] BTF: -22
+[    0.846845] fedora kernel: BPF: [189162] FUNC  
+[    0.846852] fedora kernel: BPF: type_id=77134
+[    0.846860] fedora kernel: BPF:  
+[    0.846867] fedora kernel: BPF: Invalid name
+[    0.846874] fedora kernel: BPF: 
+[    0.846882] fedora kernel: failed to validate module [qcom_common] BTF: -22
+[    0.846890] fedora kernel: BPF: [189470] FUNC  
+[    0.846897] fedora kernel: BPF: type_id=52059
+[    0.846904] fedora kernel: BPF:  
+[    0.846915] fedora kernel: BPF: Invalid name
+[    0.846922] fedora kernel: BPF: 
+[    0.846929] fedora kernel: failed to validate module [fuse] BTF: -22
+[    0.846960] fedora systemd-journald[221]: Collecting audit messages is disabled.
+[    0.846984] fedora systemd[1]: Finished systemd-vconsole-setup.service - Virtual Console Setup.
+[    0.846996] fedora systemd[1]: Starting dracut-cmdline-ask.service - dracut ask for additional cmdline parameters...
+[    0.847006] fedora systemd[1]: Finished systemd-tmpfiles-setup-dev-early.service - Create Static Device Nodes in /dev gracefully.
+[    0.847015] fedora systemd[1]: Starting systemd-tmpfiles-setup-dev.service - Create Static Device Nodes in /dev...
+[    0.847028] fedora systemd-journald[221]: Journal started
+[    0.847051] fedora systemd-journald[221]: Runtime Journal (/run/log/journal/b6292008d6b44484838436e6b9995684) is 8M, max 64M, 56M free.
+[    0.807518] fedora systemd-modules-load[222]: Using 8 probe threads
+[    0.811701] fedora systemd-modules-load[222]: Module 'i2c_dev' is built in
+[    0.811712] fedora systemd-modules-load[222]: Module 'pkcs8_key_parser' is built in
+[    0.847948] fedora systemd[1]: Starting systemd-tmpfiles-setup.service - Create System Files and Directories...
+[    0.848016] fedora systemd[1]: Started systemd-journald.service - Journal Service.
+[    0.857363] fedora systemd[1]: Finished dracut-cmdline-ask.service - dracut ask for additional cmdline parameters.
+[    0.858136] fedora systemd[1]: Starting dracut-cmdline.service - dracut cmdline hook...
+[    0.864213] fedora systemd-modules-load[222]: Failed to insert module 'fuse': Invalid argument
+[    0.874142] fedora systemd[1]: Finished systemd-tmpfiles-setup-dev.service - Create Static Device Nodes in /dev.
+[    0.874353] fedora systemd[1]: Reached target local-fs-pre.target - Preparation for Local File Systems.
+[    0.874369] fedora systemd[1]: Reached target local-fs.target - Local File Systems.
+[    0.882983] fedora dracut-cmdline[250]: dracut-108-8.fc44
+[    0.886921] fedora systemd-tmpfiles[239]: /usr/lib/tmpfiles.d/var.conf:14: Duplicate line for path "/var/log", ignoring.
+[    0.888198] fedora systemd-modules-load[222]: Failed to insert module 'hid_sony': Invalid argument
+[    0.888873] fedora dracut-cmdline[250]: Using kernel command line parameters:  rd.driver.pre=btrfs   ostree=/ostree/boot.1/default/6a72aa7da1328e0a329eec0cdcad18fc80b24c3a61d5978ec5b653ad5033891c/0 root=UUID=c8f19552-6d5f-4d2e-be10-17b11c3d9d15 rw boot=UUID=774e975f-87d4-4d7c-811f-ee7df06a14f9 rootwait console=tty0 quiet loglevel=3 allow_mismatched_32bit_el0 fw_devlink.strict=1 psi=1 cgroup_disable=pressure cgroup.memory=nokmem,nosocket cpufreq.default_governor=schedutil swiotlb=8192 pcie_ports=compat rootflags=subvol=root,noatime,compress=zstd:1,discard=async
+[    0.894544] fedora systemd[1]: Finished systemd-tmpfiles-setup.service - Create System Files and Directories.
+[    0.912121] fedora systemd-modules-load[222]: Failed to insert module 'hid_nintendo': Invalid argument
+[    0.928173] fedora systemd-modules-load[222]: Failed to insert module 'hid_steam': Invalid argument
+[    0.956154] fedora systemd-modules-load[222]: Failed to insert module 'rsinput': Invalid argument
+[    0.976159] fedora systemd-modules-load[222]: Failed to insert module 'hid_playstation': Invalid argument
+[    1.004166] fedora systemd-modules-load[222]: Failed to insert module 'retroid': Invalid argument
+[    1.005449] fedora kernel: fbcon: Taking over console
+[    1.005093] fedora systemd[1]: systemd-modules-load.service: Main process exited, code=exited, status=1/FAILURE
+[    1.005159] fedora systemd[1]: systemd-modules-load.service: Failed with result 'exit-code'.
+[    1.005316] fedora systemd[1]: Failed to start systemd-modules-load.service - Load Kernel Modules.
+[    1.006316] fedora systemd[1]: Starting systemd-sysctl.service - Apply Kernel Variables...
+[    1.028923] fedora systemd[1]: Finished dracut-cmdline.service - dracut cmdline hook.
+[    1.033799] fedora systemd-sysctl[342]: Couldn't write '0' to 'kernel/yama/ptrace_scope', ignoring: No such file or directory
+[    1.034485] fedora systemd[1]: Starting dracut-pre-udev.service - dracut pre-udev hook...
+[    1.036303] fedora systemd-sysctl[342]: Couldn't write '0' to 'kernel/nmi_watchdog', ignoring: No such file or directory
+[    1.036321] fedora systemd-sysctl[342]: Couldn't write '0' to 'kernel/soft_watchdog', ignoring: No such file or directory
+[    1.036331] fedora systemd-sysctl[342]: Couldn't write '0' to 'kernel/watchdog', ignoring: No such file or directory
+[    1.038588] fedora systemd[1]: Finished systemd-sysctl.service - Apply Kernel Variables.
+[    1.060034] fedora kernel: BPF: [189229] ENUM (anon) 
+[    1.060084] fedora kernel: BPF: size=4 vlen=19
+[    1.060106] fedora kernel: BPF:  
+[    1.060132] fedora kernel: BPF: Invalid name
+[    1.060149] fedora kernel: BPF: 
+[    1.060163] fedora kernel: failed to validate module [dm_mod] BTF: -22
+[    1.124599] fedora dracut-pre-udev[361]: modprobe: ERROR: could not insert 'dm_mod': Invalid argument
+[    1.129854] fedora kernel: BPF: [189229] ENUM (anon) 
+[    1.130003] fedora kernel: BPF: size=4 vlen=19
+[    1.130097] fedora kernel: BPF:  
+[    1.130206] fedora kernel: BPF: Invalid name
+[    1.130291] fedora kernel: BPF: 
+[    1.130373] fedora kernel: failed to validate module [dm_mod] BTF: -22
+[    1.253106] fedora rpc.statd[377]: Version 2.8.7 starting
+[    1.255644] fedora rpc.statd[377]: Failed to open directory sm: No such file or directory
+[    1.255661] fedora rpc.statd[377]: Initializing NSM state
+[    1.255666] fedora rpc.statd[377]: Failed to create /var/lib/nfs/statd/.state.new: No such file or directory
+[    1.270932] fedora rpc.idmapd[382]: Setting log level to 0
+[    1.271206] fedora rpc.idmapd[382]: libnfsidmap: Unable to determine the NFSv4 domain; Using 'localdomain' as the NFSv4 domain which means UIDs will be mapped to the 'Nobody-User' user defined in /etc/idmapd.conf
+[    1.288039] fedora kernel: BPF: [189177] FUNC 16_t 
+[    1.288075] fedora kernel: BPF: type_id=189165
+[    1.288089] fedora kernel: BPF:  
+[    1.288111] fedora kernel: BPF: Invalid name
+[    1.288125] fedora kernel: BPF: 
+[    1.288136] fedora kernel: failed to validate module [raid6_pq] BTF: -22
+[    1.376757] fedora dracut-pre-udev[389]: modprobe: ERROR: could not insert 'btrfs': Invalid argument
+[    1.392638] fedora systemd[1]: Finished dracut-pre-udev.service - dracut pre-udev hook.
+[    1.393779] fedora systemd[1]: Starting systemd-udevd.service - Rule-based Manager for Device Events and Files...
+[    1.438017] fedora systemd-udevd[398]: Using default interface naming scheme 'v259'.
+[    1.459620] fedora systemd[1]: Started systemd-udevd.service - Rule-based Manager for Device Events and Files.
+[    1.464621] fedora systemd[1]: Starting dracut-pre-trigger.service - dracut pre-trigger hook...
+[    1.518423] fedora dracut-pre-trigger[399]: rd.md=0: removing MD RAID activation
+[    1.562349] fedora systemd[1]: Finished dracut-pre-trigger.service - dracut pre-trigger hook.
+[    1.563388] fedora systemd[1]: Starting systemd-udev-trigger.service - Coldplug All udev Devices...
+[    2.056292] fedora systemd[1]: Finished systemd-udev-trigger.service - Coldplug All udev Devices.
+[    2.056535] fedora systemd[1]: Reached target sysinit.target - System Initialization.
+[    2.056558] fedora systemd[1]: Reached target basic.target - Basic System.
+[    2.056781] fedora systemd[1]: nm-initrd.service skipped, unmet condition check ConditionPathExists=/run/NetworkManager/initrd/neednet
+[    2.056798] fedora systemd[1]: Reached target network.target - Network.
+[    2.056814] fedora systemd[1]: nm-wait-online-initrd.service skipped, unmet condition check ConditionPathExists=/run/NetworkManager/initrd/neednet
+[    2.057939] fedora systemd[1]: Starting dracut-initqueue.service - dracut initqueue hook...
+[    2.159607] fedora systemd[1]: Created slice system-modprobe.slice - Slice /system/modprobe.
+[    2.159643] fedora systemd[1]: modprobe@configfs.service - Load Kernel Module configfs skipped, unmet condition check ConditionKernelModuleLoaded=!configfs
+[    2.160459] fedora systemd[1]: Mounting sys-kernel-config.mount - Kernel Configuration File System...
+[    2.178654] fedora systemd[1]: Mounted sys-kernel-config.mount - Kernel Configuration File System.
+[    2.288027] fedora kernel: BPF: [189177] FUNC 16_t 
+[    2.288083] fedora kernel: BPF: type_id=189165
+[    2.288090] fedora kernel: BPF:  
+[    2.288097] fedora kernel: BPF: Invalid name
+[    2.288103] fedora kernel: BPF: 
+[    2.288109] fedora kernel: failed to validate module [raid6_pq] BTF: -22
+[    2.492132] fedora kernel: BPF: [189162] FUNC  
+[    2.492229] fedora kernel: BPF: type_id=61570
+[    2.492262] fedora kernel: BPF:  
+[    2.492293] fedora kernel: BPF: Invalid name
+[    2.492324] fedora kernel: BPF: 
+[    2.492354] fedora kernel: failed to validate module [pwm_fan] BTF: -22
+[    2.500038] fedora kernel: BPF:          type_id=19983 bits_offset=384
+[    2.500081] fedora kernel: BPF:  
+[    2.500090] fedora kernel: BPF: Invalid name
+[    2.500098] fedora kernel: BPF: 
+[    2.500106] fedora kernel: failed to validate module [qcom_battmgr] BTF: -22
+[    2.504270] fedora kernel: qcom-pcie 1c00000.pcie: supply vdda not found, using dummy regulator
+[    2.504472] fedora kernel: qcom-pcie 1c00000.pcie: supply vddpe-3v3 not found, using dummy regulator
+[    2.504598] fedora kernel: qcom-pcie 1c00000.pcie: host bridge /soc@0/pcie@1c00000 ranges:
+[    2.504717] fedora kernel: qcom-pcie 1c00000.pcie:       IO 0x0060200000..0x00602fffff -> 0x0000000000
+[    2.504833] fedora kernel: qcom-pcie 1c00000.pcie:      MEM 0x0060300000..0x0063ffffff -> 0x0060300000
+[    2.506597] fedora kernel: BPF:          type_id=86 bits_offset=0
+[    2.506681] fedora kernel: BPF:  
+[    2.506718] fedora kernel: BPF: Invalid name
+[    2.506748] fedora kernel: BPF: 
+[    2.506790] fedora kernel: failed to validate module [qcrypto] BTF: -22
+[    2.516043] fedora kernel: BPF: [189162] FUNC  
+[    2.516112] fedora kernel: BPF: type_id=77134
+[    2.516149] fedora kernel: BPF:  
+[    2.516179] fedora kernel: BPF: Invalid name
+[    2.516206] fedora kernel: BPF: 
+[    2.516235] fedora kernel: failed to validate module [qcom_common] BTF: -22
+[    2.516264] fedora kernel: BPF: [189152] FUNC  
+[    2.516292] fedora kernel: BPF: type_id=189147
+[    2.516321] fedora kernel: BPF:  
+[    2.516348] fedora kernel: BPF: Invalid name
+[    2.516386] fedora kernel: BPF: 
+[    2.516412] fedora kernel: failed to validate module [pinctrl_lpass_lpi] BTF: -22
+[    2.608045] fedora kernel: qcom-pcie 1c00000.pcie: supply vdda not found, using dummy regulator
+[    2.608637] fedora kernel: qcom-pcie 1c00000.pcie: supply vddpe-3v3 not found, using dummy regulator
+[    2.609064] fedora kernel: qcom-pcie 1c00000.pcie: host bridge /soc@0/pcie@1c00000 ranges:
+[    2.609491] fedora kernel: qcom-pcie 1c00000.pcie:       IO 0x0060200000..0x00602fffff -> 0x0000000000
+[    2.609918] fedora kernel: qcom-pcie 1c00000.pcie:      MEM 0x0060300000..0x0063ffffff -> 0x0060300000
+[    2.652281] fedora kernel: BPF:          type_id=101020 bits_offset=136
+[    2.652309] fedora kernel: BPF:  
+[    2.652324] fedora kernel: BPF: Invalid name
+[    2.652333] fedora kernel: BPF: 
+[    2.652341] fedora kernel: failed to validate module [rtc_pm8xxx] BTF: -22
+[    2.653496] fedora kernel: qcom_pmic_glink pmic-glink: Failed to create device link (0x180) with supplier usb0-sbu-mux for /pmic-glink/connector@0
+[    2.660029] fedora kernel: qcom-pcie 1c00000.pcie: supply vdda not found, using dummy regulator
+[    2.660506] fedora kernel: qcom-pcie 1c00000.pcie: supply vddpe-3v3 not found, using dummy regulator
+[    2.660932] fedora kernel: qcom-pcie 1c00000.pcie: host bridge /soc@0/pcie@1c00000 ranges:
+[    2.661439] fedora kernel: qcom-pcie 1c00000.pcie:       IO 0x0060200000..0x00602fffff -> 0x0000000000
+[    2.662124] fedora kernel: qcom-pcie 1c00000.pcie:      MEM 0x0060300000..0x0063ffffff -> 0x0060300000
+[    2.662738] fedora kernel: msm_dpu ae01000.display-controller: bound ae94000.dsi (ops dsi_ops)
+[    2.663463] fedora kernel: msm_dpu ae01000.display-controller: bound ae90000.displayport-controller (ops msm_dp_display_comp_ops)
+[    2.664198] fedora kernel: adreno 3d00000.gpu: supply vdd not found, using dummy regulator
+[    2.664741] fedora kernel: adreno 3d00000.gpu: supply vddcx not found, using dummy regulator
+[    2.696040] fedora kernel: msm_dpu ae01000.display-controller: bound 3d00000.gpu (ops a3xx_ops)
+[    2.696597] fedora kernel: [drm:dpu_kms_hw_init:1280] dpu hardware revision:0x90000000
+[    2.716030] fedora kernel: [drm] Initialized msm 1.13.0 for ae01000.display-controller on minor 0
+[    2.716089] fedora kernel: msm_dpu ae01000.display-controller: Direct firmware load for qcom/a740_sqe.fw failed with error -2
+[    2.716561] fedora kernel: msm_dpu ae01000.display-controller: [drm:adreno_request_fw] *ERROR* failed to load a740_sqe.fw
+[    2.789930] fedora systemd[1]: Finished dracut-initqueue.service - dracut initqueue hook.
+[    2.792210] fedora systemd[1]: Reached target remote-fs-pre.target - Preparation for Remote File Systems.
+[    2.792225] fedora systemd[1]: Reached target remote-cryptsetup.target - Remote Encrypted Volumes.
+[    2.792235] fedora systemd[1]: Reached target remote-fs.target - Remote File Systems.
+[    2.792764] fedora systemd[1]: Starting dracut-pre-mount.service - dracut pre-mount hook...
+[    2.792776] fedora systemd[1]: systemd-vconsole-setup.service: Deactivated successfully.
+[    2.792796] fedora systemd[1]: Stopped systemd-vconsole-setup.service - Virtual Console Setup.
+[    2.792834] fedora systemd[1]: Stopping systemd-vconsole-setup.service - Virtual Console Setup...
+[    2.793186] fedora systemd[1]: Starting systemd-vconsole-setup.service - Virtual Console Setup...
+[    2.968022] fedora kernel: Console: switching to colour frame buffer device 160x60
+[    2.968055] fedora kernel: fb0: sys_imageblit: framebuffer is not in virtual address space.
+[    2.984044] fedora kernel: msm_dpu ae01000.display-controller: [drm] fb0: msmdrmfb frame buffer device
+[    2.988077] fedora kernel: qcom-pcie 1c00000.pcie: supply vdda not found, using dummy regulator
+[    2.989552] fedora kernel: qcom-pcie 1c00000.pcie: supply vddpe-3v3 not found, using dummy regulator
+[    2.991107] fedora kernel: qcom-pcie 1c00000.pcie: host bridge /soc@0/pcie@1c00000 ranges:
+[    2.992947] fedora kernel: qcom-pcie 1c00000.pcie:       IO 0x0060200000..0x00602fffff -> 0x0000000000
+[    2.993832] fedora kernel: qcom-pcie 1c00000.pcie:      MEM 0x0060300000..0x0063ffffff -> 0x0060300000
+[    3.002807] fedora systemd[1]: Finished dracut-pre-mount.service - dracut pre-mount hook.
+[    3.003973] fedora systemd[1]: Starting armada-splash-initrd.service - Armada splash (initramfs)...
+[    3.016973] fedora systemd[1]: Started armada-splash-initrd.service - Armada splash (initramfs).
+[    3.026654] fedora systemd[1]: Finished systemd-vconsole-setup.service - Virtual Console Setup.
+[    3.076075] fedora kernel: msm_dpu ae01000.display-controller: Direct firmware load for qcom/a740_sqe.fw failed with error -2
+[    3.076659] fedora kernel: msm_dpu ae01000.display-controller: [drm:adreno_request_fw] *ERROR* failed to load a740_sqe.fw
+[   12.772492] fedora kernel: qnoc-sm8550 1500000.interconnect: sync_state() pending due to 1c00000.pcie
+[   12.773505] fedora kernel: qnoc-sm8550 interconnect-1: sync_state() pending due to 1c00000.pcie
+[   12.774165] fedora kernel: qnoc-sm8550 16c0000.interconnect: sync_state() pending due to 1c00000.pcie
+[   12.774778] fedora kernel: gcc-sm8550 100000.clock-controller: sync_state() pending due to 1c00000.pcie
+[   12.775370] fedora kernel: qnoc-sm8550 interconnect-1: sync_state() pending due to 1dfa000.crypto
+[   12.775910] fedora kernel: qnoc-sm8550 1700000.interconnect: sync_state() pending due to 1dfa000.crypto
+[   12.780925] fedora kernel: gcc-sm8550 100000.clock-controller: sync_state() pending due to 3d6a000.gmu
+[   12.781698] fedora kernel: gpu_cc-sm8550 3d90000.clock-controller: sync_state() pending due to 3d6a000.gmu
+[   12.782439] fedora kernel: qnoc-sm8550 interconnect-1: sync_state() pending due to 6800000.remoteproc
+[   12.783151] fedora kernel: qnoc-sm8550 7430000.interconnect: sync_state() pending due to 6800000.remoteproc
+[   12.788325] fedora kernel: qnoc-sm8550 interconnect-1: sync_state() pending due to aa00000.video-codec
+[   12.789053] fedora kernel: qnoc-sm8550 1780000.interconnect: sync_state() pending due to aa00000.video-codec
+[   12.789777] fedora kernel: qnoc-sm8550 1600000.interconnect: sync_state() pending due to aa00000.video-codec
+[   12.790504] fedora kernel: gcc-sm8550 100000.clock-controller: sync_state() pending due to aa00000.video-codec
+[   12.791198] fedora kernel: video_cc-sm8550 aaf0000.clock-controller: sync_state() pending due to aa00000.video-codec
+[   12.791891] fedora kernel: qcom-rpmhpd 17a00000.rsc:power-controller: sync_state() pending due to aa00000.video-codec
+[   12.794388] fedora kernel: qcom-rpmhpd 17a00000.rsc:power-controller: sync_state() pending due to 6800000.remoteproc
+[   12.794579] fedora kernel: qnoc-sm8550 24100000.interconnect: sync_state() pending due to aa00000.video-codec
+[   12.794751] fedora kernel: qnoc-sm8550 24100000.interconnect: sync_state() pending due to 1c00000.pcie
+[   12.794918] fedora kernel: qnoc-sm8550 interconnect-1: sync_state() pending due to 32300000.remoteproc
+[   12.795083] fedora kernel: qnoc-sm8550 320c0000.interconnect: sync_state() pending due to 32300000.remoteproc
+[   12.795251] fedora kernel: qcom-rpmhpd 17a00000.rsc:power-controller: sync_state() pending due to 32300000.remoteproc
+[   12.795421] fedora kernel: qcom-pcie 1c00000.pcie: supply vdda not found, using dummy regulator
+[   12.795586] fedora kernel: qcom-pcie 1c00000.pcie: supply vddpe-3v3 not found, using dummy regulator
+[   12.795745] fedora kernel: qcom-pcie 1c00000.pcie: host bridge /soc@0/pcie@1c00000 ranges:
+[   12.795899] fedora kernel: qcom-pcie 1c00000.pcie:       IO 0x0060200000..0x00602fffff -> 0x0000000000
+[   12.796080] fedora kernel: qcom-pcie 1c00000.pcie:      MEM 0x0060300000..0x0063ffffff -> 0x0060300000
+[  120.994750] fedora systemd[1]: Starting sm8550-pcie-opp-initrd-recover.service - Restore the known-good Nova kernel if the PCIe test stalls in initrd...

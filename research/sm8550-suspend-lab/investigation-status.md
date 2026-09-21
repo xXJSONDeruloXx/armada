@@ -6,7 +6,7 @@ the chronological record, including failed runs and superseded interpretations.
 Update this page when a checklist item changes; put raw output in a dated
 receipt and explain the result in the notebook.
 
-Status as of 2026-09-21 01:15 UTC. Branch `feat/sm8550-suspend-lab`.
+Status as of 2026-09-21 01:34 UTC. Branch `feat/sm8550-suspend-lab`.
 
 ## Current goal checklist
 
@@ -76,52 +76,46 @@ Status as of 2026-09-21 01:15 UTC. Branch `feat/sm8550-suspend-lab`.
   `journalctl` command without blocking recovery; assert the image includes
   `journalctl` in its generated initramfs.
 - [x] Build and validate phase-02 candidate with the same kernel/DTB and OPP,
-  plus only the bounded initrd journal capture. It remains unstaged.
-- [ ] Apply phase-02 while ABL recovery is available. Read `SUSDIAG.JRN` and
-  root phase marker before changing the recovery timeout or running the OPP
-  A/B.
-- [ ] Determine why candidate initrd does not reach switch-root before the
-  120-second recovery timer. Keep the timer and PCIe OPP unchanged while
-  gathering this evidence.
+  plus only the bounded initrd journal capture. It was subsequently applied;
+  see the captured diagnosis below.
+- [x] Apply phase-02 with ABL recovery available and retrieve its ESP marker,
+  bounded initrd journal, and root phase marker. The initrd ran on boot
+  `529c658e-7b48-47ca-b626-a579fd239cf2`; its recovery timer restored stock.
+- [x] Diagnose the pre-switch-root failure: candidate kernel BTF rejects stock
+  `dm_mod` and `btrfs` modules. The test image copied a candidate kernel/DTB
+  but retained the base image's stock module tree. No suspend A/B ran.
+- [ ] Establish the exact candidate source snapshot and builder, then build
+  matching modules from the existing configured tree if feasible. Package
+  them with the candidate and regenerate the initramfs before another boot.
 - [ ] Run the PCIe OPP direct-deep A/B only after candidate kernel/DTB and root
   are positively identified. Neither candidate attempt has run a suspend test.
 
 ## Latest device recovery state
 
-As of 2026-09-21 01:15 UTC, the Nova is healthy on stock Armada Linux
+As of 2026-09-21 01:34 UTC, the Nova is healthy on stock Armada Linux
 `20260915.feca679`, kernel `7.2.3`, boot ID
-`5263e173-9323-426b-aee2-6fe6f3dc4bfd`. Wi-Fi is connected, systemd is
-`running` with zero failed units, and no RTC wake alarm is armed. `bootc`
-reports `bootOrder=default`, `rollback=null`, `rollbackQueued=false`, and
-`staged=null`; OSTree lists only the stock deployment. Both ESP kernel files
-match stock SHA-256
-`0b0d7c03a88e77c480ad31d145a6718916638ba62287ff5a2b427c0f75475000`; the
-active boot-image stamp is stock. Bootc has no staged or rollback deployment.
-The phase-02 diagnostic candidate is built in rootful Podman as
-`localhost/armada-pcie-opp-test-phase:20260921-02`, digest
-`sha256:b8be5e46ca08c9d03aa7992bd24b9861befd95af5d360a122504cb8685d0e8bd`;
-it is not staged. The latest attempt's ESP record says
-`event=stock_kernel_restored boot_id=5debf421-a407-40be-926b-3803174e6291`;
-the candidate-root phase log is absent. See the
-[phase-marker build receipt](receipts/2026-09-21-pcie-opp-phase-01-build.md),
-[guard execution receipt](receipts/2026-09-21-pcie-opp-phase-01-recovery.md),
-and the [journal-capture build receipt](receipts/2026-09-21-pcie-opp-phase-02-build.md).
+`f884a7fb-79d5-4247-9d1e-c634ed2b0141`. Wi-Fi is connected, systemd is
+`running` with zero failed units, and no RTC wake alarm is armed. Root-level
+`bootc status` reports `staged: null` and `rollback: null`; OSTree lists only
+the stock default deployment. The phase-02 candidate initrd ran on boot
+`529c658e-7b48-47ca-b626-a579fd239cf2`, failed before switch-root because
+essential stock modules were rejected by candidate-kernel BTF validation,
+then its recovery service restored the known-good kernel. No candidate root
+marker appeared and no suspend A/B ran. The preserved log, diagnosis, and
+build details are in the
+[phase-02 initrd diagnosis](receipts/2026-09-21-pcie-opp-phase-02-initrd-diagnosis.md),
+[raw initrd journal](receipts/2026-09-21-pcie-opp-phase-02-initrd-journal.txt),
+[phase-02 build receipt](receipts/2026-09-21-pcie-opp-phase-02-build.md), and
+[phase-marker recovery receipt](receipts/2026-09-21-pcie-opp-phase-01-recovery.md).
 
-The 2026-09-21 guarded candidate apply did not yield a confirmed candidate
-userspace, and no suspend A/B ran. The returned stock boot's journal shows
-that Armada's BLS-based startup updater wrote the still-pending candidate into
-`/KERNEL`; `KERNEL.BAK` remained stock. The pending OSTree deployment was
-removed and Armada's updater regenerated the stock image. Whether the initrd
-guard, ABL/firmware, or a manual reset returned the device to stock remains
-unresolved.
-
-The phase-marker follow-up confirmed that the initrd recovery timer executed
-and restored `KERNEL.BAK`; the candidate-root marker did not appear. This
-strongly places the stall before candidate switch-root, but no candidate
-journal was persisted, so the cause is still unknown. The deployment and ESP
-were cleaned back to stock without another reboot. Phase-02 adds a bounded
-initrd journal snapshot to the recovery helper; it is built but not yet
-staged. Read that log before extending the timer or retrying the OPP A/B.
+The decisive failure is in boot packaging: the image paired a modified
+candidate kernel with the base image's stock modules. Candidate `vmlinux` has
+a different `.BTF` hash, and the captured initrd journal shows BTF validation
+failures followed by `dm_mod` and `btrfs` insertion failures. The build tree
+has not yet produced candidate `.ko` files or `Module.symvers`; inspect the
+candidate source/toolchain path and build matching modules before rebuilding
+the test image. Keep the 120-second guard and PCIe OPP behavior unchanged.
+See the [diagnosis receipt](receipts/2026-09-21-pcie-opp-phase-02-initrd-diagnosis.md).
 
 Older dated live-state observations below are historical; use the latest
 state above for current device status.

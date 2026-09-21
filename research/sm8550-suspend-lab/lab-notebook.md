@@ -7680,3 +7680,45 @@ Next: with ABL recovery available, stage and apply this exact image; check
 `SUSDIAG.LOG`, `SUSDIAG.JRN`, and the root phase log before deciding whether
 the candidate root reached switch-root. Do not run a suspend test unless the
 candidate version/kernel/DTB are all confirmed.
+
+### 2026-09-21 01:34 UTC — phase-02 initrd exposes candidate/module mismatch
+
+Applied phase-02 image
+`localhost/armada-pcie-opp-test-phase:20260921-02` with ABL recovery
+available. ESP `SUSDIAG.LOG` records
+`event=stock_kernel_restored boot_id=529c658e-7b48-47ca-b626-a579fd239cf2`;
+the candidate-root marker is absent. The recovery did not come from a
+successful candidate userspace, and the intended PCIe OPP suspend A/B never
+ran.
+
+The bounded `SUSDIAG.JRN` is 500 lines / 45,091 bytes (SHA-256
+`4da561bfacec200ffa7cc1321d0113b502ccbd011d736075896b87558b8646db`). The
+candidate initrd uses Btrfs root UUID
+`c8f19552-6d5f-4d2e-be10-17b11c3d9d15` and `rootflags=subvol=root`. At 1.060 s
+the kernel rejects `dm_mod` BTF and modprobe returns `Invalid argument`; at
+1.376 s, `btrfs` insertion fails likewise. Other stock modules also produce
+BTF validation errors. Initrd systemd reaches `sysinit.target`, runs through
+`dracut-initqueue` and `dracut-pre-mount`, but never records
+`initrd-switch-root.target`. The 120-second recovery service starts and the
+ESP marker confirms stock kernel restoration.
+
+This points to the test-image packaging mistake: its Containerfile copied the
+candidate `vmlinuz` and Nova DTB but left the cached base's stock
+`/usr/lib/modules/7.2.3` in place. The candidate `.BTF` SHA
+`cd7334c576a197a39b0e5121d2b3fb9c38fef8af6b034beb039d1b04b4bbbb44` differs
+from the stock `.BTF` SHA
+`fb193ea5c32178ae22d52e30a62986e4bbc2c3db01bfa530f34b257fe94b45a1`.
+Stock module files are therefore not a valid kernel/module set for this
+candidate. The candidate config builds Btrfs and device mapper as modules,
+with module BTF enabled. The output tree has the matching candidate kernel
+and diagnostic source but no `btrfs.ko`, `dm-mod.ko`, or `Module.symvers` yet.
+
+The Nova is back on stock Armada `20260915.feca679` / kernel `7.2.3`, boot ID
+`f884a7fb-79d5-4247-9d1e-c634ed2b0141`; Wi-Fi is connected, systemd is
+healthy with zero failed units, and bootc reports no staged or rollback
+deployment. The next work is to identify the candidate source/build container,
+then try a modules-only build and complete module packaging if the exact
+source/toolchain can be reconstructed. The OPP remains unchanged and the
+recovery guard stays at 120 seconds. Full evidence is in the
+[`phase-02 diagnosis receipt`](receipts/2026-09-21-pcie-opp-phase-02-initrd-diagnosis.md)
+and the [captured initrd journal](receipts/2026-09-21-pcie-opp-phase-02-initrd-journal.txt).
