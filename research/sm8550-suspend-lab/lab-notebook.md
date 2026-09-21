@@ -8378,3 +8378,36 @@ case is independently explained by the no-driver path, which skips the power
 transition and marks D0 unknown. No boot argument, PCI state, or power policy
 was changed during this source/raw-evidence review. Updated the current status
 and PCIe audit receipt to distinguish the two older runs.
+
+
+### 2026-09-21 10:14 UTC — root port is an active D3cold-check participant
+
+Read-only SSH on the unchanged stock boot confirmed the normal configuration:
+the command line has `pcie_ports=compat`; root port 0000:00:00.0
+(17cb:0113) is unbound but `enable=1`, with no pcieport driver directory.
+WCN7850 0000:01:00.0 remains enabled and bound to ath12k. Both were awake in
+D0 and wakeup was disabled. No policy or device state was changed.
+
+This makes the normal root-port veto fully source-explainable. The
+`pcie_ports=compat` parser sets `pcie_ports_disabled`; the PCI core's
+no-driver `pci_pm_suspend_noirq()` path saves config and marks an unhandled
+device's state unknown. The common D3cold walker skips only a function with
+no driver **and** PCI disabled. Because the root is enabled, it remains in the
+walk, and PCI_UNKNOWN fails the D3hot check before DesignWare tears down the
+host.
+
+The final Qualcomm D3cold series deliberately checks all active PCI functions,
+not only endpoints. Maintainer discussion explains that an active switch,
+bridge, root port, RC-integrated endpoint, or conventional device may have a
+bound driver that requires D0. Therefore a generic endpoint-only filter is
+not a defensible fix. A QCOM-host-specific exception is conceivable only if
+it is backed by the controller's ownership contract, complete downstream
+quiescence, and wake behavior.
+
+The earlier pcieport-bound run still has an unresolved branch: it ended with
+the root at PCI_UNKNOWN but did not capture `state_saved`,
+`skip_bus_pm`, `bridge_d3`, or root `pci_prepare_to_sleep()` entry/return.
+The live default boot cannot reproduce that bound case because pcieport is
+absent, and we are not repeating the boot-policy experiment. No behavioral
+A/B is justified. The exact new evidence and next diagnostic fields are in
+the [root-port eligibility audit](receipts/2026-09-21-root-port-eligibility-audit.md).

@@ -6,7 +6,7 @@ the chronological record, including failed runs and superseded interpretations.
 Update this page when a checklist item changes; put raw output in a dated
 receipt and explain the result in the notebook.
 
-Status as of 2026-09-21 09:44 UTC. Branch `feat/sm8550-suspend-lab`.
+Status as of 2026-09-21 10:14 UTC. Branch `feat/sm8550-suspend-lab`.
 
 ## Immediate next checkpoint
 
@@ -65,6 +65,14 @@ Status as of 2026-09-21 09:44 UTC. Branch `feat/sm8550-suspend-lab`.
   identical. Qualcomm's changed OPP plumbing does not resolve the root-port
   veto. See the
   [comparison receipt](receipts/2026-09-21-pci-endpoint-state-and-upstream-audit.md).
+- [x] Explain the default-boot root-port veto from live state and source.
+  With `pcie_ports=compat`, the current boot has no bound pcieport driver;
+  root port 17cb:0113 is nevertheless enabled=1, so the common D3cold helper
+  does not classify it as inactive. The generic no-driver PCI noirq path
+  leaves its tracked state PCI_UNKNOWN, which vetoes host teardown. The
+  upstream helper intentionally checks all active PCI functions, including
+  bridges/root ports; do not add a generic endpoint-only filter. See the
+  [root-port eligibility audit](receipts/2026-09-21-root-port-eligibility-audit.md).
 - [x] Audit the RPMh/AOP observability layers against Linux 7.2.3 and current
   upstream. `rpmh_flush()==0` means TCS slot programming succeeded; the AP
   does not trigger SLEEP/WAKE TCSes and has no firmware completion IRQ for
@@ -81,13 +89,13 @@ Status as of 2026-09-21 09:44 UTC. Branch `feat/sm8550-suspend-lab`.
   `interconnect_summary` is an awake snapshot, so neither identifies all
   context-specific leaf votes.
 - [ ] Establish a truthful, wake-safe Linux root-port/host suspend contract.
-  WCN's PCI core state is now known to be D3hot, but the physical endpoint/link
-  state and a supported way for this host to transition through the root-port
-  veto remain unknown. A prior run with `pcieport` bound also captured the
-  root at `PCI_UNKNOWN`; it did not record `bridge_d3`, `skip_bus_pm`, endpoint
-  state, or the root's `pci_prepare_to_sleep()` result, so binding alone is
-  not a fix and the bound-path reason is unresolved. Do not force a PCI state
-  or bypass the common safety predicate.
+  The default compat-boot veto is explained, but the prior bound-root run
+  still ended at `PCI_UNKNOWN` and did not record `bridge_d3`,
+  `skip_bus_pm`, `state_saved`, or the root's `pci_prepare_to_sleep()`
+  result. The physical endpoint/link state and a supported way for this host
+  to transition through the veto remain unknown. Do not repeat the
+  pcie_ports experiment, force a PCI state, or bypass the common safety
+  predicate. See the [root-port eligibility audit](receipts/2026-09-21-root-port-eligibility-audit.md).
 - [ ] Complete the Linux/Android required-wake map for PCIe/WCN, UFS, USB and
   display before considering regulator-context behavior.
 - [ ] Select one behavior-changing A/B only after those PCIe/wake and request
@@ -214,6 +222,14 @@ Status as of 2026-09-21 09:44 UTC. Branch `feat/sm8550-suspend-lab`.
   has unverified PCIe, UFS, USB and display wake consequences.
 
 ## Latest device recovery state
+
+At 10:14 UTC, read-only SSH confirmed the device is still on stock Linux
+7.2.3 and the same boot ID. The default command line includes
+`pcie_ports=compat`; root port 17cb:0113 is enabled but unbound, and the
+pcieport driver directory is absent. WCN7850 is enabled and bound to
+ath12k_wifi7_pci. Both are awake in D0 with wakeup disabled. No power policy,
+driver binding, or boot setting was changed. See the
+[root-port eligibility audit](receipts/2026-09-21-root-port-eligibility-audit.md).
 
 At 09:21 UTC, read-only SSH confirmed the Nova is awake on the same stock
 Linux 7.2.3 boot, with root port and WCN endpoint back in D0 and `wlp1s0`
