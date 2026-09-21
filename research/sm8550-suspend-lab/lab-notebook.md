@@ -6392,6 +6392,15 @@ PCI state, regulators, or the boot deployment. The request cache persists until
 reboot; if the WAKE_ONLY queue fails after SLEEP was accepted, do not suspend
 and reboot before further testing.
 
+This reproduces only the firmware-facing sleep/wake pair, not Android's full
+`dcvs_fp` behavior: Armada lacks the vendor `rpmh_init_fast_path()` and
+`rpmh_update_fast_path()` interfaces used for ACTIVE_ONLY updates. The encoded
+BCM data are `0x60000000` in SLEEP and `0x60000001` in WAKE_ONLY for each
+resource. The proposed one-variable test, success/failure criteria, and
+rollback gate are in the [DCVS-FP A/B design
+receipt](../../receipts/2026-09-20-dcvs-fp-ab-design.md); its planned test was
+later completed with the negative result recorded below.
+
 The out-of-tree module is an AArch64 ELF with vermagic
 `7.2.3 SMP preempt mod_unload aarch64`, matching both `uname -r` and a shipped
 device module. Its SHA-256 is
@@ -6420,7 +6429,10 @@ the probe has not been copied to or loaded on it. No suspend test has run. The
 next gate is to insert the module, verify its one-line `SLEEP_AB` success log,
 and only then run the harness's 10-second minimum RTC-woken direct-deep test
 with the available `rpmh-aoss` trace profile. After the trial, reboot the unchanged
-deployment to clear the cached RPMh pair.
+deployment to clear the cached RPMh pair. The build commands, source and
+artifact hashes, live ABI checks, and config caveat are in the [module build
+receipt](../../receipts/2026-09-20-rpmh-dcvs-pair-module-build.md); the
+corrected BTF-compatible artifact is documented separately below.
 
 ### 2026-09-20 13:15 UTC — use available RPMh tracepoints for the A/B
 
@@ -8474,3 +8486,16 @@ QCOM host driver. Android leaf ownership for SH1/ACV/QUP2 and wake safety for
 shared LDOE1/LDOE3 remain unresolved. The status page's `Next action` now
 lists these exact prerequisites and removes the stale phase-02/03 recovery
 instructions.
+
+### 2026-09-21 11:44 UTC — receipt reconciliation
+
+I cross-checked the notebook against the root and lab receipt directories and
+the other research Markdown files. The only two receipts without direct
+notebook links were the [DCVS-FP A/B design](../../receipts/2026-09-20-dcvs-fp-ab-design.md)
+and [RPMh pair module build](../../receipts/2026-09-20-rpmh-dcvs-pair-module-build.md);
+both are now linked at the relevant 13:01 entry. Their main findings were
+already captured across the 13:01 build plan, 13:45 corrected ABI check, and
+13:51 negative A/B result. This pass adds the exact staged BCM words and makes
+clear that the design receipt's planned test was superseded by that completed
+result. No new device observation or device change occurred, and no other
+uncited receipt or missing research conclusion surfaced in this pass.
